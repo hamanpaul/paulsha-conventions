@@ -1,0 +1,14 @@
+name: policy-check
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    uses: ./.github/workflows/reusable-policy-check.yml
+    with:
+      repo: .

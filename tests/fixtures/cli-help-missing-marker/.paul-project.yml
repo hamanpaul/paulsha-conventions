@@ -1,0 +1,7 @@
+policy_profile: flat
+policy_version: "1.0.0"
+cli:
+  - command: "echo"
+    help_args: ["--help-demo"]
+    reflected_in: "README.md"
+    marker: "demo"

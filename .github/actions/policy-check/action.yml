@@ -1,0 +1,55 @@
+name: policy-check
+description: Run policy_check from local repository source
+
+inputs:
+  profile:
+    description: Policy profile (must match .paul-project.yml)
+    required: true
+  version:
+    description: Policy version (must match .paul-project.yml)
+    required: true
+  repo:
+    description: Repository root to check (relative to workspace)
+    required: false
+    default: "."
+  only:
+    description: Comma-separated rule IDs (optional)
+    required: false
+    default: ""
+  pr_title:
+    description: PR title override (optional)
+    required: false
+    default: ""
+  pr_body:
+    description: PR body override (optional)
+    required: false
+    default: ""
+  pr_labels:
+    description: Comma-separated PR labels override (optional)
+    required: false
+    default: ""
+  pr_base_ref:
+    description: PR base ref override (optional)
+    required: false
+    default: ""
+  pr_head_ref:
+    description: PR head ref override (optional)
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Run policy_check
+      shell: bash
+      run: |
+        "${{ github.action_path }}/run.sh" \
+          "${{ inputs.profile }}" \
+          "${{ inputs.version }}" \
+          "${{ inputs.repo }}" \
+          "${{ inputs.only }}" \
+          "${{ inputs.pr_title }}" \
+          "${{ inputs.pr_body }}" \
+          "${{ inputs.pr_labels }}" \
+          "${{ inputs.pr_base_ref }}" \
+          "${{ inputs.pr_head_ref }}"

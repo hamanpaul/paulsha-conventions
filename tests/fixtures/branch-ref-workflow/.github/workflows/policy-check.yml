@@ -1,0 +1,9 @@
+name: policy-check
+on: [pull_request]
+jobs:
+  check:
+    uses: hamanpaul/paul-project-conventions/.github/workflows/reusable-policy-check.yml@main
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@feature/policy-updates

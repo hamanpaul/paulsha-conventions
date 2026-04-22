@@ -1,0 +1,8 @@
+name: step-pinned
+on: [pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@6f3c85b6d5f7ad6f9e3d7f6f1e2d3c4b5a6d7e8f
+      - uses: ./local/action

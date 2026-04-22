@@ -1,0 +1,11 @@
+policy_profile: flat
+policy_version: 1.0.0
+code_paths:
+  - "**/*.py"
+  - "**/*.sh"
+  - "scripts/**"
+cli:
+  - command: "python3 -m policy_check"
+    help_args: ["--help"]
+    reflected_in: "README.md"
+    marker: "policy-check-help"
