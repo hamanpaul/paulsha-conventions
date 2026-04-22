@@ -147,7 +147,7 @@ options:
 - **PATCH**: 累積已完成的 feature batch 計數（本 repo 為 R-01~R-16 完整實作）
 - **-fix.N**: 落地後 bug fix（非新 feature、非穩定、非 release）
 
-當前版本：`1.0.0`（R-01~R-16 baseline landed + reusable workflow + helper scripts）
+當前版本：`0.0.0`（R-01~R-16 baseline 建立中，待 merge 後升版）
 
 ## 相關專案
 
