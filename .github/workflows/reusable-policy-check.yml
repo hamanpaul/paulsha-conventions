@@ -34,6 +34,12 @@ jobs:
 
       - name: Run policy check
         uses: ./.github/actions/policy-check
+        env:
+          GITHUB_PR_TITLE: ${{ github.event.pull_request.title }}
+          GITHUB_PR_BODY: ${{ github.event.pull_request.body }}
+          GITHUB_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
         with:
           profile: ${{ inputs.policy_profile }}
           version: ${{ inputs.policy_version }}

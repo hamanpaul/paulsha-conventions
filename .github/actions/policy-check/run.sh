@@ -7,18 +7,27 @@ WORKSPACE="${GITHUB_WORKSPACE:-$REPO_ROOT}"
 
 PROFILE_INPUT="${1:-}"
 VERSION_INPUT="${2:-}"
-REPO_INPUT="${3:-.}"
-ONLY_INPUT="${4:-}"
-PR_TITLE_INPUT="${5:-}"
-PR_BODY_INPUT="${6:-}"
-PR_LABELS_INPUT="${7:-}"
-PR_BASE_REF_INPUT="${8:-}"
-PR_HEAD_REF_INPUT="${9:-}"
+
+# Repo path: always current workspace (action runs in checked-out repo)
+REPO_INPUT="."
+
+# PR context from GitHub environment variables
+PR_TITLE_INPUT="${GITHUB_PR_TITLE:-}"
+PR_BODY_INPUT="${GITHUB_PR_BODY:-}"
+PR_LABELS_INPUT="${GITHUB_PR_LABELS:-}"
+PR_BASE_REF_INPUT="${GITHUB_BASE_REF:-}"
+PR_HEAD_REF_INPUT="${GITHUB_HEAD_REF:-}"
 
 cd "$WORKSPACE"
 
 # Validate profile and version against .paul-project.yml (fail-close)
-CONFIG_PATH="${WORKSPACE}/${REPO_INPUT}/.paul-project.yml"
+# REPO_INPUT can be absolute or relative path; normalize it
+if [[ "$REPO_INPUT" = /* ]]; then
+  CONFIG_PATH="${REPO_INPUT}/.paul-project.yml"
+else
+  CONFIG_PATH="${WORKSPACE}/${REPO_INPUT}/.paul-project.yml"
+fi
+
 if [[ -f "$CONFIG_PATH" ]]; then
   if command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="python3"
@@ -26,7 +35,8 @@ if [[ -f "$CONFIG_PATH" ]]; then
     PYTHON_BIN="python"
   fi
 
-  VALIDATION_RESULT=$("$PYTHON_BIN" - "$CONFIG_PATH" "$PROFILE_INPUT" "$VERSION_INPUT" <<'PYEOF'
+  # Run validation script, preserving stderr
+  VALIDATION_SCRIPT=$(cat <<'PYEOF'
 import sys
 import yaml
 config_path = sys.argv[1]
@@ -52,12 +62,13 @@ except Exception as exc:
 PYEOF
 )
 
-  if [[ "$VALIDATION_RESULT" != "OK" ]]; then
+  if ! "$PYTHON_BIN" -c "$VALIDATION_SCRIPT" "$CONFIG_PATH" "$PROFILE_INPUT" "$VERSION_INPUT"; then
     echo "Profile/version validation failed. See error above." >&2
     exit 1
   fi
 fi
 
+# Policy check execution
 if [[ -x "${WORKSPACE}/.venv/bin/python" ]]; then
   PYTHON_BIN="${WORKSPACE}/.venv/bin/python"
 elif command -v python3 >/dev/null 2>&1; then
@@ -68,9 +79,6 @@ fi
 
 ARGS=(-m policy_check --repo "$REPO_INPUT")
 
-if [[ -n "$ONLY_INPUT" ]]; then
-  ARGS+=(--only "$ONLY_INPUT")
-fi
 if [[ -n "$PR_TITLE_INPUT" ]]; then
   ARGS+=(--pr-title "$PR_TITLE_INPUT")
 fi

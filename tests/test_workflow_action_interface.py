@@ -43,7 +43,7 @@ def test_reusable_workflow_interface_contract():
 
 
 def test_composite_action_has_profile_version_inputs():
-    """Composite action must accept profile and version inputs."""
+    """Composite action must accept profile and version inputs (and only these as required)."""
     action_path = Path(__file__).parent.parent / ".github" / "actions" / "policy-check" / "action.yml"
     assert action_path.exists(), f"Missing {action_path}"
 
@@ -53,6 +53,11 @@ def test_composite_action_has_profile_version_inputs():
     # Spec: composite action 要補 profile 與 version inputs
     assert "profile" in inputs, "Composite action missing 'profile' input"
     assert "version" in inputs, "Composite action missing 'version' input"
+    
+    # Spec §4.1: action should ONLY expose profile and version as per design
+    # All other parameters should be derived from GitHub context in the workflow layer
+    assert inputs["profile"]["required"] is True, "profile should be required"
+    assert inputs["version"]["required"] is True, "version should be required"
 
 
 def test_composite_action_validates_profile_version_consistency():
