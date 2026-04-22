@@ -18,7 +18,7 @@
 - 防止「分支命名混亂、版號語意不一致」
 - 防止「policy 說要遵守但 policy repo 自己不遵守」
 
-本 repo 自身亦 **dog-food** 本套 policy（`profile: stage-driven`, `policy_version: 1.0.0`）。
+本 repo 自身亦 **dog-food** 本套 policy（`profile: flat`, `policy_version: 1.0.0`）。
 
 ## 規則總覽（R-01 ~ R-16）
 
@@ -141,11 +141,11 @@ options:
 
 `VERSION` 檔（repo root）為專案版號 single source of truth。
 
-**本 repo 版號語意**（`profile: stage-driven`）：
+**本 repo 版號語意**（`profile: flat`）：
 - **MAJOR**: 正式 release（feature 達到對外可用狀態）
 - **MINOR**: 功能穩定（已規劃 feature 全 landed + 7 天無 hotfix）
-- **PATCH**: 單一 stage 落地（本 repo 為 R-01~R-16 完整實作）
-- **-fix.N**: 落地後 bug fix（非新 stage、非穩定、非 release）
+- **PATCH**: 累積已完成的 feature batch 計數（本 repo 為 R-01~R-16 完整實作）
+- **-fix.N**: 落地後 bug fix（非新 feature、非穩定、非 release）
 
 當前版本：`1.0.0`（R-01~R-16 baseline landed + reusable workflow + helper scripts）
 
