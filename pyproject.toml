@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "policy-check"
+version = "0.0.0"
+description = "Cross-repo policy checker for hamanpaul/*"
+requires-python = ">=3.11"
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[project.scripts]
+policy-check = "policy_check.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["policy_check*"]
