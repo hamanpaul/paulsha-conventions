@@ -1,5 +1,5 @@
 <!-- managed-by: hamanpaul/paul-project-conventions@v1.0.0 -->
-<!-- 若修改此檔,同步更新 CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md 四份 -->
+<!-- 若修改此檔，同步更新 CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md 四份 -->
 policy_version: 1.0.0
 
 # Agent Policy Checklist
