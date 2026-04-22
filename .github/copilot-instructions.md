@@ -8,7 +8,7 @@ policy_version: 1.0.0
 所有 agent 進入 session 時，必須依下列 checklist 行動。
 
 ## 本 repo 的 profile
-- policy_profile: `stage-driven` （見 `.paul-project.yml`）
+- policy_profile: `flat` （見 `.paul-project.yml`）
 - policy_version: `1.0.0`
 
 ## 動工前
@@ -34,7 +34,7 @@ policy_version: 1.0.0
 - [ ] `CHANGELOG.md [Unreleased]` 有對應 entry（或 PR 標 `skip-changelog` + 理由）
 - [ ] `VERSION` 內容與意圖一致（release label PR 才可偏離 latest tag）
 - [ ] `.github/pull_request_template.md` checklist 全勾
-- [ ] 測試全綠（本 repo: `pytest -q`）
+- [ ] 測試全綠（本 repo: `python3 -m pytest -q`）
 - [ ] `python3 -m policy_check --repo .` 無任何 failure
 - [ ] 若跳過任何檢查，PR 必須帶對應豁免 label + 理由
 
