@@ -11,5 +11,5 @@ jobs:
   check:
     uses: ./.github/workflows/reusable-policy-check.yml
     with:
-      policy_profile: stage-driven
+      policy_profile: flat
       policy_version: "1.0.0"
