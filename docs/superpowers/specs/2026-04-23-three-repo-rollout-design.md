@@ -2,7 +2,7 @@
 
 - **Date**: 2026-04-23
 - **Status**: Draft for review
-- **Decision**: Use a three-repo model, but roll it out in two phases: design both missing repos now, create `hamanpaul/.github` first, then create `hamanpaul/paul-project-template`.
+- **Decision**: Use a three-repo model, but roll it out in two phases: design both missing repos now, create `hamanpaul/.github` first, then create `hamanpaul/new-project-template`.
 
 ## Context
 
@@ -15,7 +15,7 @@
 What is still missing is the rest of the planned ecosystem:
 
 1. `hamanpaul/.github`
-2. `hamanpaul/paul-project-template`
+2. `hamanpaul/new-project-template`
 
 Without those two repos, the current system can be piloted, but it cannot yet provide account-level defaults or one-command bootstrap for new projects.
 
@@ -46,7 +46,7 @@ Create the account defaults repo first, then create the template repo later.
 - new repos still need manual bootstrap
 - template design is deferred
 
-### Approach B: create `paul-project-template` first
+### Approach B: create `new-project-template` first
 
 Create the new-project skeleton first, then add `.github` later.
 
@@ -82,7 +82,7 @@ The policy engine already exists. The next most important step is not more polic
 | --- | --- | --- | --- |
 | `hamanpaul/paulsha-conventions` | Source of truth for policy logic | `policy_check` CLI, rule implementations, reusable workflow, composite action, helper scripts, self-dogfood tests and docs | account defaults, project-specific bootstrap copies |
 | `hamanpaul/.github` | Account-wide GitHub defaults | default `pull_request_template.md`, issue templates if needed, `CONTRIBUTING.md`, `SECURITY.md`, and other community health files supported by a public account-level `.github` repo | rule logic, duplicated validation code, project bootstrap skeleton, workflow distribution responsibilities that are better handled by the project template |
-| `hamanpaul/paul-project-template` | New-project bootstrap skeleton | starter `.paul-project.yml`, `README.md`, `CHANGELOG.md`, `VERSION`, four agent convention files, starter workflow referencing `paulsha-conventions` | copied policy engine logic, account-level governance that belongs in `.github` |
+| `hamanpaul/new-project-template` | New-project bootstrap skeleton | starter `.paul-project.yml`, `README.md`, `CHANGELOG.md`, `VERSION`, four agent convention files, starter workflow referencing `paulsha-conventions` | copied policy engine logic, account-level governance that belongs in `.github` |
 
 ## Architecture and change flow
 
@@ -96,7 +96,7 @@ This means:
 
 - `paulsha-conventions` is the only place where rule behavior is implemented
 - `.github` is a distribution layer for account-level community health defaults
-- `paul-project-template` is a bootstrap convenience layer, not a policy engine
+- `new-project-template` is a bootstrap convenience layer, not a policy engine
 
 ## Rollout design
 
@@ -122,7 +122,7 @@ This repo should be intentionally thin. If a file needs to explain or enforce ru
 
 Because `hamanpaul` currently behaves like a personal account rather than an organization, do **not** rely on account-level workflow templates as a primary adoption path. Keep workflow wiring in the project template instead.
 
-### Phase 2: create `hamanpaul/paul-project-template`
+### Phase 2: create `hamanpaul/new-project-template`
 
 Create the template only after `.github` scope is settled. The template should include:
 
@@ -146,7 +146,7 @@ To control it:
 
 - never duplicate rule logic outside `paulsha-conventions`
 - keep `.github` limited to community defaults
-- keep `paul-project-template` limited to bootstrap content
+- keep `new-project-template` limited to bootstrap content
 - whenever `paulsha-conventions` changes downstream-facing behavior, update the pinned reference in `.github` and the template repo in the same rollout batch
 - validate downstream changes using a pilot repo before broad rollout
 
@@ -156,7 +156,7 @@ The rollout should be considered healthy only if all three checks pass:
 
 1. `paulsha-conventions` still passes self-dogfood checks
 2. a pilot repo under the same account can pick up `.github` defaults and pass policy check
-3. a throwaway new repo created from `paul-project-template` can run the policy workflow successfully with no manual fixes beyond filling project-specific metadata
+3. a throwaway new repo created from `new-project-template` can run the policy workflow successfully with no manual fixes beyond filling project-specific metadata
 
 ## Success criteria
 
@@ -169,4 +169,4 @@ The three-repo design is working when:
 
 ## Immediate next step
 
-Create `hamanpaul/.github` first, with only the smallest useful default set, and keep `hamanpaul/paul-project-template` for the next phase after the account defaults are proven in one pilot repo.
+Create `hamanpaul/.github` first, with only the smallest useful default set, and keep `hamanpaul/new-project-template` for the next phase after the account defaults are proven in one pilot repo.

@@ -7,7 +7,7 @@
 
 本 repo 提供一套跨 `hamanpaul/*` 所有專案的 **policy engine**，目標：
 
-- **新 repo 建立時**：自動帶入合規骨架（via `paul-project-template`）
+- **新 repo 建立時**：自動帶入合規骨架（via `new-project-template`）
 - **CI gate**：PR merge 前擋住不合規變更
 - **Agent checklist**：進入 session 時自動看到規範
 - **強制同步**：code 與 docs / CHANGELOG / VERSION 必須一起動
@@ -107,14 +107,14 @@ bash /path/to/paulsha-conventions/scripts/update-cli-help.sh
 
 ### 4. 新專案 Bootstrap
 
-使用 `hamanpaul/paul-project-template` 建立新 repo，自動包含：
+使用 `hamanpaul/new-project-template` 建立新 repo，自動包含：
 - `.paul-project.yml`（需填入 profile / version）
 - `README.md` / `CHANGELOG.md` / `VERSION` 骨架
 - 四份 agent convention files（`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md`）
 - `.github/workflows/policy-check.yml` 呼叫本 repo reusable workflow
 
 ```bash
-gh repo create hamanpaul/<new-project> --template hamanpaul/paul-project-template
+gh repo create hamanpaul/<new-project> --template hamanpaul/new-project-template
 ```
 
 ### CLI Help
@@ -152,7 +152,7 @@ options:
 ## 相關專案
 
 - [`hamanpaul/.github`](https://github.com/hamanpaul/.github)：GitHub 社群預設（PR template / Issue template / SECURITY / CONTRIBUTING）
-- [`hamanpaul/paul-project-template`](https://github.com/hamanpaul/paul-project-template)：新專案骨架（供 `gh repo create --template` 使用）
+- [`hamanpaul/new-project-template`](https://github.com/hamanpaul/new-project-template)：新專案骨架（供 `gh repo create --template` 使用）
 
 ## License
 

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Create `hamanpaul/.github` and `hamanpaul/paul-project-template`, wire them to `hamanpaul/paulsha-conventions`, and validate the rollout with a smoke-test repository.
+**Goal:** Create `hamanpaul/.github` and `hamanpaul/new-project-template`, wire them to `hamanpaul/paulsha-conventions`, and validate the rollout with a smoke-test repository.
 
-**Architecture:** Keep all rule logic and reusable workflow code inside `hamanpaul/paulsha-conventions`. Use `hamanpaul/.github` only for account-level community health defaults, and use `hamanpaul/paul-project-template` only for bootstrap files that point back to the central policy engine by pinned commit SHA.
+**Architecture:** Keep all rule logic and reusable workflow code inside `hamanpaul/paulsha-conventions`. Use `hamanpaul/.github` only for account-level community health defaults, and use `hamanpaul/new-project-template` only for bootstrap files that point back to the central policy engine by pinned commit SHA.
 
 **Tech Stack:** GitHub repositories, Markdown, YAML, GitHub Actions, `gh` CLI, `policy_check` CLI, Python virtual environments
 
@@ -14,8 +14,8 @@
 
 - Current policy engine repo: `/home/paul_chen/prj_pri/paulsha-conventions`
 - Account defaults repo clone target: `/home/paul_chen/prj_pri/.github`
-- Template repo clone target: `/home/paul_chen/prj_pri/paul-project-template`
-- Smoke-test repo clone target: `/home/paul_chen/prj_pri/paul-project-template-smoke`
+- Template repo clone target: `/home/paul_chen/prj_pri/new-project-template`
+- Smoke-test repo clone target: `/home/paul_chen/prj_pri/new-project-template-smoke`
 - Shared validation virtualenv: `/tmp/paulsha-policy-venv`
 - Frozen policy reference for downstream repos: `dbde416e3595593645799970bd3f9ad3bb05cfe9`
 
@@ -304,36 +304,36 @@ gh pr create \
 gh pr merge --squash --delete-branch
 ```
 
-### Task 2: Create and merge `hamanpaul/paul-project-template`
+### Task 2: Create and merge `hamanpaul/new-project-template`
 
 **Files:**
-- Create: `/home/paul_chen/prj_pri/paul-project-template/.paul-project.yml`
-- Create: `/home/paul_chen/prj_pri/paul-project-template/README.md`
-- Create: `/home/paul_chen/prj_pri/paul-project-template/CHANGELOG.md`
-- Create: `/home/paul_chen/prj_pri/paul-project-template/VERSION`
-- Create: `/home/paul_chen/prj_pri/paul-project-template/AGENTS.md`
-- Create: `/home/paul_chen/prj_pri/paul-project-template/CLAUDE.md`
-- Create: `/home/paul_chen/prj_pri/paul-project-template/GEMINI.md`
-- Create: `/home/paul_chen/prj_pri/paul-project-template/.github/copilot-instructions.md`
-- Create: `/home/paul_chen/prj_pri/paul-project-template/.github/workflows/policy-check.yml`
+- Create: `/home/paul_chen/prj_pri/new-project-template/.paul-project.yml`
+- Create: `/home/paul_chen/prj_pri/new-project-template/README.md`
+- Create: `/home/paul_chen/prj_pri/new-project-template/CHANGELOG.md`
+- Create: `/home/paul_chen/prj_pri/new-project-template/VERSION`
+- Create: `/home/paul_chen/prj_pri/new-project-template/AGENTS.md`
+- Create: `/home/paul_chen/prj_pri/new-project-template/CLAUDE.md`
+- Create: `/home/paul_chen/prj_pri/new-project-template/GEMINI.md`
+- Create: `/home/paul_chen/prj_pri/new-project-template/.github/copilot-instructions.md`
+- Create: `/home/paul_chen/prj_pri/new-project-template/.github/workflows/policy-check.yml`
 
 - [ ] **Step 1: Create the template repository and branch**
 
 ```bash
 cd /home/paul_chen/prj_pri
-gh repo create hamanpaul/paul-project-template \
+gh repo create hamanpaul/new-project-template \
   --public \
   --clone \
   --add-readme \
   --description "Starter skeleton for repositories that follow hamanpaul/paulsha-conventions"
-cd /home/paul_chen/prj_pri/paul-project-template
-git checkout -b feature/bootstrap-project-template
+cd /home/paul_chen/prj_pri/new-project-template
+git checkout -b feature/bootstrap-new-project-template
 ```
 
 - [ ] **Step 2: Run `policy_check` before adding the scaffold**
 
 ```bash
-/tmp/paulsha-policy-venv/bin/python -m policy_check --repo /home/paul_chen/prj_pri/paul-project-template
+/tmp/paulsha-policy-venv/bin/python -m policy_check --repo /home/paul_chen/prj_pri/new-project-template
 ```
 
 Expected:
@@ -345,9 +345,9 @@ FAIL: missing CHANGELOG.md, VERSION, .paul-project.yml, and agent convention fil
 - [ ] **Step 3: Write the root scaffold files**
 
 ```bash
-mkdir -p /home/paul_chen/prj_pri/paul-project-template/.github/workflows
+mkdir -p /home/paul_chen/prj_pri/new-project-template/.github/workflows
 
-cat > /home/paul_chen/prj_pri/paul-project-template/.paul-project.yml <<'EOF'
+cat > /home/paul_chen/prj_pri/new-project-template/.paul-project.yml <<'EOF'
 policy_profile: flat
 policy_version: 1.0.0
 code_paths:
@@ -359,7 +359,7 @@ code_paths:
   - "scripts/**"
 EOF
 
-cat > /home/paul_chen/prj_pri/paul-project-template/README.md <<'EOF'
+cat > /home/paul_chen/prj_pri/new-project-template/README.md <<'EOF'
 # Project Template
 
 > GitHub template skeleton for repositories that follow `hamanpaul/paulsha-conventions`. Replace the title and summary after generating a new repository.
@@ -377,7 +377,7 @@ Document the common developer workflow here. At minimum, run `python3 -m policy_
 `VERSION` is the single source of truth for the repository version. Update it together with `CHANGELOG.md` according to the selected `policy_profile`.
 EOF
 
-cat > /home/paul_chen/prj_pri/paul-project-template/CHANGELOG.md <<'EOF'
+cat > /home/paul_chen/prj_pri/new-project-template/CHANGELOG.md <<'EOF'
 # Changelog
 
 本專案所有重大變更都會記錄在此檔案。
@@ -388,7 +388,7 @@ cat > /home/paul_chen/prj_pri/paul-project-template/CHANGELOG.md <<'EOF'
 ## [Unreleased]
 
 ### Added
-- 建立 `hamanpaul/paul-project-template` 新專案骨架
+- 建立 `hamanpaul/new-project-template` 新專案骨架
 
 ### Changed
 - 無
@@ -397,9 +397,9 @@ cat > /home/paul_chen/prj_pri/paul-project-template/CHANGELOG.md <<'EOF'
 - 無
 EOF
 
-printf '0.0.0\n' > /home/paul_chen/prj_pri/paul-project-template/VERSION
+printf '0.0.0\n' > /home/paul_chen/prj_pri/new-project-template/VERSION
 
-cat > /home/paul_chen/prj_pri/paul-project-template/.github/workflows/policy-check.yml <<'EOF'
+cat > /home/paul_chen/prj_pri/new-project-template/.github/workflows/policy-check.yml <<'EOF'
 name: Policy Check
 
 on:
@@ -421,18 +421,18 @@ EOF
 - [ ] **Step 4: Reuse the generic agent convention file in all four locations**
 
 ```bash
-cp /home/paul_chen/prj_pri/.github/AGENTS.md /home/paul_chen/prj_pri/paul-project-template/AGENTS.md
-cp /home/paul_chen/prj_pri/.github/AGENTS.md /home/paul_chen/prj_pri/paul-project-template/CLAUDE.md
-cp /home/paul_chen/prj_pri/.github/AGENTS.md /home/paul_chen/prj_pri/paul-project-template/GEMINI.md
-cp /home/paul_chen/prj_pri/.github/AGENTS.md /home/paul_chen/prj_pri/paul-project-template/.github/copilot-instructions.md
+cp /home/paul_chen/prj_pri/.github/AGENTS.md /home/paul_chen/prj_pri/new-project-template/AGENTS.md
+cp /home/paul_chen/prj_pri/.github/AGENTS.md /home/paul_chen/prj_pri/new-project-template/CLAUDE.md
+cp /home/paul_chen/prj_pri/.github/AGENTS.md /home/paul_chen/prj_pri/new-project-template/GEMINI.md
+cp /home/paul_chen/prj_pri/.github/AGENTS.md /home/paul_chen/prj_pri/new-project-template/.github/copilot-instructions.md
 ```
 
 - [ ] **Step 5: Validate the template repo and mark it as a template**
 
 ```bash
-/tmp/paulsha-policy-venv/bin/python -m policy_check --repo /home/paul_chen/prj_pri/paul-project-template
-cd /home/paul_chen/prj_pri/paul-project-template
-gh repo edit hamanpaul/paul-project-template --template
+/tmp/paulsha-policy-venv/bin/python -m policy_check --repo /home/paul_chen/prj_pri/new-project-template
+cd /home/paul_chen/prj_pri/new-project-template
+gh repo edit hamanpaul/new-project-template --template
 ```
 
 Expected:
@@ -445,13 +445,13 @@ gh repo edit: template flag enabled
 - [ ] **Step 6: Commit, push, open a PR, and merge it**
 
 ```bash
-cd /home/paul_chen/prj_pri/paul-project-template
+cd /home/paul_chen/prj_pri/new-project-template
 git add .
 git commit -m "docs(template): 建立新專案骨架" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-git push -u origin feature/bootstrap-project-template
+git push -u origin feature/bootstrap-new-project-template
 gh pr create \
   --base main \
-  --head feature/bootstrap-project-template \
+  --head feature/bootstrap-new-project-template \
   --title "docs(template): 建立新專案骨架" \
   --body $'## Summary\n- [x] 說明本 PR 做了什麼\n- [x] 說明為什麼需要這個變更\n\n## Changelog\n- [x] 已更新 `CHANGELOG.md [Unreleased]`\n- [ ] 本 PR 屬於 docs-only / test-only / chore，無需 CHANGELOG\n- [ ] 需使用 `skip-changelog`，原因已填在下方 Notes\n\n## Validation\n- [x] `python3 -m policy_check --repo .` 已通過\n- [x] 本 repo 額外的 test / lint / build 已通過，或本 PR 無相關指令\n\n## Branch and Policy\n- [x] 來源分支符合 policy（`feature/*` 或 `wt/<feature>/*`）\n- [x] 未直接 push 到 `main`\n- [x] 未新增未列入白名單的 exemption label\n\n## Notes\n- 無\n'
 gh pr merge --squash --delete-branch
@@ -460,31 +460,31 @@ gh pr merge --squash --delete-branch
 ### Task 3: Smoke-test the template and `.github` defaults together
 
 **Files:**
-- Create: `/home/paul_chen/prj_pri/paul-project-template-smoke/README.md`
-- Modify: `/home/paul_chen/prj_pri/paul-project-template-smoke/CHANGELOG.md`
-- Test: `gh api repos/hamanpaul/paul-project-template-smoke/community/profile`
-- Test: `gh run list -R hamanpaul/paul-project-template-smoke --workflow "Policy Check"`
+- Create: `/home/paul_chen/prj_pri/new-project-template-smoke/README.md`
+- Modify: `/home/paul_chen/prj_pri/new-project-template-smoke/CHANGELOG.md`
+- Test: `gh api repos/hamanpaul/new-project-template-smoke/community/profile`
+- Test: `gh run list -R hamanpaul/new-project-template-smoke --workflow "Policy Check"`
 
 - [ ] **Step 1: Generate a smoke-test repo from the template**
 
 ```bash
 cd /home/paul_chen/prj_pri
-gh repo create hamanpaul/paul-project-template-smoke \
+gh repo create hamanpaul/new-project-template-smoke \
   --private \
-  --template hamanpaul/paul-project-template \
+  --template hamanpaul/new-project-template \
   --clone \
-  --description "Smoke test for paul-project-template"
-cd /home/paul_chen/prj_pri/paul-project-template-smoke
+  --description "Smoke test for new-project-template"
+cd /home/paul_chen/prj_pri/new-project-template-smoke
 git checkout -b feature/template-smoke
 ```
 
 - [ ] **Step 2: Replace the template summary with smoke-test metadata**
 
 ```bash
-cat > /home/paul_chen/prj_pri/paul-project-template-smoke/README.md <<'EOF'
-# paul-project-template-smoke
+cat > /home/paul_chen/prj_pri/new-project-template-smoke/README.md <<'EOF'
+# new-project-template-smoke
 
-> Smoke-test repository generated from `hamanpaul/paul-project-template`.
+> Smoke-test repository generated from `hamanpaul/new-project-template`.
 
 ## Install
 
@@ -501,7 +501,7 @@ EOF
 
 python3 - <<'PY'
 from pathlib import Path
-path = Path("/home/paul_chen/prj_pri/paul-project-template-smoke/CHANGELOG.md")
+path = Path("/home/paul_chen/prj_pri/new-project-template-smoke/CHANGELOG.md")
 text = path.read_text()
 marker = "### Changed\n- 無\n"
 replacement = "### Changed\n- 將 template README 內容替換為 smoke-test 專案描述\n"
@@ -514,7 +514,7 @@ PY
 - [ ] **Step 3: Run the local policy validation**
 
 ```bash
-/tmp/paulsha-policy-venv/bin/python -m policy_check --repo /home/paul_chen/prj_pri/paul-project-template-smoke
+/tmp/paulsha-policy-venv/bin/python -m policy_check --repo /home/paul_chen/prj_pri/new-project-template-smoke
 ```
 
 Expected:
@@ -526,7 +526,7 @@ Expected:
 - [ ] **Step 4: Commit and push the smoke-test branch**
 
 ```bash
-cd /home/paul_chen/prj_pri/paul-project-template-smoke
+cd /home/paul_chen/prj_pri/new-project-template-smoke
 git add README.md CHANGELOG.md
 git commit -m "docs: 驗證 template smoke repo" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 git push -u origin feature/template-smoke
@@ -535,7 +535,7 @@ git push -u origin feature/template-smoke
 - [ ] **Step 5: Verify the default PR template is loaded from `hamanpaul/.github`**
 
 ```bash
-cd /home/paul_chen/prj_pri/paul-project-template-smoke
+cd /home/paul_chen/prj_pri/new-project-template-smoke
 gh pr create --web --base main --head feature/template-smoke
 ```
 
@@ -548,7 +548,7 @@ The browser opens a new PR form whose body is prefilled from hamanpaul/.github/.
 - [ ] **Step 6: Verify the account-level `CONTRIBUTING.md` and `SECURITY.md` files are visible through the community profile API**
 
 ```bash
-gh api repos/hamanpaul/paul-project-template-smoke/community/profile | jq '{contributing: (.files.contributing != null), security: (.files.security != null)}'
+gh api repos/hamanpaul/new-project-template-smoke/community/profile | jq '{contributing: (.files.contributing != null), security: (.files.security != null)}'
 ```
 
 Expected:
@@ -563,7 +563,7 @@ Expected:
 - [ ] **Step 7: Wait for the smoke-test workflow to pass**
 
 ```bash
-gh run list -R hamanpaul/paul-project-template-smoke --workflow "Policy Check" --limit 1
+gh run list -R hamanpaul/new-project-template-smoke --workflow "Policy Check" --limit 1
 ```
 
 Expected:
@@ -575,8 +575,8 @@ The newest run for workflow "Policy Check" is completed with conclusion "success
 - [ ] **Step 8: Delete the smoke-test repo after validation**
 
 ```bash
-gh repo delete hamanpaul/paul-project-template-smoke --yes
-rm -rf /home/paul_chen/prj_pri/paul-project-template-smoke
+gh repo delete hamanpaul/new-project-template-smoke --yes
+rm -rf /home/paul_chen/prj_pri/new-project-template-smoke
 ```
 
 ### Task 4: Record the rollout result back in `paulsha-conventions`
@@ -600,7 +600,7 @@ from pathlib import Path
 path = Path("/home/paul_chen/prj_pri/paulsha-conventions/CHANGELOG.md")
 text = path.read_text()
 marker = "### Added\n"
-insert = "### Added\n- 建立三 repo 生態的 rollout artifact：`hamanpaul/.github` 與 `hamanpaul/paul-project-template`\n"
+insert = "### Added\n- 建立三 repo 生態的 rollout artifact：`hamanpaul/.github` 與 `hamanpaul/new-project-template`\n"
 if marker not in text:
     raise SystemExit("Expected CHANGELOG marker not found")
 path.write_text(text.replace(marker, insert, 1))
@@ -614,8 +614,8 @@ python3 - <<'PY'
 from pathlib import Path
 path = Path("/home/paul_chen/prj_pri/paulsha-conventions/README.md")
 text = path.read_text()
-old = "## 相關專案\n\n- [`hamanpaul/.github`](https://github.com/hamanpaul/.github)：GitHub 社群預設（PR template / Issue template / SECURITY / CONTRIBUTING）\n- [`hamanpaul/paul-project-template`](https://github.com/hamanpaul/paul-project-template)：新專案骨架（供 `gh repo create --template` 使用）\n"
-new = "## 相關專案\n\n- [`hamanpaul/.github`](https://github.com/hamanpaul/.github)：account-level GitHub community health defaults\n- [`hamanpaul/paul-project-template`](https://github.com/hamanpaul/paul-project-template)：新專案骨架（供 `gh repo create --template` 使用）\n"
+old = "## 相關專案\n\n- [`hamanpaul/.github`](https://github.com/hamanpaul/.github)：GitHub 社群預設（PR template / Issue template / SECURITY / CONTRIBUTING）\n- [`hamanpaul/new-project-template`](https://github.com/hamanpaul/new-project-template)：新專案骨架（供 `gh repo create --template` 使用）\n"
+new = "## 相關專案\n\n- [`hamanpaul/.github`](https://github.com/hamanpaul/.github)：account-level GitHub community health defaults\n- [`hamanpaul/new-project-template`](https://github.com/hamanpaul/new-project-template)：新專案骨架（供 `gh repo create --template` 使用）\n"
 if old not in text:
     raise SystemExit("Expected README block not found")
 path.write_text(text.replace(old, new, 1))
