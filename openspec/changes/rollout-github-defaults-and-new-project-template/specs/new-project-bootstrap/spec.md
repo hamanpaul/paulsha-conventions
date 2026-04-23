@@ -14,9 +14,11 @@ The system SHALL provide a public `hamanpaul/new-project-template` repository th
 ### Requirement: Template wires new repositories to the policy engine
 The template MUST connect generated repositories to `hamanpaul/paulsha-conventions` by a pinned reusable workflow reference.
 
-#### Scenario: Template workflow uses a pinned reusable workflow reference
+#### Scenario: Template workflow uses a pinned reusable workflow reference with explicit policy engine ref
 - **WHEN** a maintainer opens `.github/workflows/policy-check.yml` in `hamanpaul/new-project-template`
-- **THEN** the workflow references `hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml` by full commit SHA
+- **THEN** the workflow BOTH:
+  - References `hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml` by full commit SHA, AND
+  - Passes an explicit `policy_engine_ref` input pointing at the same version (tag or commit SHA) of `hamanpaul/paulsha-conventions`
 
 #### Scenario: Generated repository passes local policy validation
 - **WHEN** a maintainer creates a smoke-test repository from `hamanpaul/new-project-template` and fills only project-specific metadata

@@ -9,6 +9,7 @@
 
 ### Changed
 - Rename repo from `paul-project-conventions` to `paulsha-conventions`；更新 README、四份 agent convention files 與 fixtures 的 `managed-by` 與 `uses:` 參照
+- **OpenSpec 規格文件更新**：新專案 bootstrap spec 與 design doc 更新以反映 reusable workflow 的新 `policy_engine_ref` 輸入需求；template workflow 現在須同時鎖定 reusable workflow SHA 與傳入明確的 policy_engine_ref，確保兩者版本同步
 
 ### Added
 - **R-01 ~ R-16 完整規則實作**（TDD 覆蓋 + fixtures）

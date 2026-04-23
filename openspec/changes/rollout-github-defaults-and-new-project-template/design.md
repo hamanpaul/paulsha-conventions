@@ -37,11 +37,15 @@ The `.github` repo will contain the default PR template, `CONTRIBUTING.md`, `SEC
 
 ### 3. Keep the policy workflow pinned inside `new-project-template`
 
-The template repo will include `.github/workflows/policy-check.yml` that references `hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml` by full commit SHA.
+The template repo will include `.github/workflows/policy-check.yml` that:
+- References `hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml` by full commit SHA
+- Passes an explicit `policy_engine_ref` input (tag or pinned SHA) pointing at `hamanpaul/paulsha-conventions`
 
-**Why:** Pinned references satisfy the existing policy rules and make template-generated repositories deterministic during pilot adoption.
+The `policy_engine_ref` input is required by the reusable workflow to specify which version of the policy engine to checkout. In cross-repo workflows, `github.workflow_sha` refers to the caller's repository, not to paulsha-conventions, so an explicit ref prevents silent version drift.
 
-**Alternative considered:** Reference `@main` or a floating tag. Rejected because the current rules explicitly disallow branch refs and the release story is not stabilized yet.
+**Why:** Dual pinning (workflow ref + policy_engine_ref) ensures both the reusable workflow logic and the policy engine implementation stay locked to the same version, satisfying the existing policy rules and making template-generated repositories deterministic during pilot adoption.
+
+**Alternative considered:** Reference `@main` or a floating tag, or pass `github.workflow_sha` to the policy engine checkout. Rejected because the current rules explicitly disallow branch refs, and `github.workflow_sha` in a cross-repo workflow context points to the caller's repository, not to paulsha-conventions.
 
 ### 4. Validate with a smoke-test repository before broader rollout
 
