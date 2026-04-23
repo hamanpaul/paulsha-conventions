@@ -419,6 +419,13 @@ def test_reusable_workflow_binds_policy_engine_ref_via_env_not_direct_interpolat
         f"Current env: {env_section}"
     )
 
+    # The env binding must map to the exact workflow input expression
+    policy_engine_ref_value = env_section.get("POLICY_ENGINE_REF")
+    assert policy_engine_ref_value == "${{ inputs.policy_engine_ref }}", (
+        f"POLICY_ENGINE_REF env must map to '${{{{ inputs.policy_engine_ref }}}}'. "
+        f"Got: {policy_engine_ref_value}"
+    )
+
     # The shell script must read from the env variable, not direct interpolation
     assert "$POLICY_ENGINE_REF" in run_cmd, (
         "Validation step must read from $POLICY_ENGINE_REF environment variable. "
