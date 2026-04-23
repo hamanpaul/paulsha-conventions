@@ -145,7 +145,15 @@ def test_action_run_sh_uses_action_repo_source_with_runtime_dependency_only(fixt
         capture_output=True,
         text=True,
         cwd=repo_path,
-        env={**os.environ, "GITHUB_WORKSPACE": str(repo_path), "PYTHONPATH": ""},
+        env={
+            **os.environ,
+            "GITHUB_WORKSPACE": str(repo_path),
+            "PYTHONPATH": "",
+            # In GitHub Actions jobs, policy_check writes the report to the step summary
+            # file instead of stdout. Clear it here so the integration test can assert
+            # on the emitted report text directly.
+            "GITHUB_STEP_SUMMARY": "",
+        },
     )
 
     combined_output = f"{result.stdout}\n{result.stderr}"
