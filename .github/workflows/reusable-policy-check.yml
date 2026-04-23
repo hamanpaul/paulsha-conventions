@@ -29,8 +29,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install local package
-        run: python -m pip install -e .
+      - name: Install action runtime
+        run: python -m pip install --disable-pip-version-check "PyYAML>=6.0"
 
       - name: Run policy check
         uses: ./.github/actions/policy-check

@@ -60,6 +60,24 @@ def test_composite_action_has_profile_version_inputs():
     assert inputs["version"]["required"] is True, "version should be required"
 
 
+def test_reusable_workflow_bootstraps_runtime_without_installing_caller_repo():
+    """Reusable workflow must not assume the downstream repo is an installable package."""
+    workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "reusable-policy-check.yml"
+    content = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+    steps = content["jobs"]["check"]["steps"]
+    run_commands = [step.get("run", "") for step in steps if "run" in step]
+
+    assert all("pip install -e ." not in command for command in run_commands), (
+        "Reusable workflow must not run 'pip install -e .' in the caller repo. "
+        "Bootstrap template/downstream repos do not ship Python package metadata."
+    )
+    assert any("python -m pip install" in command and "PyYAML" in command for command in run_commands), (
+        "Reusable workflow should install its runtime dependency explicitly instead "
+        "of relying on the downstream repo being installable."
+    )
+
+
 def test_composite_action_validates_profile_version_consistency():
     """
     Composite action run.sh should validate profile/version against .paul-project.yml.

@@ -48,3 +48,4 @@
 
 ### Fixed
 - 無（baseline 建立階段）
+- reusable workflow 不再對下游 repo 執行 `pip install -e .`；改為僅安裝 action runtime 相依，並讓 composite action 直接從自身 source tree 載入 `policy_check`

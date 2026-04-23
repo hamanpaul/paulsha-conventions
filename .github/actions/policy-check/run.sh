@@ -20,6 +20,16 @@ PR_HEAD_REF_INPUT="${GITHUB_HEAD_REF:-}"
 
 cd "$WORKSPACE"
 
+if [[ -x "${WORKSPACE}/.venv/bin/python" ]]; then
+  PYTHON_BIN="${WORKSPACE}/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="python3"
+else
+  PYTHON_BIN="python"
+fi
+
+export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+
 # Validate profile and version against .paul-project.yml (fail-close)
 # REPO_INPUT can be absolute or relative path; normalize it
 if [[ "$REPO_INPUT" = /* ]]; then
@@ -29,12 +39,6 @@ else
 fi
 
 if [[ -f "$CONFIG_PATH" ]]; then
-  if command -v python3 >/dev/null 2>&1; then
-    PYTHON_BIN="python3"
-  else
-    PYTHON_BIN="python"
-  fi
-
   # Run validation script, preserving stderr
   VALIDATION_SCRIPT=$(cat <<'PYEOF'
 import sys
@@ -66,15 +70,6 @@ PYEOF
     echo "Profile/version validation failed. See error above." >&2
     exit 1
   fi
-fi
-
-# Policy check execution
-if [[ -x "${WORKSPACE}/.venv/bin/python" ]]; then
-  PYTHON_BIN="${WORKSPACE}/.venv/bin/python"
-elif command -v python3 >/dev/null 2>&1; then
-  PYTHON_BIN="python3"
-else
-  PYTHON_BIN="python"
 fi
 
 ARGS=(-m policy_check --repo "$REPO_INPUT")
