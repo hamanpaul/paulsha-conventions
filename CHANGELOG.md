@@ -8,6 +8,9 @@
 ## [Unreleased]
 
 ### Changed
+- **Shell injection 完整防護**：Reusable workflow `Run policy check` 步驟改以 `env:` 繫結 `POLICY_PROFILE` / `POLICY_VERSION`，shell 腳本改用 `$POLICY_PROFILE` / `$POLICY_VERSION`，消除對 `${{ inputs.policy_profile }}` / `${{ inputs.policy_version }}` 的直接插值
+- **新增測試 `test_reusable_workflow_run_step_binds_profile_version_via_env`**：驗證 `Run policy check` 步驟精確 env 映射（`POLICY_PROFILE == "${{ inputs.policy_profile }}"` / `POLICY_VERSION == "${{ inputs.policy_version }}"`）且 shell body 不含直接插值
+- **R-15 文件一致化**：README.md 與 CHANGELOG.md 中 R-15 描述從「tag / SHA」更新為「完整 40 字元 commit SHA」，與 SHA-only contract 保持一致
 - Rename repo from `paul-project-conventions` to `paulsha-conventions`；更新 README、四份 agent convention files 與 fixtures 的 `managed-by` 與 `uses:` 參照
 - **OpenSpec 規格文件更新**：新專案 bootstrap spec 與 design doc 更新以反映 reusable workflow 的新 `policy_engine_ref` 輸入需求；template workflow 現在須同時鎖定 reusable workflow SHA 與傳入明確的 policy_engine_ref，確保兩者版本同步
 - **README CI 範例 consistency 修正**：使 `uses:` 與 `policy_engine_ref` 兩者都明確鎖定為同一完整 40 字元 commit SHA 範例，不再使用 tag（`@v1.0.0` / `v1.0.0`），確保文件中的 dual-pinning 訊息一致
@@ -33,7 +36,7 @@
   - R-12: 分支來源正確性（目標=main 要求來源 `feature/*`；目標=`feature/*` 要求來源 `wt/<feature>/*`）
   - R-13: Agent convention files 存在性（`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md`）
   - R-14: Agent files policy 版本一致性（四份檔案 `policy_version` 必須與 `.paul-project.yml` 一致）
-  - R-15: Caller workflow ref 鎖定檢查（`uses:` 必須指向 tag / SHA，禁止 branch ref 如 `@main`）
+  - R-15: Caller workflow ref 鎖定檢查（`uses:` 必須指向完整 40 字元 commit SHA，禁止 branch ref 如 `@main` 或 tag ref）
   - R-16: CLI help 與 docs 同步檢查（`.paul-project.yml.cli` 宣告的 command，實跑 help 輸出必須與 marker 區塊字元一致）
 - **Reusable workflow**：`.github/workflows/policy-check.yml`（下游 repo 直接 `uses:` 呼叫）
 - **Composite action**：`.github/actions/policy-check/action.yml`（可獨立使用或被 workflow 呼叫）

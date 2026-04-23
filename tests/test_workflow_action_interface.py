@@ -424,3 +424,73 @@ def test_reusable_workflow_binds_policy_engine_ref_via_env_not_direct_interpolat
         "Validation step must read from $POLICY_ENGINE_REF environment variable. "
         "This prevents shell injection attacks."
     )
+
+
+def test_reusable_workflow_run_step_binds_profile_version_via_env():
+    """
+    The 'Run policy check' step must bind policy_profile and policy_version through
+    'env:' instead of direct shell interpolation to prevent shell injection.
+
+    Exact required env mappings:
+      POLICY_PROFILE: ${{ inputs.policy_profile }}
+      POLICY_VERSION: ${{ inputs.policy_version }}
+
+    The run: script must use $POLICY_PROFILE / $POLICY_VERSION shell variables,
+    not ${{ inputs.policy_profile }} / ${{ inputs.policy_version }} directly.
+    """
+    workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "reusable-policy-check.yml"
+    raw = workflow_path.read_text(encoding="utf-8")
+    content = yaml.safe_load(raw)
+
+    steps = content["jobs"]["check"]["steps"]
+
+    # Find the "Run policy check" step by name
+    run_steps = [s for s in steps if s.get("name", "") == "Run policy check"]
+    assert run_steps, (
+        "Could not find 'Run policy check' step in reusable workflow. "
+        "Expected a step with name: 'Run policy check'."
+    )
+    run_step = run_steps[0]
+    run_cmd = run_step.get("run", "")
+    env_section = run_step.get("env", {})
+
+    # --- env binding assertions ---
+    assert env_section, (
+        "'Run policy check' step must have an 'env:' section to safely bind inputs."
+    )
+    assert "POLICY_PROFILE" in env_section, (
+        f"'Run policy check' step 'env:' must contain POLICY_PROFILE. "
+        f"Current env: {env_section}"
+    )
+    assert "POLICY_VERSION" in env_section, (
+        f"'Run policy check' step 'env:' must contain POLICY_VERSION. "
+        f"Current env: {env_section}"
+    )
+
+    # --- exact mapping assertions ---
+    assert env_section["POLICY_PROFILE"] == "${{ inputs.policy_profile }}", (
+        f"POLICY_PROFILE must map to exactly '${{{{ inputs.policy_profile }}}}'. "
+        f"Got: {env_section.get('POLICY_PROFILE')!r}"
+    )
+    assert env_section["POLICY_VERSION"] == "${{ inputs.policy_version }}", (
+        f"POLICY_VERSION must map to exactly '${{{{ inputs.policy_version }}}}'. "
+        f"Got: {env_section.get('POLICY_VERSION')!r}"
+    )
+
+    # --- no direct interpolation in shell body ---
+    assert "${{ inputs.policy_profile }}" not in run_cmd, (
+        "'Run policy check' run: script must NOT interpolate inputs.policy_profile directly. "
+        "Use $POLICY_PROFILE shell variable instead."
+    )
+    assert "${{ inputs.policy_version }}" not in run_cmd, (
+        "'Run policy check' run: script must NOT interpolate inputs.policy_version directly. "
+        "Use $POLICY_VERSION shell variable instead."
+    )
+
+    # --- shell variables must actually be used ---
+    assert "$POLICY_PROFILE" in run_cmd, (
+        "'Run policy check' run: script must read from $POLICY_PROFILE env variable."
+    )
+    assert "$POLICY_VERSION" in run_cmd, (
+        "'Run policy check' run: script must read from $POLICY_VERSION env variable."
+    )

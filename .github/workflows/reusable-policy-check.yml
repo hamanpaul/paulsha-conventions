@@ -75,9 +75,11 @@ jobs:
       - name: Run policy check
         run: |
           bash .policy-engine/.github/actions/policy-check/run.sh \
-            "${{ inputs.policy_profile }}" \
-            "${{ inputs.policy_version }}"
+            "$POLICY_PROFILE" \
+            "$POLICY_VERSION"
         env:
+          POLICY_PROFILE: ${{ inputs.policy_profile }}
+          POLICY_VERSION: ${{ inputs.policy_version }}
           GITHUB_PR_TITLE: ${{ github.event.pull_request.title }}
           GITHUB_PR_BODY: ${{ github.event.pull_request.body }}
           GITHUB_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
