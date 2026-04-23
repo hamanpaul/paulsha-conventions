@@ -366,3 +366,61 @@ def test_reusable_workflow_policy_engine_ref_description_says_full_sha_only():
         "policy_engine_ref description must NOT start with 'Tag ...' suggesting tags are a valid type. "
         f"Current description: {description!r}"
     )
+
+
+def test_reusable_workflow_binds_policy_engine_ref_via_env_not_direct_interpolation():
+    """
+    The validation step must bind policy_engine_ref through 'env:' instead of direct
+    shell interpolation to prevent shell injection.
+
+    If policy_engine_ref is interpolated directly as `ref="${{ inputs.policy_engine_ref }}"`,
+    a malicious value containing '"' can break out of the quoted string and bypass validation.
+    
+    Instead, the step should use 'env:' to set POLICY_ENGINE_REF and read from it via
+    shell variable expansion, which safely isolates the value.
+    """
+    workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "reusable-policy-check.yml"
+    raw = workflow_path.read_text(encoding="utf-8")
+    content = yaml.safe_load(raw)
+
+    steps = content["jobs"]["check"]["steps"]
+
+    # Find the validation step
+    validation_steps = [
+        s for s in steps
+        if "run" in s
+        and "policy_engine_ref" in s.get("run", "")
+        and ("40" in s.get("run", "") or "[0-9a-f]" in s.get("run", ""))
+    ]
+
+    assert validation_steps, (
+        "Could not find validation step for policy_engine_ref"
+    )
+
+    validation_step = validation_steps[0]
+    run_cmd = validation_step.get("run", "")
+
+    # The step must NOT interpolate directly: ${{ inputs.policy_engine_ref }}
+    # should not appear inside the shell script body
+    assert "${{ inputs.policy_engine_ref }}" not in run_cmd, (
+        "Validation step must NOT interpolate inputs.policy_engine_ref directly in the shell script. "
+        "This allows shell injection. Use 'env: POLICY_ENGINE_REF: ${{ inputs.policy_engine_ref }}' "
+        "and read from $POLICY_ENGINE_REF instead."
+    )
+
+    # The step MUST have an 'env:' section that binds POLICY_ENGINE_REF
+    env_section = validation_step.get("env", {})
+    assert env_section, (
+        "Validation step must have 'env:' section to safely bind policy_engine_ref"
+    )
+
+    assert "POLICY_ENGINE_REF" in env_section, (
+        f"Validation step 'env:' must include POLICY_ENGINE_REF. "
+        f"Current env: {env_section}"
+    )
+
+    # The shell script must read from the env variable, not direct interpolation
+    assert "$POLICY_ENGINE_REF" in run_cmd, (
+        "Validation step must read from $POLICY_ENGINE_REF environment variable. "
+        "This prevents shell injection attacks."
+    )

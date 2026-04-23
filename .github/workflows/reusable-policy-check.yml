@@ -38,14 +38,15 @@ jobs:
       - name: Validate policy_engine_ref is a full 40-character commit SHA
         shell: bash
         run: |
-          ref="${{ inputs.policy_engine_ref }}"
-          if ! [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+          if ! [[ "$POLICY_ENGINE_REF" =~ ^[0-9a-f]{40}$ ]]; then
             echo "ERROR: policy_engine_ref must be a full 40-character lowercase hex commit SHA."
-            echo "Got: '$ref'"
+            echo "Got: '$POLICY_ENGINE_REF'"
             echo "Tip: use \${{ github.sha }} (self-dogfood) or a pinned full SHA"
             echo "     from hamanpaul/paulsha-conventions (not a tag, not a short SHA, not a branch ref)."
             exit 1
           fi
+        env:
+          POLICY_ENGINE_REF: ${{ inputs.policy_engine_ref }}
 
       # Explicit checkout of paulsha-conventions gives the policy_check module
       # a deterministic, caller-independent location.  Using uses: ./.github/actions/...
