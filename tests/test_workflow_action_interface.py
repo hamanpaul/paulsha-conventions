@@ -52,6 +52,33 @@ def test_reusable_workflow_interface_contract():
     )
 
 
+def test_reusable_workflow_input_descriptions_do_not_use_github_expressions():
+    """
+    workflow_call input descriptions must be plain metadata text, not `${{ ... }}`.
+
+    GitHub parses expressions in reusable workflow metadata. If an input description
+    contains `${{ github.sha }}` or similar expression syntax, the called workflow is
+    rejected before any job starts.
+    """
+    workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "reusable-policy-check.yml"
+    content = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+    on_section = content.get("on") or content.get(True)
+    inputs = on_section.get("workflow_call", {}).get("inputs", {})
+
+    unsafe_descriptions = {
+        input_name: spec.get("description", "")
+        for input_name, spec in inputs.items()
+        if "${{" in str(spec.get("description", ""))
+    }
+
+    assert not unsafe_descriptions, (
+        "workflow_call input descriptions must not contain GitHub expression syntax like "
+        "'${{ github.sha }}'. GitHub parses reusable-workflow metadata before jobs start, "
+        f"so these descriptions make the workflow invalid. Found: {unsafe_descriptions}"
+    )
+
+
 def test_composite_action_has_profile_version_inputs():
     """Composite action must accept profile and version inputs (and only these as required)."""
     action_path = Path(__file__).parent.parent / ".github" / "actions" / "policy-check" / "action.yml"

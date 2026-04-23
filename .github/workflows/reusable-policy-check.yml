@@ -18,8 +18,9 @@ on:
           are rejected. Do NOT pass github.workflow_sha here because in a cross-repo
           reusable workflow that SHA belongs to the caller's repo, not to
           paulsha-conventions. Branch refs are disallowed by R-15 (Caller workflow
-          pinning rule). For self-dogfood use ${{ github.sha }}; downstream callers
-          must supply the full commit SHA of the paulsha-conventions version they pin.
+          pinning rule). For self-dogfood, pass the caller workflow's github.sha
+          value; downstream callers must supply the full commit SHA of the
+          paulsha-conventions version they pin.
         required: true
         type: string
 
