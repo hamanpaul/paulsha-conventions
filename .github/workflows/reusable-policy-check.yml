@@ -11,6 +11,15 @@ on:
         description: Policy version to enforce
         required: true
         type: string
+      policy_engine_ref:
+        description: >
+          Tag, branch, or commit SHA in hamanpaul/paulsha-conventions to check out as the
+          policy engine. Must be an explicit ref pointing at paulsha-conventions — do NOT
+          pass github.workflow_sha here because in a cross-repo reusable workflow that SHA
+          belongs to the caller's repo, not to paulsha-conventions.
+          Example: "v1.0.0" or a full commit SHA such as "abc1234".
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -29,14 +38,15 @@ jobs:
       # inside a reusable workflow would resolve against the CALLER's repo (where the
       # action does not exist), causing an action-not-found error.
       #
-      # Pin to github.workflow_sha so the policy engine version always matches the
-      # reusable workflow version the caller requested (e.g. @v1.0.0).  Without this,
-      # the checkout silently drifts to main regardless of the caller's pin.
+      # Use inputs.policy_engine_ref (not github.workflow_sha) because in a cross-repo
+      # reusable workflow the github context is always associated with the CALLER workflow.
+      # github.workflow_sha therefore points at the caller's repo SHA, not at a
+      # paulsha-conventions SHA.  Callers must supply an explicit tag or pinned SHA.
       - name: Checkout policy engine
         uses: actions/checkout@v4
         with:
           repository: hamanpaul/paulsha-conventions
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ inputs.policy_engine_ref }}
           path: .policy-engine
 
       - name: Setup Python

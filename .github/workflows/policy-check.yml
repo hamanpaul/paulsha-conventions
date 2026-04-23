@@ -13,3 +13,7 @@ jobs:
     with:
       policy_profile: flat
       policy_version: "1.0.0"
+      # Self-dogfood: pin to the current commit so the local reusable workflow and
+      # policy engine checkout are always in sync.  Downstream repos should supply a
+      # tag or pinned SHA pointing at hamanpaul/paulsha-conventions instead.
+      policy_engine_ref: ${{ github.sha }}

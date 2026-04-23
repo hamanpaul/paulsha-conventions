@@ -53,3 +53,4 @@
 - **interpreter 不一致**：`run.sh` 移除對 `${WORKSPACE}/.venv/bin/python` 的優先使用；統一使用 `setup-python` 設置的 `python3`，確保安裝與執行使用同一直譯器
 - **README 敘述**：更新 CI workflow 說明，反映實際的 policy engine checkout + 安裝流程
 - **reusable workflow policy engine 版本漂移**：`Checkout policy engine` 步驟加入 `ref: ${{ github.workflow_sha }}`，確保 policy engine 版本與呼叫者所鎖定的 workflow 版本一致，消除未鎖定時永遠抓 main branch 的風險；同步新增回歸測試 `test_reusable_workflow_policy_engine_checkout_is_pinned`
+- **跨 repo reusable workflow 中 `github.workflow_sha` 指向錯誤 repo**：根據 GitHub 官方文件，reusable workflow 中 `github` context 始終屬於 caller workflow，因此 `github.workflow_sha` 是 caller repo 的 SHA，而非 `paulsha-conventions` 的 SHA；改為在 `workflow_call.inputs` 新增必填 `policy_engine_ref` 參數，由呼叫者明確傳入指向 `hamanpaul/paulsha-conventions` 的 tag 或 SHA；同步更新 `policy-check.yml`（self-dogfood 以 `${{ github.sha }}` 傳入）、README CI 範例、及測試 `test_reusable_workflow_interface_contract` 與 `test_reusable_workflow_policy_engine_checkout_is_pinned`

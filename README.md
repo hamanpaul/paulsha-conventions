@@ -76,10 +76,13 @@ on: [pull_request]
 
 jobs:
   policy:
-    uses: hamanpaul/paulsha-conventions/.github/workflows/policy-check.yml@v1
+    uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@v1
     with:
       policy_profile: stage-driven  # 或 flat
       policy_version: 1.0.0
+      # 必須傳入明確的 tag 或 commit SHA，指向 hamanpaul/paulsha-conventions。
+      # 不可使用 github.workflow_sha（那是 caller 自己 repo 的 SHA，不是 paulsha-conventions 的）。
+      policy_engine_ref: v1.0.0
 ```
 
 Workflow 會自動：

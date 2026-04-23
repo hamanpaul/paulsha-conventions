@@ -16,7 +16,7 @@ import yaml
 
 
 def test_reusable_workflow_interface_contract():
-    """Reusable workflow must ONLY expose policy_profile and policy_version inputs."""
+    """Reusable workflow must expose policy_profile, policy_version, and policy_engine_ref inputs."""
     workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "reusable-policy-check.yml"
     assert workflow_path.exists(), f"Missing {workflow_path}"
 
@@ -29,17 +29,27 @@ def test_reusable_workflow_interface_contract():
     
     inputs = on_section.get("workflow_call", {}).get("inputs", {})
 
-    # Spec: workflow_call.inputs 只暴露 policy_profile 與 policy_version 兩個必要參數
-    assert set(inputs.keys()) == {"policy_profile", "policy_version"}, (
-        f"Reusable workflow should ONLY expose policy_profile and policy_version. "
+    # Spec: workflow_call.inputs 暴露三個輸入：
+    #   - policy_profile, policy_version: 業務參數
+    #   - policy_engine_ref: 明確指定 policy engine checkout 的 ref/SHA，
+    #     解決跨 repo reusable workflow 中 github.workflow_sha 屬於 caller repo 的問題
+    assert set(inputs.keys()) == {"policy_profile", "policy_version", "policy_engine_ref"}, (
+        f"Reusable workflow should expose policy_profile, policy_version, and policy_engine_ref. "
         f"Found: {list(inputs.keys())}"
     )
 
-    # Both should be required strings
+    # policy_profile and policy_version: required strings
     assert inputs["policy_profile"]["type"] == "string"
     assert inputs["policy_profile"]["required"] is True
     assert inputs["policy_version"]["type"] == "string"
     assert inputs["policy_version"]["required"] is True
+
+    # policy_engine_ref: required string — caller must always pin explicitly
+    assert inputs["policy_engine_ref"]["type"] == "string"
+    assert inputs["policy_engine_ref"]["required"] is True, (
+        "policy_engine_ref must be required so callers are forced to pin to a specific "
+        "tag or SHA; an optional default would encourage unpinned / drifting usage."
+    )
 
 
 def test_composite_action_has_profile_version_inputs():
@@ -153,11 +163,15 @@ def test_run_sh_does_not_prefer_caller_venv_python():
 
 def test_reusable_workflow_policy_engine_checkout_is_pinned():
     """
-    The policy engine checkout must be pinned to the same ref as the workflow being
-    executed (github.workflow_sha), not left unpinned (which would always pull main).
+    The policy engine checkout must be pinned via the explicit `policy_engine_ref` input,
+    NOT via `github.workflow_sha`.
 
-    Without an explicit ref the checkout silently drifts: a caller pinned to
-    paulsha-conventions@v1.0.0 would still get main-branch policy_check code.
+    In a cross-repo reusable workflow, `github.workflow_sha` is the SHA of the CALLER's
+    workflow file, not of hamanpaul/paulsha-conventions. Using it as the ref would check
+    out a random SHA from the caller's repo (or fail), causing version drift.
+
+    The correct contract: callers must supply `policy_engine_ref` (a tag or pinned SHA
+    pointing at hamanpaul/paulsha-conventions) so the engine version is deterministic.
     """
     workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "reusable-policy-check.yml"
     raw = workflow_path.read_text(encoding="utf-8")
@@ -183,11 +197,18 @@ def test_reusable_workflow_policy_engine_checkout_is_pinned():
             "Without a ref, GitHub always fetches the default branch (main), which "
             "causes version drift when callers pin to a specific tag or SHA."
         )
-        # The ref must use github.workflow_sha so the engine version matches
-        # the reusable workflow version that the caller actually requested.
-        assert "github.workflow_sha" in ref_value, (
-            "Policy engine checkout should pin to '${{ github.workflow_sha }}' so "
-            "the engine version always matches the reusable workflow version under execution."
+        # Must NOT use github.workflow_sha (belongs to the caller repo, not paulsha-conventions)
+        assert "github.workflow_sha" not in ref_value, (
+            "Policy engine checkout must NOT use github.workflow_sha. "
+            "In a cross-repo reusable workflow the github context is always associated "
+            "with the CALLER workflow, so github.workflow_sha is the caller's SHA, not "
+            "a paulsha-conventions SHA. Use inputs.policy_engine_ref instead."
+        )
+        # Must use the explicit input so the caller controls which engine version is used
+        assert "inputs.policy_engine_ref" in ref_value, (
+            "Policy engine checkout ref must be '${{ inputs.policy_engine_ref }}'. "
+            "This forces every caller to pin explicitly to a tag or SHA in "
+            "hamanpaul/paulsha-conventions, preventing silent version drift."
         )
 
 
