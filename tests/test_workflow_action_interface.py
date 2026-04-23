@@ -185,7 +185,7 @@ def test_reusable_workflow_policy_engine_checkout_is_pinned():
         )
         # The ref must use github.workflow_sha so the engine version matches
         # the reusable workflow version that the caller actually requested.
-        assert "github.workflow_sha" in raw, (
+        assert "github.workflow_sha" in ref_value, (
             "Policy engine checkout should pin to '${{ github.workflow_sha }}' so "
             "the engine version always matches the reusable workflow version under execution."
         )
