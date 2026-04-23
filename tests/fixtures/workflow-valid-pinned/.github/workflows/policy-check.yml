@@ -2,4 +2,4 @@ name: policy-check
 on: [pull_request]
 jobs:
   check:
-    uses: hamanpaul/paul-project-conventions/.github/workflows/reusable-policy-check.yml@v1
+    uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@v1

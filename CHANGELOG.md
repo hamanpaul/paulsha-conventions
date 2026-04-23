@@ -7,6 +7,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Rename repo from `paul-project-conventions` to `paulsha-conventions`；更新 README、四份 agent convention files 與 fixtures 的 `managed-by` 與 `uses:` 參照
+
 ### Added
 - **R-01 ~ R-16 完整規則實作**（TDD 覆蓋 + fixtures）
   - R-01: README.md 存在性檢查

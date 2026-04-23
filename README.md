@@ -1,4 +1,4 @@
-# paul-project-conventions
+# paulsha-conventions
 
 > `hamanpaul/*` 跨專案 policy 守門員  
 > 讓文件、版號、分支、PR 保持一致，防止規範漂移
@@ -76,7 +76,7 @@ on: [pull_request]
 
 jobs:
   policy:
-    uses: hamanpaul/paul-project-conventions/.github/workflows/policy-check.yml@v1
+    uses: hamanpaul/paulsha-conventions/.github/workflows/policy-check.yml@v1
     with:
       policy_profile: stage-driven  # 或 flat
       policy_version: 1.0.0
@@ -97,7 +97,7 @@ Workflow 會自動：
 **使用**：
 ```bash
 cd <下游專案>
-bash /path/to/paul-project-conventions/scripts/update-cli-help.sh
+bash /path/to/paulsha-conventions/scripts/update-cli-help.sh
 ```
 
 **注意**：

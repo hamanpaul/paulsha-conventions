@@ -2,7 +2,7 @@
 Test R-16 self-dogfood requirement.
 
 Spec reference: §4.2 R-16 CLI help sync
-- paul-project-conventions repo must have cli: entries in .paul-project.yml
+- paulsha-conventions repo must have cli: entries in .paul-project.yml
 - README.md must have corresponding marker blocks
 - R-16 should NOT show "No CLI entries declared"
 """
