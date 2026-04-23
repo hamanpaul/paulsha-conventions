@@ -24,22 +24,32 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Explicit checkout of paulsha-conventions gives the policy_check module
+      # a deterministic, caller-independent location.  Using uses: ./.github/actions/...
+      # inside a reusable workflow would resolve against the CALLER's repo (where the
+      # action does not exist), causing an action-not-found error.
+      - name: Checkout policy engine
+        uses: actions/checkout@v4
+        with:
+          repository: hamanpaul/paulsha-conventions
+          path: .policy-engine
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install action runtime
-        run: python -m pip install --disable-pip-version-check "PyYAML>=6.0"
+      - name: Install policy engine
+        run: python -m pip install --disable-pip-version-check ".policy-engine"
 
       - name: Run policy check
-        uses: ./.github/actions/policy-check
+        run: |
+          bash .policy-engine/.github/actions/policy-check/run.sh \
+            "${{ inputs.policy_profile }}" \
+            "${{ inputs.policy_version }}"
         env:
           GITHUB_PR_TITLE: ${{ github.event.pull_request.title }}
           GITHUB_PR_BODY: ${{ github.event.pull_request.body }}
           GITHUB_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           GITHUB_BASE_REF: ${{ github.base_ref }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
-        with:
-          profile: ${{ inputs.policy_profile }}
-          version: ${{ inputs.policy_version }}

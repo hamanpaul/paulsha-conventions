@@ -84,7 +84,7 @@ jobs:
 
 Workflow 會自動：
 - Checkout PR context
-- 安裝 policy_check 套件
+- 從 `hamanpaul/paulsha-conventions` 取得 policy engine（含 PyYAML 依賴）
 - 跑完整規則檢查
 - 在 GitHub Actions Summary 輸出結果
 

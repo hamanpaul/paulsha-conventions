@@ -49,3 +49,6 @@
 ### Fixed
 - 無（baseline 建立階段）
 - reusable workflow 不再對下游 repo 執行 `pip install -e .`；改為僅安裝 action runtime 相依，並讓 composite action 直接從自身 source tree 載入 `policy_check`
+- **reusable workflow action 解析問題**：移除 `uses: ./.github/actions/policy-check`（在被呼叫 workflow 中此路徑解析自 caller repo，導致 action-not-found）；改為顯式 checkout `hamanpaul/paulsha-conventions` 至 `.policy-engine/` 並直接呼叫 `run.sh`
+- **interpreter 不一致**：`run.sh` 移除對 `${WORKSPACE}/.venv/bin/python` 的優先使用；統一使用 `setup-python` 設置的 `python3`，確保安裝與執行使用同一直譯器
+- **README 敘述**：更新 CI workflow 說明，反映實際的 policy engine checkout + 安裝流程

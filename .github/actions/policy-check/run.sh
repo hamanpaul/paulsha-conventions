@@ -20,9 +20,7 @@ PR_HEAD_REF_INPUT="${GITHUB_HEAD_REF:-}"
 
 cd "$WORKSPACE"
 
-if [[ -x "${WORKSPACE}/.venv/bin/python" ]]; then
-  PYTHON_BIN="${WORKSPACE}/.venv/bin/python"
-elif command -v python3 >/dev/null 2>&1; then
+if command -v python3 >/dev/null 2>&1; then
   PYTHON_BIN="python3"
 else
   PYTHON_BIN="python"
