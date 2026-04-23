@@ -119,6 +119,12 @@ bash /path/to/paulsha-conventions/scripts/update-cli-help.sh
 - 四份 agent convention files（`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md`）
 - `.github/workflows/policy-check.yml` 呼叫本 repo reusable workflow
 
+目前已落地的 live rollout repos：
+- [`hamanpaul/.github`](https://github.com/hamanpaul/.github)：提供 account-level PR template / CONTRIBUTING / SECURITY defaults
+- [`hamanpaul/new-project-template`](https://github.com/hamanpaul/new-project-template)：提供新專案 bootstrap skeleton 與 dual-pinned `Policy Check` workflow
+
+這條 bootstrap 路徑已用 fresh smoke repo 驗證：只補 smoke metadata 的 PR 即可直接通過 generated `Policy Check` workflow，無需手改 workflow 檔。暫時只剩遠端 smoke repo 清理尚未完成，因目前 `gh` token 缺少 `delete_repo` scope。
+
 ```bash
 gh repo create hamanpaul/<new-project> --template hamanpaul/new-project-template
 ```
