@@ -240,11 +240,11 @@ def test_composite_action_validates_profile_version_consistency():
 def test_caller_workflow_passes_policy_engine_ref_to_reusable():
     """
     Self-dogfood test: the caller workflow (.github/workflows/policy-check.yml)
-    must pass policy_engine_ref to the reusable workflow.
+    must pass policy_engine_ref as exactly '${{ github.sha }}' to the reusable workflow.
 
-    This ensures the local policy-check workflow self-dogfoods the dual-pinning requirement
-    (R-15) that downstream repos must also follow. It demonstrates that we hold ourselves
-    to the same standard by pinning the engine explicitly.
+    '${{ github.sha }}' evaluates to a full 40-char commit SHA at runtime, satisfying the
+    full-SHA-only contract.  Using '${{ github.workflow_sha }}' would be a regression —
+    in cross-repo reusable workflows that SHA belongs to the caller's repo, not paulsha-conventions.
     """
     caller_workflow_path = (
         Path(__file__).parent.parent / ".github" / "workflows" / "policy-check.yml"
@@ -252,24 +252,117 @@ def test_caller_workflow_passes_policy_engine_ref_to_reusable():
     assert caller_workflow_path.exists(), f"Missing {caller_workflow_path}"
 
     content = yaml.safe_load(caller_workflow_path.read_text(encoding="utf-8"))
-    
-    # Check that the job uses the reusable workflow
+
     jobs = content.get("jobs", {})
     assert "check" in jobs, "Missing 'check' job in caller workflow"
-    
+
     job = jobs["check"]
     assert "uses" in job, "Caller workflow job must use the reusable workflow"
-    
-    # Extract the 'with' section (workflow inputs)
+
     job_with = job.get("with", {})
     assert "policy_engine_ref" in job_with, (
         "Caller workflow must pass 'policy_engine_ref' to the reusable workflow. "
         "This self-dogfoods the requirement that downstream repos must pin explicitly."
     )
-    
-    # Verify it's not empty
+
     ref_value = job_with.get("policy_engine_ref", "")
-    assert ref_value, (
-        "policy_engine_ref must have a non-empty value. "
-        "For self-dogfood, use github.sha (local commit) or a specific tag."
+
+    # Must be exactly the github.sha expression — evaluates to a full 40-char SHA at runtime
+    assert ref_value == "${{ github.sha }}", (
+        f"policy_engine_ref in self-dogfood caller must be exactly '${{{{ github.sha }}}}'. "
+        f"Got: '{ref_value}'. "
+        "Do not use github.workflow_sha — in cross-repo reusable workflows that SHA "
+        "belongs to the caller's repo, not to paulsha-conventions."
+    )
+
+    # Explicitly guard against regression to github.workflow_sha
+    assert "github.workflow_sha" not in ref_value, (
+        "policy_engine_ref must NOT use github.workflow_sha. "
+        "In cross-repo reusable workflows, github.workflow_sha is the caller's repo SHA. "
+        "Use github.sha instead (it evaluates to a full 40-char SHA at runtime)."
+    )
+
+
+def test_reusable_workflow_validates_policy_engine_ref_is_full_sha():
+    """
+    Reusable workflow must have a validation step before 'Checkout policy engine' that
+    rejects any policy_engine_ref that is not a full 40-character lowercase hex commit SHA.
+
+    This prevents callers from accidentally passing tags, short SHAs, or branch refs.
+    Tags are no longer valid — only a full pinned SHA is safe and unambiguous.
+    """
+    workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "reusable-policy-check.yml"
+    content = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+    steps = content["jobs"]["check"]["steps"]
+
+    # Locate the "Checkout policy engine" step index
+    checkout_engine_idx = next(
+        (
+            i for i, s in enumerate(steps)
+            if s.get("uses", "").startswith("actions/checkout")
+            and "hamanpaul/paulsha-conventions" in str(s.get("with", {}).get("repository", ""))
+        ),
+        None,
+    )
+    assert checkout_engine_idx is not None, (
+        "Could not find 'Checkout policy engine' step. Cannot verify validation ordering."
+    )
+
+    # A validation step must appear BEFORE the engine checkout
+    pre_checkout_steps = steps[:checkout_engine_idx]
+    validation_steps = [
+        s for s in pre_checkout_steps
+        if "run" in s
+        and "policy_engine_ref" in s.get("run", "")
+        and (
+            "40" in s.get("run", "")
+            or "[0-9a-f]" in s.get("run", "")
+        )
+    ]
+
+    assert validation_steps, (
+        "Reusable workflow must have a validation step before 'Checkout policy engine' "
+        "that checks policy_engine_ref is a full 40-character commit SHA. "
+        "This prevents tags, short SHAs, or branch refs from silently succeeding."
+    )
+
+    run_cmd = validation_steps[0]["run"]
+    assert "exit 1" in run_cmd, (
+        "Validation step must 'exit 1' when the ref does not match the full-SHA pattern."
+    )
+
+
+def test_reusable_workflow_policy_engine_ref_description_says_full_sha_only():
+    """
+    The policy_engine_ref input description must state 'full 40-character commit SHA'
+    and must NOT mention 'tag' as an acceptable value.
+
+    Tags are no longer accepted — only full 40-character commit SHAs are valid.
+    This eliminates the tag-vs-SHA ambiguity and matches the security/pinning intent.
+    """
+    workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "reusable-policy-check.yml"
+    content = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+    on_section = content.get("on") or content.get(True)
+    inputs = on_section.get("workflow_call", {}).get("inputs", {})
+    description = inputs.get("policy_engine_ref", {}).get("description", "")
+
+    assert "40" in description, (
+        "policy_engine_ref description must state it requires a full 40-character commit SHA. "
+        f"Current description: {description!r}"
+    )
+
+    # Must NOT present tags as valid inputs (the old description said "Tag or commit SHA")
+    # Note: the word "tag" may appear in explanatory context (e.g. "tags are rejected"),
+    # so check for the specific pattern that implies tags are acceptable values.
+    assert "tag or commit" not in description.lower(), (
+        "policy_engine_ref description must NOT say 'tag or commit' — that implies tags are valid. "
+        "Only full 40-character commit SHAs are accepted. "
+        f"Current description: {description!r}"
+    )
+    # Also reject the old-style opening "Tag or commit SHA..."
+    assert not description.lower().startswith("tag "), (
+        "policy_engine_ref description must NOT start with 'Tag ...' suggesting tags are a valid type. "
+        f"Current description: {description!r}"
     )

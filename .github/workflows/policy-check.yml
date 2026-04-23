@@ -14,6 +14,8 @@ jobs:
       policy_profile: flat
       policy_version: "1.0.0"
       # Self-dogfood: pin to the current commit so the local reusable workflow and
-      # policy engine checkout are always in sync.  Downstream repos should supply a
-      # tag or pinned SHA pointing at hamanpaul/paulsha-conventions instead.
+      # policy engine checkout are always in sync.  ${{ github.sha }} evaluates to a
+      # full 40-char commit SHA at runtime, satisfying the full-SHA-only contract.
+      # Downstream repos must supply a full 40-char commit SHA pointing at
+      # hamanpaul/paulsha-conventions (not a tag, not a short SHA).
       policy_engine_ref: ${{ github.sha }}

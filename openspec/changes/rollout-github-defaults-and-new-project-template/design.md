@@ -39,7 +39,7 @@ The `.github` repo will contain the default PR template, `CONTRIBUTING.md`, `SEC
 
 The template repo will include `.github/workflows/policy-check.yml` that:
 - References `hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml` by full commit SHA
-- Passes an explicit `policy_engine_ref` input (tag or pinned SHA) pointing at `hamanpaul/paulsha-conventions`
+- Passes an explicit `policy_engine_ref` input (full 40-character commit SHA) pointing at `hamanpaul/paulsha-conventions`
 
 The `policy_engine_ref` input is required by the reusable workflow to specify which version of the policy engine to checkout. In cross-repo workflows, `github.workflow_sha` refers to the caller's repository, not to paulsha-conventions, so an explicit ref prevents silent version drift.
 
@@ -75,4 +75,4 @@ Rollback is simple: remove the new repositories from documentation and stop reco
 ## Open Questions
 
 - Which first real downstream repository should replace the smoke-test repository after the rollout is proven?
-- When should the pinned commit SHA in `new-project-template` be replaced with a pilot tag such as `v0.0.1`?
+- When should the pinned commit SHA in `new-project-template` be updated to a newer paulsha-conventions commit?

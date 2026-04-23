@@ -18,7 +18,7 @@ The template MUST connect generated repositories to `hamanpaul/paulsha-conventio
 - **WHEN** a maintainer opens `.github/workflows/policy-check.yml` in `hamanpaul/new-project-template`
 - **THEN** the workflow BOTH:
   - References `hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml` by full commit SHA, AND
-  - Passes an explicit `policy_engine_ref` input pointing at the same version (tag or commit SHA) of `hamanpaul/paulsha-conventions`
+  - Passes an explicit `policy_engine_ref` input pointing at the same version (full 40-character commit SHA) of `hamanpaul/paulsha-conventions`
 
 #### Scenario: Generated repository passes local policy validation
 - **WHEN** a maintainer creates a smoke-test repository from `hamanpaul/new-project-template` and fills only project-specific metadata

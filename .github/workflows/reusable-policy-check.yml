@@ -13,13 +13,13 @@ on:
         type: string
       policy_engine_ref:
         description: >
-          Tag or commit SHA in hamanpaul/paulsha-conventions to check out as the
-          policy engine. Must be an explicit tag or pinned commit SHA pointing at 
-          paulsha-conventions — do NOT pass github.workflow_sha here because in a 
-          cross-repo reusable workflow that SHA belongs to the caller's repo, not to 
-          paulsha-conventions. Branch refs are disallowed by R-15 (Caller workflow 
-          pinning rule).
-          Example: "v1.0.0" or a full commit SHA such as "abc1234".
+          Full 40-character commit SHA in hamanpaul/paulsha-conventions to check out
+          as the policy engine. Must be an exact 40-char hex SHA — tags and short SHAs
+          are rejected. Do NOT pass github.workflow_sha here because in a cross-repo
+          reusable workflow that SHA belongs to the caller's repo, not to
+          paulsha-conventions. Branch refs are disallowed by R-15 (Caller workflow
+          pinning rule). For self-dogfood use ${{ github.sha }}; downstream callers
+          must supply the full commit SHA of the paulsha-conventions version they pin.
         required: true
         type: string
 
@@ -35,6 +35,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate policy_engine_ref is a full 40-character commit SHA
+        shell: bash
+        run: |
+          ref="${{ inputs.policy_engine_ref }}"
+          if ! [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: policy_engine_ref must be a full 40-character lowercase hex commit SHA."
+            echo "Got: '$ref'"
+            echo "Tip: use \${{ github.sha }} (self-dogfood) or a pinned full SHA"
+            echo "     from hamanpaul/paulsha-conventions (not a tag, not a short SHA, not a branch ref)."
+            exit 1
+          fi
+
       # Explicit checkout of paulsha-conventions gives the policy_check module
       # a deterministic, caller-independent location.  Using uses: ./.github/actions/...
       # inside a reusable workflow would resolve against the CALLER's repo (where the
@@ -43,7 +55,7 @@ jobs:
       # Use inputs.policy_engine_ref (not github.workflow_sha) because in a cross-repo
       # reusable workflow the github context is always associated with the CALLER workflow.
       # github.workflow_sha therefore points at the caller's repo SHA, not at a
-      # paulsha-conventions SHA.  Callers must supply an explicit tag or pinned SHA.
+      # paulsha-conventions SHA.  Callers must supply a full 40-char commit SHA.
       - name: Checkout policy engine
         uses: actions/checkout@v4
         with:
