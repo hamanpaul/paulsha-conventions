@@ -36,7 +36,7 @@
   - R-12: 分支來源正確性（目標=main 要求來源 `feature/*`；目標=`feature/*` 要求來源 `wt/<feature>/*`）
   - R-13: Agent convention files 存在性（`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md`）
   - R-14: Agent files policy 版本一致性（四份檔案 `policy_version` 必須與 `.paul-project.yml` 一致）
-  - R-15: Caller workflow ref 鎖定檢查（`uses:` 必須指向完整 40 字元 commit SHA，禁止 branch ref 如 `@main` 或 tag ref）
+  - R-15: Caller workflow ref 鎖定檢查（一般 `uses:` 允許 tag 或完整 40 字元 commit SHA，禁止 branch ref 如 `@main`；本次 reusable workflow 的 `policy_engine_ref` 則另由 workflow 內部強制完整 SHA）
   - R-16: CLI help 與 docs 同步檢查（`.paul-project.yml.cli` 宣告的 command，實跑 help 輸出必須與 marker 區塊字元一致）
 - **Reusable workflow**：`.github/workflows/policy-check.yml`（下游 repo 直接 `uses:` 呼叫）
 - **Composite action**：`.github/actions/policy-check/action.yml`（可獨立使用或被 workflow 呼叫）

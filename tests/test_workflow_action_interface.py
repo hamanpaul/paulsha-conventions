@@ -48,7 +48,7 @@ def test_reusable_workflow_interface_contract():
     assert inputs["policy_engine_ref"]["type"] == "string"
     assert inputs["policy_engine_ref"]["required"] is True, (
         "policy_engine_ref must be required so callers are forced to pin to a specific "
-        "tag or SHA; an optional default would encourage unpinned / drifting usage."
+        "full 40-character commit SHA; an optional default would encourage unpinned / drifting usage."
     )
 
 
@@ -170,8 +170,8 @@ def test_reusable_workflow_policy_engine_checkout_is_pinned():
     workflow file, not of hamanpaul/paulsha-conventions. Using it as the ref would check
     out a random SHA from the caller's repo (or fail), causing version drift.
 
-    The correct contract: callers must supply `policy_engine_ref` (a tag or pinned SHA
-    pointing at hamanpaul/paulsha-conventions) so the engine version is deterministic.
+    The correct contract: callers must supply `policy_engine_ref` as a full 40-character
+    commit SHA pointing at hamanpaul/paulsha-conventions so the engine version is deterministic.
     """
     workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "reusable-policy-check.yml"
     raw = workflow_path.read_text(encoding="utf-8")
@@ -195,7 +195,7 @@ def test_reusable_workflow_policy_engine_checkout_is_pinned():
         assert ref_value, (
             f"Policy engine checkout step '{step.get('name', '?')}' has no 'ref:' field. "
             "Without a ref, GitHub always fetches the default branch (main), which "
-            "causes version drift when callers pin to a specific tag or SHA."
+            "causes version drift when callers pin to a specific full 40-character SHA."
         )
         # Must NOT use github.workflow_sha (belongs to the caller repo, not paulsha-conventions)
         assert "github.workflow_sha" not in ref_value, (
@@ -207,7 +207,7 @@ def test_reusable_workflow_policy_engine_checkout_is_pinned():
         # Must use the explicit input so the caller controls which engine version is used
         assert "inputs.policy_engine_ref" in ref_value, (
             "Policy engine checkout ref must be '${{ inputs.policy_engine_ref }}'. "
-            "This forces every caller to pin explicitly to a tag or SHA in "
+            "This forces every caller to pin explicitly to a full 40-character SHA in "
             "hamanpaul/paulsha-conventions, preventing silent version drift."
         )
 

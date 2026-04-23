@@ -257,7 +257,7 @@ If a change touches files covered by `code_paths`, update `CHANGELOG.md [Unrelea
 
 ## Workflow references
 
-When a repository calls shared workflows, pin them to a tag or a full commit SHA. Do not use branch refs such as `@main`.
+When a repository calls this shared policy workflow path, pin both the reusable workflow ref and `policy_engine_ref` to the same full 40-character commit SHA. Do not use tags, short SHAs, or branch refs such as `@main`.
 EOF
 
 cat > /home/paul_chen/prj_pri/.github/SECURITY.md <<'EOF'
