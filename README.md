@@ -7,7 +7,7 @@
 
 本 repo 提供一套跨 `hamanpaul/*` 所有專案的 **policy engine**，目標：
 
-- **新 repo 建立時**：自動帶入合規骨架（via `paul-project-template`）
+- **新 repo 建立時**：自動帶入合規骨架（via `new-project-template`）
 - **CI gate**：PR merge 前擋住不合規變更
 - **Agent checklist**：進入 session 時自動看到規範
 - **強制同步**：code 與 docs / CHANGELOG / VERSION 必須一起動
@@ -38,7 +38,7 @@
 | R-12 | 分支來源正確 | 目標=main 時來源非 `feature/*`；目標=`feature/*` 時來源非 `wt/<feature>/*` | `policy-exempt:branch-name` |
 | R-13 | Agent convention files 存在 | 缺 `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md` | `policy-exempt:agent-files` |
 | R-14 | Agent files policy 版本一致 | 內容 `policy_version` 與 `.paul-project.yml` 不符 | — |
-| R-15 | Caller workflow 用 tag / SHA 鎖定 | `uses:` 指向 branch ref（`@main`、`@develop`）或無 ref | — |
+| R-15 | Caller workflow 用 tag / SHA 鎖定（本 repo 的 policy-check dual-pinning path 另要求完整 40 字元 SHA） | `uses:` 指向 branch ref（`@main`、`@develop`）或無 ref | — |
 | R-16 | CLI help 與 docs 同步 | `.paul-project.yml.cli` 宣告項目，實跑 help 輸出與 marker 區塊不一致 | `policy-exempt:cli-help` |
 
 **Exemption Labels 白名單**：上表所列 `policy-exempt:*` / `skip-changelog` / `wip` 即所有可用豁免 label；gate 只認這些，其他一律視同未豁免。
@@ -76,15 +76,21 @@ on: [pull_request]
 
 jobs:
   policy:
-    uses: hamanpaul/paulsha-conventions/.github/workflows/policy-check.yml@v1
+    # Pin both the reusable workflow and the policy engine to the SAME full 40-char commit SHA.
+    # Do NOT use a tag or branch ref — full SHA is required by the policy engine validation step.
+    uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@aabbccddeeff0011223344556677889900aabbcc
     with:
       policy_profile: stage-driven  # 或 flat
       policy_version: 1.0.0
+      # 必須傳入完整 40 字元 hex commit SHA，指向 hamanpaul/paulsha-conventions。
+      # 不可使用 tag、short SHA 或 github.workflow_sha（那是 caller 自己 repo 的 SHA）。
+      # uses: 與 policy_engine_ref 兩者必須鎖定到同一個 SHA。
+      policy_engine_ref: aabbccddeeff0011223344556677889900aabbcc
 ```
 
 Workflow 會自動：
 - Checkout PR context
-- 安裝 policy_check 套件
+- 從 `hamanpaul/paulsha-conventions` 取得 policy engine（含 PyYAML 依賴）
 - 跑完整規則檢查
 - 在 GitHub Actions Summary 輸出結果
 
@@ -107,14 +113,14 @@ bash /path/to/paulsha-conventions/scripts/update-cli-help.sh
 
 ### 4. 新專案 Bootstrap
 
-使用 `hamanpaul/paul-project-template` 建立新 repo，自動包含：
+使用 `hamanpaul/new-project-template` 建立新 repo，自動包含：
 - `.paul-project.yml`（需填入 profile / version）
 - `README.md` / `CHANGELOG.md` / `VERSION` 骨架
 - 四份 agent convention files（`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md`）
 - `.github/workflows/policy-check.yml` 呼叫本 repo reusable workflow
 
 ```bash
-gh repo create hamanpaul/<new-project> --template hamanpaul/paul-project-template
+gh repo create hamanpaul/<new-project> --template hamanpaul/new-project-template
 ```
 
 ### CLI Help
@@ -152,7 +158,7 @@ options:
 ## 相關專案
 
 - [`hamanpaul/.github`](https://github.com/hamanpaul/.github)：GitHub 社群預設（PR template / Issue template / SECURITY / CONTRIBUTING）
-- [`hamanpaul/paul-project-template`](https://github.com/hamanpaul/paul-project-template)：新專案骨架（供 `gh repo create --template` 使用）
+- [`hamanpaul/new-project-template`](https://github.com/hamanpaul/new-project-template)：新專案骨架（供 `gh repo create --template` 使用）
 
 ## License
 

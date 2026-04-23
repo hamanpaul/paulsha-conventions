@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
+import venv
 from pathlib import Path
 
 import pytest
@@ -130,3 +131,37 @@ policy_version: 1.0.0
         assert "Profile/version validation failed" not in result.stderr, (
             f"Validation should pass when profile/version match. stderr: {result.stderr}"
         )
+
+
+def test_action_run_sh_uses_action_repo_source_with_runtime_dependency_only(fixture_repo):
+    """Integration test: run.sh should work without installing policy_check into the caller repo."""
+    repo_path = fixture_repo("valid-minimal")
+    venv.EnvBuilder(system_site_packages=True, with_pip=False).create(repo_path / ".venv")
+
+    run_sh = Path(__file__).parent.parent / ".github" / "actions" / "policy-check" / "run.sh"
+
+    result = subprocess.run(
+        ["bash", str(run_sh), "flat", "1.0.0"],
+        capture_output=True,
+        text=True,
+        cwd=repo_path,
+        env={
+            **os.environ,
+            "GITHUB_WORKSPACE": str(repo_path),
+            "PYTHONPATH": "",
+            # In GitHub Actions jobs, policy_check writes the report to the step summary
+            # file instead of stdout. Clear it here so the integration test can assert
+            # on the emitted report text directly.
+            "GITHUB_STEP_SUMMARY": "",
+        },
+    )
+
+    combined_output = f"{result.stdout}\n{result.stderr}"
+
+    assert "# Policy Check Report" in combined_output, (
+        "Expected the action to run policy_check from its own source tree once runtime "
+        f"dependencies are available. Output: {combined_output}"
+    )
+    assert "No module named policy_check" not in combined_output, (
+        "Action should not require policy_check to be pre-installed in the caller repo."
+    )

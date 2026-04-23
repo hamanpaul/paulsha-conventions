@@ -11,6 +11,17 @@ on:
         description: Policy version to enforce
         required: true
         type: string
+      policy_engine_ref:
+        description: >
+          Full 40-character commit SHA in hamanpaul/paulsha-conventions to check out
+          as the policy engine. Must be an exact 40-char hex SHA — tags and short SHAs
+          are rejected. Do NOT pass github.workflow_sha here because in a cross-repo
+          reusable workflow that SHA belongs to the caller's repo, not to
+          paulsha-conventions. Branch refs are disallowed by R-15 (Caller workflow
+          pinning rule). For self-dogfood use ${{ github.sha }}; downstream callers
+          must supply the full commit SHA of the paulsha-conventions version they pin.
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -24,22 +35,53 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate policy_engine_ref is a full 40-character commit SHA
+        shell: bash
+        run: |
+          if ! [[ "$POLICY_ENGINE_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: policy_engine_ref must be a full 40-character lowercase hex commit SHA."
+            echo "Got: '$POLICY_ENGINE_REF'"
+            echo "Tip: use \${{ github.sha }} (self-dogfood) or a pinned full SHA"
+            echo "     from hamanpaul/paulsha-conventions (not a tag, not a short SHA, not a branch ref)."
+            exit 1
+          fi
+        env:
+          POLICY_ENGINE_REF: ${{ inputs.policy_engine_ref }}
+
+      # Explicit checkout of paulsha-conventions gives the policy_check module
+      # a deterministic, caller-independent location.  Using uses: ./.github/actions/...
+      # inside a reusable workflow would resolve against the CALLER's repo (where the
+      # action does not exist), causing an action-not-found error.
+      #
+      # Use inputs.policy_engine_ref (not github.workflow_sha) because in a cross-repo
+      # reusable workflow the github context is always associated with the CALLER workflow.
+      # github.workflow_sha therefore points at the caller's repo SHA, not at a
+      # paulsha-conventions SHA.  Callers must supply a full 40-char commit SHA.
+      - name: Checkout policy engine
+        uses: actions/checkout@v4
+        with:
+          repository: hamanpaul/paulsha-conventions
+          ref: ${{ inputs.policy_engine_ref }}
+          path: .policy-engine
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install local package
-        run: python -m pip install -e .
+      - name: Install policy engine
+        run: python -m pip install --disable-pip-version-check ".policy-engine"
 
       - name: Run policy check
-        uses: ./.github/actions/policy-check
+        run: |
+          bash .policy-engine/.github/actions/policy-check/run.sh \
+            "$POLICY_PROFILE" \
+            "$POLICY_VERSION"
         env:
+          POLICY_PROFILE: ${{ inputs.policy_profile }}
+          POLICY_VERSION: ${{ inputs.policy_version }}
           GITHUB_PR_TITLE: ${{ github.event.pull_request.title }}
           GITHUB_PR_BODY: ${{ github.event.pull_request.body }}
           GITHUB_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           GITHUB_BASE_REF: ${{ github.base_ref }}
           GITHUB_HEAD_REF: ${{ github.head_ref }}
-        with:
-          profile: ${{ inputs.policy_profile }}
-          version: ${{ inputs.policy_version }}

@@ -8,7 +8,17 @@
 ## [Unreleased]
 
 ### Changed
+- **Shell injection 完整防護**：Reusable workflow `Run policy check` 步驟改以 `env:` 繫結 `POLICY_PROFILE` / `POLICY_VERSION`，shell 腳本改用 `$POLICY_PROFILE` / `$POLICY_VERSION`，消除對 `${{ inputs.policy_profile }}` / `${{ inputs.policy_version }}` 的直接插值
+- **新增測試 `test_reusable_workflow_run_step_binds_profile_version_via_env`**：驗證 `Run policy check` 步驟精確 env 映射（`POLICY_PROFILE == "${{ inputs.policy_profile }}"` / `POLICY_VERSION == "${{ inputs.policy_version }}"`）且 shell body 不含直接插值
+- **R-15 文件一致化**：README.md 與 CHANGELOG.md 中 R-15 描述從「tag / SHA」更新為「完整 40 字元 commit SHA」，與 SHA-only contract 保持一致
 - Rename repo from `paul-project-conventions` to `paulsha-conventions`；更新 README、四份 agent convention files 與 fixtures 的 `managed-by` 與 `uses:` 參照
+- **OpenSpec 規格文件更新**：新專案 bootstrap spec 與 design doc 更新以反映 reusable workflow 的新 `policy_engine_ref` 輸入需求；template workflow 現在須同時鎖定 reusable workflow SHA 與傳入明確的 policy_engine_ref，確保兩者版本同步
+- **README CI 範例 consistency 修正**：使 `uses:` 與 `policy_engine_ref` 兩者都明確鎖定為同一完整 40 字元 commit SHA 範例，不再使用 tag（`@v1.0.0` / `v1.0.0`），確保文件中的 dual-pinning 訊息一致
+- **Reusable workflow 輸入描述精確化**：`policy_engine_ref` 輸入描述更新為僅接受完整 40 字元 hex commit SHA；明確排除 tag、short SHA 及 branch ref；新增 workflow 驗證步驟在 `Checkout policy engine` 前強制執行格式檢查（`^[0-9a-f]{40}$`），不符規格的輸入立即 exit 1 並輸出明確錯誤訊息
+- **Self-dogfood 測試強化**：`test_caller_workflow_passes_policy_engine_ref_to_reusable` 升級為強型別斷言，要求 `policy_engine_ref` 精確為 `${{ github.sha }}`（執行時解析為完整 40 字元 SHA），並明確禁止退化為 `${{ github.workflow_sha }}`
+- **新增測試 `test_reusable_workflow_validates_policy_engine_ref_is_full_sha`**：驗證 reusable workflow 在 checkout 前有 40 字元 SHA 格式驗證步驟
+- **新增測試 `test_reusable_workflow_policy_engine_ref_description_says_full_sha_only`**：驗證 `policy_engine_ref` 輸入描述包含 "40" 且不再提及 "tag"
+- **OpenSpec 文件一致化**：design.md 與 new-project-bootstrap/spec.md 中的 `policy_engine_ref` 描述從「tag 或 commit SHA」統一改為「完整 40 字元 commit SHA」
 
 ### Added
 - **R-01 ~ R-16 完整規則實作**（TDD 覆蓋 + fixtures）
@@ -26,7 +36,7 @@
   - R-12: 分支來源正確性（目標=main 要求來源 `feature/*`；目標=`feature/*` 要求來源 `wt/<feature>/*`）
   - R-13: Agent convention files 存在性（`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md`）
   - R-14: Agent files policy 版本一致性（四份檔案 `policy_version` 必須與 `.paul-project.yml` 一致）
-  - R-15: Caller workflow ref 鎖定檢查（`uses:` 必須指向 tag / SHA，禁止 branch ref 如 `@main`）
+  - R-15: Caller workflow ref 鎖定檢查（一般 `uses:` 允許 tag 或完整 40 字元 commit SHA，禁止 branch ref 如 `@main`；本次 reusable workflow 的 `policy_engine_ref` 則另由 workflow 內部強制完整 SHA）
   - R-16: CLI help 與 docs 同步檢查（`.paul-project.yml.cli` 宣告的 command，實跑 help 輸出必須與 marker 區塊字元一致）
 - **Reusable workflow**：`.github/workflows/policy-check.yml`（下游 repo 直接 `uses:` 呼叫）
 - **Composite action**：`.github/actions/policy-check/action.yml`（可獨立使用或被 workflow 呼叫）
@@ -41,6 +51,7 @@
   - CI 整合範例（reusable workflow caller）
   - Helper scripts 使用說明
   - 新專案 bootstrap 流程
+- **Self-dogfood 測試增強**：新增 `test_caller_workflow_passes_policy_engine_ref_to_reusable` 結構測試，確保本 repo 的 caller workflow 自身也遵循 dual-pinning 需求（policy_engine_ref 必傳且精確為 `${{ github.sha }}`）
 
 ### Changed
 - CHANGELOG.md 格式改為 zh-TW 敘述，拆分明細項目（取代過度籠統的兩條 Added）
@@ -48,3 +59,9 @@
 
 ### Fixed
 - 無（baseline 建立階段）
+- reusable workflow 不再對下游 repo 執行 `pip install -e .`；改為僅安裝 action runtime 相依，並讓 composite action 直接從自身 source tree 載入 `policy_check`
+- **reusable workflow action 解析問題**：移除 `uses: ./.github/actions/policy-check`（在被呼叫 workflow 中此路徑解析自 caller repo，導致 action-not-found）；改為顯式 checkout `hamanpaul/paulsha-conventions` 至 `.policy-engine/` 並直接呼叫 `run.sh`
+- **interpreter 不一致**：`run.sh` 移除對 `${WORKSPACE}/.venv/bin/python` 的優先使用；統一使用 `setup-python` 設置的 `python3`，確保安裝與執行使用同一直譯器
+- **README 敘述**：更新 CI workflow 說明，反映實際的 policy engine checkout + 安裝流程
+- **reusable workflow policy engine 版本漂移**：`Checkout policy engine` 步驟加入 `ref: ${{ github.workflow_sha }}`，確保 policy engine 版本與呼叫者所鎖定的 workflow 版本一致，消除未鎖定時永遠抓 main branch 的風險；同步新增回歸測試 `test_reusable_workflow_policy_engine_checkout_is_pinned`
+- **跨 repo reusable workflow 中 `github.workflow_sha` 指向錯誤 repo**：根據 GitHub 官方文件，reusable workflow 中 `github` context 始終屬於 caller workflow，因此 `github.workflow_sha` 是 caller repo 的 SHA，而非 `paulsha-conventions` 的 SHA；改為在 `workflow_call.inputs` 新增必填 `policy_engine_ref` 參數，由呼叫者明確傳入指向 `hamanpaul/paulsha-conventions` 的完整 40 字元 commit SHA；同步更新 `policy-check.yml`（self-dogfood 以 `${{ github.sha }}` 傳入）、README CI 範例、及測試 `test_reusable_workflow_interface_contract` 與 `test_reusable_workflow_policy_engine_checkout_is_pinned`
