@@ -10,6 +10,8 @@
 ### Changed
 - Rename repo from `paul-project-conventions` to `paulsha-conventions`；更新 README、四份 agent convention files 與 fixtures 的 `managed-by` 與 `uses:` 參照
 - **OpenSpec 規格文件更新**：新專案 bootstrap spec 與 design doc 更新以反映 reusable workflow 的新 `policy_engine_ref` 輸入需求；template workflow 現在須同時鎖定 reusable workflow SHA 與傳入明確的 policy_engine_ref，確保兩者版本同步
+- **README CI 範例 consistency 修正**：使 `uses:` 與 `policy_engine_ref` 兩者都明確鎖定為 `@v1.0.0` / `v1.0.0`，不再使用浮動 ref（`@v1`），確保文件中的 dual-pinning 訊息一致
+- **Reusable workflow 輸入描述精確化**：`policy_engine_ref` 輸入描述更新以明確排除 branch ref，強調僅接受 tag 或 commit SHA，並與 R-15（Caller workflow pinning rule）掛鉤
 
 ### Added
 - **R-01 ~ R-16 完整規則實作**（TDD 覆蓋 + fixtures）
@@ -42,6 +44,7 @@
   - CI 整合範例（reusable workflow caller）
   - Helper scripts 使用說明
   - 新專案 bootstrap 流程
+- **Self-dogfood 測試增強**：新增 `test_caller_workflow_passes_policy_engine_ref_to_reusable` 結構測試，確保本 repo 的 caller workflow 自身也遵循 dual-pinning 需求（policy_engine_ref 必傳）
 
 ### Changed
 - CHANGELOG.md 格式改為 zh-TW 敘述，拆分明細項目（取代過度籠統的兩條 Added）

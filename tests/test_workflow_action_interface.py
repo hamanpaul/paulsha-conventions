@@ -235,3 +235,41 @@ def test_composite_action_validates_profile_version_consistency():
     assert "version" in content.lower() or "VERSION" in content, (
         "run.sh should handle version input"
     )
+
+
+def test_caller_workflow_passes_policy_engine_ref_to_reusable():
+    """
+    Self-dogfood test: the caller workflow (.github/workflows/policy-check.yml)
+    must pass policy_engine_ref to the reusable workflow.
+
+    This ensures the local policy-check workflow self-dogfoods the dual-pinning requirement
+    (R-15) that downstream repos must also follow. It demonstrates that we hold ourselves
+    to the same standard by pinning the engine explicitly.
+    """
+    caller_workflow_path = (
+        Path(__file__).parent.parent / ".github" / "workflows" / "policy-check.yml"
+    )
+    assert caller_workflow_path.exists(), f"Missing {caller_workflow_path}"
+
+    content = yaml.safe_load(caller_workflow_path.read_text(encoding="utf-8"))
+    
+    # Check that the job uses the reusable workflow
+    jobs = content.get("jobs", {})
+    assert "check" in jobs, "Missing 'check' job in caller workflow"
+    
+    job = jobs["check"]
+    assert "uses" in job, "Caller workflow job must use the reusable workflow"
+    
+    # Extract the 'with' section (workflow inputs)
+    job_with = job.get("with", {})
+    assert "policy_engine_ref" in job_with, (
+        "Caller workflow must pass 'policy_engine_ref' to the reusable workflow. "
+        "This self-dogfoods the requirement that downstream repos must pin explicitly."
+    )
+    
+    # Verify it's not empty
+    ref_value = job_with.get("policy_engine_ref", "")
+    assert ref_value, (
+        "policy_engine_ref must have a non-empty value. "
+        "For self-dogfood, use github.sha (local commit) or a specific tag."
+    )

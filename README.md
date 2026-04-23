@@ -76,7 +76,7 @@ on: [pull_request]
 
 jobs:
   policy:
-    uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@v1
+    uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@v1.0.0
     with:
       policy_profile: stage-driven  # 或 flat
       policy_version: 1.0.0
