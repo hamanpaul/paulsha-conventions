@@ -7,7 +7,7 @@
 
 本 repo 提供一套跨 `hamanpaul/*` 所有專案的 **policy engine**，目標：
 
-- **新 repo 建立時**：自動帶入合規骨架（via `paul-project-template`）
+- **新 repo 建立時**：可透過 template（規劃中）或手動 bootstrap 帶入合規骨架
 - **CI gate**：PR merge 前擋住不合規變更
 - **Agent checklist**：進入 session 時自動看到規範
 - **強制同步**：code 與 docs / CHANGELOG / VERSION 必須一起動
@@ -19,6 +19,23 @@
 - 防止「policy 說要遵守但 policy repo 自己不遵守」
 
 本 repo 自身亦 **dog-food** 本套 policy（`profile: flat`, `policy_version: 1.0.0`）。
+
+## 目前狀態
+
+**可以開始用，但定位是 pilot / draft adoption，不是完整生態已齊備的穩定方案。**
+
+目前已可用的部分：
+
+- `policy_check` CLI 可本地執行
+- R-01 ~ R-16 已實作並由本 repo 自己 dog-food
+- reusable workflow / composite action 已可供下游 repo 接入
+- `scripts/update-cli-help.sh` 可支援 R-16 docs 同步
+
+目前仍缺的部分：
+
+- `hamanpaul/.github` 尚未建立，組織層預設 PR template / community health files 尚未集中化
+- `hamanpaul/paul-project-template` 尚未建立，新專案 bootstrap 目前以手動方式為主
+- 尚未有正式 release tag；下游若要接 reusable workflow，現階段應 **pin commit SHA**
 
 ## 規則總覽（R-01 ~ R-16）
 
@@ -67,7 +84,9 @@ python3 -m policy_check --repo . --only R-01,R-02,R-03
 
 ### 2. CI 整合（下游 repo）
 
-在下游專案 `.github/workflows/policy-check.yml` 中呼叫本 repo 提供的 **reusable workflow**：
+在下游專案 `.github/workflows/policy-check.yml` 中呼叫本 repo 提供的 **reusable workflow**。
+
+> 目前尚未建立穩定 release tag，請先固定 **commit SHA**；不要用 branch ref。
 
 ```yaml
 # .github/workflows/policy-check.yml
@@ -76,7 +95,7 @@ on: [pull_request]
 
 jobs:
   policy:
-    uses: hamanpaul/paulsha-conventions/.github/workflows/policy-check.yml@v1
+    uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@<pinned-commit-sha>
     with:
       policy_profile: stage-driven  # 或 flat
       policy_version: 1.0.0
@@ -105,17 +124,75 @@ bash /path/to/paulsha-conventions/scripts/update-cli-help.sh
 - 開發者在本地跑，commit 更新後的 docs
 - 此 script 固定 `LC_ALL=C` 避免多語系輸出差異
 
-### 4. 新專案 Bootstrap
+### 4. 典型 Use Cases
 
-使用 `hamanpaul/paul-project-template` 建立新 repo，自動包含：
-- `.paul-project.yml`（需填入 profile / version）
-- `README.md` / `CHANGELOG.md` / `VERSION` 骨架
-- 四份 agent convention files（`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md`）
-- `.github/workflows/policy-check.yml` 呼叫本 repo reusable workflow
+| Use case | 現在可否開始 | 建議做法 |
+|----------|--------------|----------|
+| 既有 repo 漸進導入 | 可以 | 先補 `.paul-project.yml`、`README.md`、`CHANGELOG.md`、`VERSION`，本地跑 `policy_check`，再接 CI gate |
+| 新專案建立 | 可以 | 目前以手動 bootstrap 建立骨架；待 template repo 建立後可改成 `gh repo create --template` |
+| 強制團隊遵循流程 | 可以 | 將 policy workflow 設為 required status check，並搭配 branch protection |
+| 組織級預設化 | 部分可行 | 目前先逐 repo 接入；待 `.github` / template repo 建立後可再集中化 |
+
+### 5. 新專案建立（目前建議手動 bootstrap）
+
+在 `paul-project-template` 尚未建立前，建議新 repo 先手動補齊最小骨架：
+
+1. 建 repo，並建立 `feature/*` 工作分支
+2. 新增 `.paul-project.yml`
+3. 新增 `README.md`、`CHANGELOG.md`、`VERSION`
+4. 新增四份 agent convention files：`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md`
+5. 新增 `.github/workflows/policy-check.yml`，呼叫本 repo 的 reusable workflow
+6. 本地跑 `python3 -m policy_check --repo .`
+7. 將 CI check 設成 required status check 後再開放團隊使用
+
+可參考的最小 workflow 如下：
 
 ```bash
-gh repo create hamanpaul/<new-project> --template hamanpaul/paul-project-template
+mkdir -p .github/workflows
 ```
+
+```yaml
+# .github/workflows/policy-check.yml
+name: Policy Check
+on:
+  pull_request:
+
+jobs:
+  policy:
+    uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@<pinned-commit-sha>
+    with:
+      policy_profile: flat
+      policy_version: 1.0.0
+```
+
+### 6. 如何讓專案硬性跟隨這個流程
+
+要「硬性」跟隨，不靠口頭規範，而是靠 merge gate：
+
+1. 每個 repo 都接上 policy workflow
+2. GitHub branch protection 要求 PR merge 前必須通過 `Policy Check`
+3. 禁止直接 push 到 `main`
+4. 團隊日常開發都走 PR，讓 R-09 / R-10 / R-11 / R-12 在 merge 前生效
+
+做到這一步後，流程就會從「建議」變成「不過 gate 就不能 merge」。
+
+### 7. 流程是否有調整彈性
+
+有，但彈性應放在 **policy 設定**，不是讓個別 repo 自行繞過流程。
+
+可調整的地方：
+
+- `.paul-project.yml` 的 `policy_profile`：目前支援 `flat` / `stage-driven`
+- `.paul-project.yml` 的 `code_paths`：決定哪些檔案變動會觸發 R-09
+- `.paul-project.yml` 的 `cli` 區塊：決定哪些命令需要做 R-16 help sync
+- 白名單 exemption labels：用於明確、可審計的例外處理
+- workflow ref：可從 pinned SHA 升級成正式 release tag
+
+不建議保留太大彈性的地方：
+
+- 不建議讓 repo 任意改 branch 規則格式
+- 不建議讓 repo 自行新增未列入白名單的 exemption label
+- 不建議用 branch ref（如 `@main`）引用 reusable workflow
 
 ### CLI Help
 
@@ -151,8 +228,8 @@ options:
 
 ## 相關專案
 
-- [`hamanpaul/.github`](https://github.com/hamanpaul/.github)：GitHub 社群預設（PR template / Issue template / SECURITY / CONTRIBUTING）
-- [`hamanpaul/paul-project-template`](https://github.com/hamanpaul/paul-project-template)：新專案骨架（供 `gh repo create --template` 使用）
+- `hamanpaul/.github`（planned）：未來放 GitHub 社群預設（PR template / Issue template / SECURITY / CONTRIBUTING）
+- `hamanpaul/paul-project-template`（planned）：未來提供新專案骨架（`gh repo create --template`）
 
 ## License
 
