@@ -151,6 +151,46 @@ def test_run_sh_does_not_prefer_caller_venv_python():
     )
 
 
+def test_reusable_workflow_policy_engine_checkout_is_pinned():
+    """
+    The policy engine checkout must be pinned to the same ref as the workflow being
+    executed (github.workflow_sha), not left unpinned (which would always pull main).
+
+    Without an explicit ref the checkout silently drifts: a caller pinned to
+    paulsha-conventions@v1.0.0 would still get main-branch policy_check code.
+    """
+    workflow_path = Path(__file__).parent.parent / ".github" / "workflows" / "reusable-policy-check.yml"
+    raw = workflow_path.read_text(encoding="utf-8")
+    content = yaml.safe_load(raw)
+
+    steps = content["jobs"]["check"]["steps"]
+    engine_checkout_steps = [
+        step for step in steps
+        if step.get("uses", "").startswith("actions/checkout")
+        and isinstance(step.get("with"), dict)
+        and "hamanpaul/paulsha-conventions" in str(step["with"].get("repository", ""))
+    ]
+
+    assert engine_checkout_steps, (
+        "No policy engine checkout step found (hamanpaul/paulsha-conventions). "
+        "Cannot verify pinning."
+    )
+
+    for step in engine_checkout_steps:
+        ref_value = step["with"].get("ref", "")
+        assert ref_value, (
+            f"Policy engine checkout step '{step.get('name', '?')}' has no 'ref:' field. "
+            "Without a ref, GitHub always fetches the default branch (main), which "
+            "causes version drift when callers pin to a specific tag or SHA."
+        )
+        # The ref must use github.workflow_sha so the engine version matches
+        # the reusable workflow version that the caller actually requested.
+        assert "github.workflow_sha" in raw, (
+            "Policy engine checkout should pin to '${{ github.workflow_sha }}' so "
+            "the engine version always matches the reusable workflow version under execution."
+        )
+
+
 def test_composite_action_validates_profile_version_consistency():
     """
     Composite action run.sh should validate profile/version against .paul-project.yml.

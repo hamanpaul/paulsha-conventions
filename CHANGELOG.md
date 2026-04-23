@@ -52,3 +52,4 @@
 - **reusable workflow action 解析問題**：移除 `uses: ./.github/actions/policy-check`（在被呼叫 workflow 中此路徑解析自 caller repo，導致 action-not-found）；改為顯式 checkout `hamanpaul/paulsha-conventions` 至 `.policy-engine/` 並直接呼叫 `run.sh`
 - **interpreter 不一致**：`run.sh` 移除對 `${WORKSPACE}/.venv/bin/python` 的優先使用；統一使用 `setup-python` 設置的 `python3`，確保安裝與執行使用同一直譯器
 - **README 敘述**：更新 CI workflow 說明，反映實際的 policy engine checkout + 安裝流程
+- **reusable workflow policy engine 版本漂移**：`Checkout policy engine` 步驟加入 `ref: ${{ github.workflow_sha }}`，確保 policy engine 版本與呼叫者所鎖定的 workflow 版本一致，消除未鎖定時永遠抓 main branch 的風險；同步新增回歸測試 `test_reusable_workflow_policy_engine_checkout_is_pinned`

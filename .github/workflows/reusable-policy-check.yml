@@ -28,10 +28,15 @@ jobs:
       # a deterministic, caller-independent location.  Using uses: ./.github/actions/...
       # inside a reusable workflow would resolve against the CALLER's repo (where the
       # action does not exist), causing an action-not-found error.
+      #
+      # Pin to github.workflow_sha so the policy engine version always matches the
+      # reusable workflow version the caller requested (e.g. @v1.0.0).  Without this,
+      # the checkout silently drifts to main regardless of the caller's pin.
       - name: Checkout policy engine
         uses: actions/checkout@v4
         with:
           repository: hamanpaul/paulsha-conventions
+          ref: ${{ github.workflow_sha }}
           path: .policy-engine
 
       - name: Setup Python
