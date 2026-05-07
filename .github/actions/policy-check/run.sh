@@ -28,12 +28,18 @@ fi
 
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
-# Validate profile and version against .paul-project.yml (fail-close)
+# Validate profile and version against .project-policy.yml, with .paul-project.yml fallback (fail-close)
 # REPO_INPUT can be absolute or relative path; normalize it
 if [[ "$REPO_INPUT" = /* ]]; then
-  CONFIG_PATH="${REPO_INPUT}/.paul-project.yml"
+  PROJECT_CONFIG_PATH="${REPO_INPUT}/.project-policy.yml"
+  LEGACY_CONFIG_PATH="${REPO_INPUT}/.paul-project.yml"
 else
-  CONFIG_PATH="${WORKSPACE}/${REPO_INPUT}/.paul-project.yml"
+  PROJECT_CONFIG_PATH="${WORKSPACE}/${REPO_INPUT}/.project-policy.yml"
+  LEGACY_CONFIG_PATH="${WORKSPACE}/${REPO_INPUT}/.paul-project.yml"
+fi
+CONFIG_PATH="$PROJECT_CONFIG_PATH"
+if [[ ! -f "$CONFIG_PATH" ]]; then
+  CONFIG_PATH="$LEGACY_CONFIG_PATH"
 fi
 
 if [[ -f "$CONFIG_PATH" ]]; then
@@ -52,10 +58,10 @@ try:
     actual_version = config.get("policy_version", "")
     
     if expected_profile and actual_profile != expected_profile:
-        print(f"ERROR: profile mismatch: action expects '{expected_profile}' but .paul-project.yml has '{actual_profile}'", file=sys.stderr)
+        print(f"ERROR: profile mismatch: action expects '{expected_profile}' but {config_path} has '{actual_profile}'", file=sys.stderr)
         sys.exit(1)
     if expected_version and actual_version != expected_version:
-        print(f"ERROR: version mismatch: action expects '{expected_version}' but .paul-project.yml has '{actual_version}'", file=sys.stderr)
+        print(f"ERROR: version mismatch: action expects '{expected_version}' but {config_path} has '{actual_version}'", file=sys.stderr)
         sys.exit(1)
     print("OK")
 except Exception as exc:
