@@ -40,7 +40,10 @@ def test_r08_policy_config_schema_pass(fixture_repo, fixture_name: str):
 @pytest.mark.parametrize(
     "fixture_name, expected_text",
     [
-        ("bad-policy-config/missing-config", "Missing .project-policy.yml"),
+        (
+            "bad-policy-config/missing-config",
+            "Missing .project-policy.yml or .paul-project.yml",
+        ),
         ("bad-policy-config/missing-policy-profile", "missing required keys"),
         ("bad-policy-config/missing-policy-version", "missing required keys"),
         ("bad-policy-config/invalid-policy-profile", "policy_profile must be one of"),

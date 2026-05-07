@@ -28,7 +28,7 @@ fi
 
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
-# Validate profile and version against .project-policy.yml (fail-close)
+# Validate profile and version against .project-policy.yml, with .paul-project.yml fallback (fail-close)
 # REPO_INPUT can be absolute or relative path; normalize it
 if [[ "$REPO_INPUT" = /* ]]; then
   PROJECT_CONFIG_PATH="${REPO_INPUT}/.project-policy.yml"

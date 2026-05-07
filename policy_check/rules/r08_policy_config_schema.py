@@ -3,7 +3,7 @@ from __future__ import annotations
 import yaml
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
-from policy_check.config import config_path
+from policy_check.config import CONFIG_NAMES_DISPLAY, config_path
 from policy_check.rules.registry import register
 
 
@@ -21,7 +21,7 @@ class R08PolicyConfigSchema:
             return RuleResult(
                 rule_id=self.rule_id,
                 status=Status.FAIL,
-                message="Missing .project-policy.yml at repository root.",
+                message=f"Missing {CONFIG_NAMES_DISPLAY} at repository root.",
             )
 
         try:

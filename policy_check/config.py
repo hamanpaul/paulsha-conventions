@@ -5,6 +5,8 @@ import yaml
 
 REQUIRED_KEYS = {"policy_profile", "policy_version"}
 VALID_PROFILES = {"stage-driven", "flat"}
+CONFIG_NAMES = (".project-policy.yml", ".paul-project.yml")
+CONFIG_NAMES_DISPLAY = " or ".join(CONFIG_NAMES)
 DEFAULT_CODE_PATHS = {
     "stage-driven": ["**/*.py", "**/*.sh", "scripts/**"],
     "flat":         ["**/*.py", "**/*.sh", "scripts/**"],
@@ -25,7 +27,7 @@ def config_path(repo_root: Path) -> Path:
 def load(repo_root: Path) -> dict:
     path = config_path(repo_root)
     if not path.exists():
-        raise ConfigError(f".project-policy.yml not found at {path}")
+        raise ConfigError(f"{CONFIG_NAMES_DISPLAY} not found at repository root.")
     try:
         data = yaml.safe_load(path.read_text()) or {}
     except yaml.YAMLError as exc:

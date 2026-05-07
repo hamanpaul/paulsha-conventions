@@ -2,7 +2,7 @@
 Integration tests for composite action fail-close validation.
 
 These tests verify that the action's run.sh actually enforces profile/version
-consistency with .paul-project.yml, not just checking for string presence.
+consistency with the project policy config, not just checking for string presence.
 """
 
 from __future__ import annotations
