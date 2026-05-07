@@ -15,17 +15,24 @@ class ConfigError(Exception):
     pass
 
 
+def config_path(repo_root: Path) -> Path:
+    project_policy = repo_root / ".project-policy.yml"
+    if project_policy.exists():
+        return project_policy
+    return repo_root / ".paul-project.yml"
+
+
 def load(repo_root: Path) -> dict:
-    path = repo_root / ".paul-project.yml"
+    path = config_path(repo_root)
     if not path.exists():
-        raise ConfigError(f".paul-project.yml not found at {path}")
+        raise ConfigError(f".project-policy.yml not found at {path}")
     try:
         data = yaml.safe_load(path.read_text()) or {}
     except yaml.YAMLError as exc:
-        raise ConfigError(f".paul-project.yml is not valid YAML: {exc}") from exc
+        raise ConfigError(f"{path.name} is not valid YAML: {exc}") from exc
     missing = REQUIRED_KEYS - data.keys()
     if missing:
-        raise ConfigError(f".paul-project.yml missing keys: {sorted(missing)}")
+        raise ConfigError(f"{path.name} missing keys: {sorted(missing)}")
     if data["policy_profile"] not in VALID_PROFILES:
         raise ConfigError(
             f"policy_profile must be one of {VALID_PROFILES}, got {data['policy_profile']}"

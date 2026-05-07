@@ -8,6 +8,8 @@
 ## [Unreleased]
 
 ### Changed
+- **Project-neutral policy config support**：policy engine now prefers
+  `.project-policy.yml` while retaining legacy `.paul-project.yml` fallback.
 - **Three-repo rollout 文件同步完成**：README 現在明確指向 live `hamanpaul/.github` 與 `hamanpaul/new-project-template`，並補充 fresh smoke repo 已驗證 generated `Policy Check` workflow 可 end-to-end 成功
 - **Shell injection 完整防護**：Reusable workflow `Run policy check` 步驟改以 `env:` 繫結 `POLICY_PROFILE` / `POLICY_VERSION`，shell 腳本改用 `$POLICY_PROFILE` / `$POLICY_VERSION`，消除對 `${{ inputs.policy_profile }}` / `${{ inputs.policy_version }}` 的直接插值
 - **新增測試 `test_reusable_workflow_run_step_binds_profile_version_via_env`**：驗證 `Run policy check` 步驟精確 env 映射（`POLICY_PROFILE == "${{ inputs.policy_profile }}"` / `POLICY_VERSION == "${{ inputs.policy_version }}"`）且 shell body 不含直接插值
