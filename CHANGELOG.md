@@ -3,11 +3,12 @@
 本專案所有重大變更都會記錄在此檔案。
 
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
-本專案遵循 hamanpaul project policy v1.0.0。
+本專案遵循 hamanpaul project policy v1.0.1。
 
 ## [Unreleased]
 
 ### Changed
+- **policy_version 1.0.0 → 1.0.1**：新增 R-17 / R-18 與語言規範後同步升版；四份 agent convention 檔的 `policy_version` 與 `managed-by@v1.0.1` 標記、`.paul-project.yml`、README 版本敘述一併更新，讓下游可確認引用的 policy 版本
 - **Project-neutral policy config support**：policy engine now prefers
   `.project-policy.yml` while retaining legacy `.paul-project.yml` fallback.
 - **Three-repo rollout 文件同步完成**：README 現在明確指向 live `hamanpaul/.github` 與 `hamanpaul/new-project-template`，並補充 fresh smoke repo 已驗證 generated `Policy Check` workflow 可 end-to-end 成功
@@ -24,6 +25,9 @@
 - **OpenSpec 文件一致化**：design.md 與 new-project-bootstrap/spec.md 中的 `policy_engine_ref` 描述從「tag 或 commit SHA」統一改為「完整 40 字元 commit SHA」
 
 ### Added
+- **R-17 PR↔issue 連結規則**：PR body 出現 `#N` 時必須使用 closing-keyword（`Closes`/`Fixes`/`Resolves #N`），讓 merge 自動關閉 issue 並於 issue timeline 留下 cross-reference；只引用不關閉時上 `policy-exempt:issue-link`（含 TDD 測試 `tests/test_rule_r17_pr_issue_link.py`）
+- **R-18 docs/README 對齊規則（WARN）**：`code_paths` 有變動但 `README.md` / `docs/**` 未同步時發出 advisory WARN（不擋 merge），可上 `policy-exempt:docs-sync` 豁免（含 TDD 測試 `tests/test_rule_r18_docs_sync.py`）
+- **語言規範 checklist**：repo 屬 `hamanpaul` / `paulc-arc` → PR 與所有 comment 用 zh-tw；arcadyan GitLab → en_US（依 `git remote` 判斷；checklist-only，不做引擎偵測）
 - **R-01 ~ R-16 完整規則實作**（TDD 覆蓋 + fixtures）
   - R-01: README.md 存在性檢查
   - R-02: README.md 必備段落（Install / Usage / Version）

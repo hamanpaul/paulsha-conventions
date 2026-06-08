@@ -18,9 +18,9 @@
 - 防止「分支命名混亂、版號語意不一致」
 - 防止「policy 說要遵守但 policy repo 自己不遵守」
 
-本 repo 自身亦 **dog-food** 本套 policy（`profile: flat`, `policy_version: 1.0.0`）。
+本 repo 自身亦 **dog-food** 本套 policy（`profile: flat`, `policy_version: 1.0.1`）。
 
-## 規則總覽（R-01 ~ R-16）
+## 規則總覽（R-01 ~ R-18）
 
 | ID | 檢查項 | 失敗條件 | 豁免 label |
 |----|--------|----------|------------|
@@ -40,6 +40,8 @@
 | R-14 | Agent files policy 版本一致 | 內容 `policy_version` 與 `.paul-project.yml` 不符 | — |
 | R-15 | Caller workflow 用 tag / SHA 鎖定（本 repo 的 policy-check dual-pinning path 另要求完整 40 字元 SHA） | `uses:` 指向 branch ref（`@main`、`@develop`）或無 ref | — |
 | R-16 | CLI help 與 docs 同步 | `.paul-project.yml.cli` 宣告項目，實跑 help 輸出與 marker 區塊不一致 | `policy-exempt:cli-help` |
+| R-17 | PR↔issue 連結 | PR body 出現 `#N` 但非 closing-keyword（`Closes`/`Fixes`/`Resolves #N`）形式 | `policy-exempt:issue-link` |
+| R-18 | docs/README 對齊 code 變動 | code_paths 有變動但 `README.md` / `docs/**` 未同步（**WARN**，不擋 merge） | `policy-exempt:docs-sync` |
 
 **Exemption Labels 白名單**：上表所列 `policy-exempt:*` / `skip-changelog` / `wip` 即所有可用豁免 label；gate 只認這些，其他一律視同未豁免。
 
@@ -81,7 +83,7 @@ jobs:
     uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@aabbccddeeff0011223344556677889900aabbcc
     with:
       policy_profile: stage-driven  # 或 flat
-      policy_version: 1.0.0
+      policy_version: 1.0.1
       # 必須傳入完整 40 字元 hex commit SHA，指向 hamanpaul/paulsha-conventions。
       # 不可使用 tag、short SHA 或 github.workflow_sha（那是 caller 自己 repo 的 SHA）。
       # uses: 與 policy_engine_ref 兩者必須鎖定到同一個 SHA。
@@ -156,10 +158,10 @@ options:
 **本 repo 版號語意**（`profile: flat`）：
 - **MAJOR**: 正式 release（feature 達到對外可用狀態）
 - **MINOR**: 功能穩定（已規劃 feature 全 landed + 7 天無 hotfix）
-- **PATCH**: 累積已完成的 feature batch 計數（本 repo 為 R-01~R-16 完整實作）
+- **PATCH**: 累積已完成的 feature batch 計數（本 repo 為 R-01~R-18 完整實作）
 - **-fix.N**: 落地後 bug fix（非新 feature、非穩定、非 release）
 
-當前版本：`0.0.0`（R-01~R-16 baseline 建立中，待 merge 後升版）
+當前版本：`0.0.0`（R-01~R-18 baseline 建立中，待 merge 後升版）
 
 ## 相關專案
 
