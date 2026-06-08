@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from policy_check.rules import registry
 from policy_check.rules.base import RuleContext, Status
 
