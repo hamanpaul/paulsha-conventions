@@ -1,0 +1,9 @@
+name: Policy Check
+on:
+  pull_request:
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "policy only, no test execution here"

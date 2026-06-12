@@ -3,11 +3,19 @@
 本專案所有重大變更都會記錄在此檔案。
 
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
-本專案遵循 hamanpaul project policy v1.0.1。
+本專案遵循 hamanpaul project policy v1.0.2。
 
 ## [Unreleased]
 
+### Added
+- **新增 R-19（repo 有測試則 CI 必須執行）**：repo 根目錄存在 `tests/`（含 `test_*.py` / `*_test.py`）時，`.github/workflows/**` 必須有至少一個 workflow 實際執行測試（pytest / unittest / npm test / go test / cargo test 等），否則 FAIL；豁免 label `policy-exempt:ci-tests`。無測試套件的 repo 空轉通過。動機：多個 repo 擁有大量測試但 CI 僅跑 policy check，測試從未在 PR gate 上執行。
+- **新增 R-20（workflow policy_version 與 config 同步）**：workflow 內宣告的 `policy_version` / `POLICY_VERSION` semver 字面值必須與 `.paul-project.yml` 的 `policy_version` 一致，否則 FAIL（無豁免 label，比照 R-14）；input 宣告與 `${{ inputs.* }}` 模板表達式不在檢查範圍。動機：1.0.2 升版時本 repo 自身的 caller workflow 殘留 1.0.1，僅被 reusable workflow 的 shell 驗證在 CI 階段攔截，本地 policy_check 無法發現——將該驗證提升為引擎規則
+- **新增 `RELEASES.md` 版本譜系**：`policy_version` ↔ engine tag/SHA 的權威對照表；1.0.0 / 1.0.1 的 SHA 由下游釘選值事後考據回填，自 1.0.2 起發版流程為「merge → 打 `vX.Y.Z` tag → 回填本表」。
+
 ### Changed
+- **policy_version 1.0.1 → 1.0.2**：隨 R-19 升版；四份 agent convention 檔（`policy_version`、`managed-by@v1.0.2`、白名單與完成前 checklist 加入 R-19）、`.paul-project.yml`、README 規則表與版本敘述一併更新
+- **引擎 `VERSION` 與 policy_version 對齊**：`VERSION` 0.0.0 → 1.0.2（pyproject 同步），引擎自此開始打 release tag，R-07 不再因永無 tag 而空轉
+- **pytest 設定排除 fixtures**：`--ignore=tests/fixtures`，避免 R-19 fixture 內的假 `test_*.py` 被引擎自身測試蒐集（同名 module 會碰撞）
 - **policy_version 1.0.0 → 1.0.1**：新增 R-17 / R-18 與語言規範後同步升版；四份 agent convention 檔的 `policy_version` 與 `managed-by@v1.0.1` 標記、`.paul-project.yml`、README 版本敘述一併更新，讓下游可確認引用的 policy 版本
 - **Project-neutral policy config support**：policy engine now prefers
   `.project-policy.yml` while retaining legacy `.paul-project.yml` fallback.
