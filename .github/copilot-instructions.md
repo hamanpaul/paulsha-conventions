@@ -1,15 +1,15 @@
-<!-- managed-by: hamanpaul/paulsha-conventions@v1.0.1 -->
+<!-- managed-by: hamanpaul/paulsha-conventions@v1.0.2 -->
 <!-- 若修改此檔，同步更新 CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md 四份 -->
-policy_version: 1.0.1
+policy_version: 1.0.2
 
 # Agent Policy Checklist
 
-本 repo 受 hamanpaul project policy v1.0.1 管轄。
+本 repo 受 hamanpaul project policy v1.0.2 管轄。
 所有 agent 進入 session 時，必須依下列 checklist 行動。
 
 ## 本 repo 的 profile
 - policy_profile: `flat` （見 `.paul-project.yml`）
-- policy_version: `1.0.1`
+- policy_version: `1.0.2`
 
 ## 動工前
 - [ ] 確認當前分支不是 `main`
@@ -41,6 +41,7 @@ policy_version: 1.0.1
 - [ ] `python3 -m policy_check --repo .` 無任何 failure
 - [ ] R-17：PR body 若引用 issue（`#N`），必須是 closing-keyword 形式（`Closes/Fixes/Resolves #N`）；只引用不關閉時上 `policy-exempt:issue-link`
 - [ ] R-18：code 有變動時已評估並（如需要）同步 `README.md` / `docs/**`，或上 `policy-exempt:docs-sync`
+- [ ] R-19：repo 有 `tests/` 時，CI workflow 有實際執行測試（pytest 等）；新增測試套件而 CI 未涵蓋時同步補上
 - [ ] 語言：PR 標題／內文與所有 comment 的語言符合本 repo 規範（見「語言規範」段）
 - [ ] 若跳過任何檢查，PR 必須帶對應豁免 label + 理由
 
@@ -67,5 +68,6 @@ policy_version: 1.0.1
 - `policy-exempt:cli-help` — R-16 CLI help 同步
 - `policy-exempt:issue-link` — R-17 PR body issue 參照需 closing-keyword 形式
 - `policy-exempt:docs-sync` — R-18 code 變動需同步 README/docs
+- `policy-exempt:ci-tests` — R-19 repo 有測試則 CI 必須執行
 - `skip-changelog` — R-09 code 變動要求 CHANGELOG entry（特殊用途，需附理由）
 - `wip` — R-11 自動通過 PR body checkbox 未全勾（work in progress）

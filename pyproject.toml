@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "policy-check"
-version = "0.0.0"
+version = "1.0.2"
 description = "Cross-repo policy checker for hamanpaul/*"
 requires-python = ">=3.11"
 dependencies = [
@@ -19,3 +19,7 @@ policy-check = "policy_check.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["policy_check*"]
+
+[tool.pytest.ini_options]
+# fixtures/ 內含給規則測試用的假 repo（可能帶 test_*.py），不可被 pytest 蒐集
+addopts = "--ignore=tests/fixtures"
