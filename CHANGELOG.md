@@ -9,6 +9,7 @@
 
 ### Added
 - **新增 R-19（repo 有測試則 CI 必須執行）**：repo 根目錄存在 `tests/`（含 `test_*.py` / `*_test.py`）時，`.github/workflows/**` 必須有至少一個 workflow 實際執行測試（pytest / unittest / npm test / go test / cargo test 等），否則 FAIL；豁免 label `policy-exempt:ci-tests`。無測試套件的 repo 空轉通過。動機：多個 repo 擁有大量測試但 CI 僅跑 policy check，測試從未在 PR gate 上執行。
+- **新增 R-20（workflow policy_version 與 config 同步）**：workflow 內宣告的 `policy_version` / `POLICY_VERSION` semver 字面值必須與 `.paul-project.yml` 的 `policy_version` 一致，否則 FAIL（無豁免 label，比照 R-14）；input 宣告與 `${{ inputs.* }}` 模板表達式不在檢查範圍。動機：1.0.2 升版時本 repo 自身的 caller workflow 殘留 1.0.1，僅被 reusable workflow 的 shell 驗證在 CI 階段攔截，本地 policy_check 無法發現——將該驗證提升為引擎規則
 - **新增 `RELEASES.md` 版本譜系**：`policy_version` ↔ engine tag/SHA 的權威對照表；1.0.0 / 1.0.1 的 SHA 由下游釘選值事後考據回填，自 1.0.2 起發版流程為「merge → 打 `vX.Y.Z` tag → 回填本表」。
 
 ### Changed

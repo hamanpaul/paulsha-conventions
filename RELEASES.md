@@ -5,7 +5,7 @@
 
 | policy_version | engine tag | engine SHA | 摘要 |
 |----------------|-----------|------------|------|
-| 1.0.2 | `v1.0.2`（merge 後補打） | （merge 後補：`git rev-list -n1 v1.0.2`） | 新增 R-19（repo 有測試則 CI 必須執行，豁免 `policy-exempt:ci-tests`）；引擎 `VERSION` 自此與 policy_version 對齊並開始打 tag |
+| 1.0.2 | `v1.0.2`（merge 後補打） | （merge 後補：`git rev-list -n1 v1.0.2`） | 新增 R-19（repo 有測試則 CI 必須執行，豁免 `policy-exempt:ci-tests`）與 R-20（workflow 宣告的 policy_version 須與 `.paul-project.yml` 一致）；引擎 `VERSION` 自此與 policy_version 對齊並開始打 tag |
 | 1.0.1 | —（未打 tag） | `4ff59b6c35a46a87af3c3e641975743ee8fa0858` | R-17（PR↔issue closing-keyword）、R-18（docs 對齊，WARN）、語言規範 |
 | 1.0.0 | —（未打 tag） | `8454aa1967b752ea38c82edd79a8439b5bde915b` | R-01 ~ R-16 初版 |
 
