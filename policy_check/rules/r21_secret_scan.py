@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -35,8 +36,26 @@ def _is_exempt(rel: str, allow: list[str]) -> bool:
     return False
 
 
+def _git_tracked_files(root: Path) -> list[str] | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            capture_output=True, text=True, check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    if not result.stdout:
+        return None
+    return [f for f in result.stdout.split("\0") if f]
+
+
 def _iter_text_files(root: Path):
-    for p in root.rglob("*"):
+    tracked = _git_tracked_files(root)
+    if tracked is not None:
+        candidates = (root / rel for rel in tracked)
+    else:
+        candidates = (p for p in root.rglob("*"))
+    for p in candidates:
         if not p.is_file():
             continue
         rel_parts = p.relative_to(root).parts

@@ -75,3 +75,25 @@ def test_r21_exempts_own_rule_file(tmp_path):
         config=cfg.load(tmp_path),
     )
     assert get_rule().check(ctx).status == Status.PASS
+
+
+def test_r21_skips_gitignored_files(tmp_path):
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.3\ntier: shareable\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".gitignore").write_text("build/\n", encoding="utf-8")
+    (tmp_path / "clean.py").write_text("x = 1\n", encoding="utf-8")
+    build = tmp_path / "build"
+    build.mkdir()
+    (build / "artifact.txt").write_text("leaked BGW720 marker\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    from policy_check import config as cfg
+    ctx = RuleContext(
+        repo_root=tmp_path, profile="flat", policy_version="1.0.3",
+        config=cfg.load(tmp_path),
+    )
+    # build/ is gitignored → its marker file is untracked → R-21 must not scan it
+    assert get_rule().check(ctx).status == Status.PASS

@@ -7,6 +7,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **R-21 改掃 git-tracked 檔案**：`_iter_text_files()` 從 `rglob("*")` 改為優先以 `git ls-files` 列舉已追蹤檔案，自動尊重 `.gitignore`，避免 `build/`、`dist/`、`*.egg-info/` 等本地產物含雇主標記時誤報 FAIL；非 git 目錄（如測試 fixture 的暫存目錄）自動 fallback 至原有 rglob 行為，現有測試無需修改。
+
 ### Added
 - **R-08 接受 optional `tier` 欄位**：`.paul-project.yml` 新增可選欄位 `tier`，允許值為 `shareable` / `work` / `personal`；提供非法值（如 `public`）時 FAIL，並回報允許值清單。
 - **新增 R-21（機密掃描）**：宣告 `tier: shareable` 的 repo 若含雇主標記（內部代號、裝置型號、build 主機等）、個人絕對路徑或憑證模式則 FAIL；`tier: work`/`personal` 視為 not-applicable；自身規則檔/fixtures 與 `.paul-project.yml` 的 `secret_scan.allow` 路徑豁免；豁免 label `policy-exempt:secret-scan`。同時 `.paul-project.yml` 新增 `secret_scan.allow` 設定。
