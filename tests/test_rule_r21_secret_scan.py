@@ -34,3 +34,19 @@ def test_r21_fail_when_shareable_has_marker(fixture_repo):
     result = get_rule().check(make_ctx(repo))
     assert result.status == Status.FAIL
     assert "BGW720" in result.detail or "platform.py" in result.detail
+
+
+def test_r21_pass_when_work_tier_has_marker(fixture_repo):
+    repo = fixture_repo("secret-scan/work-leak")
+    result = get_rule().check(make_ctx(repo))
+    assert result.status == Status.PASS
+    assert "work" in result.message
+
+
+def test_r21_skip_with_exemption_label(fixture_repo):
+    repo = fixture_repo("secret-scan/shareable-leak")
+    result = get_rule().check(
+        make_ctx(repo, labels=["policy-exempt:secret-scan"])
+    )
+    assert result.status == Status.SKIP
+    assert result.exempt_label == "policy-exempt:secret-scan"

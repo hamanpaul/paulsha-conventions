@@ -36,6 +36,25 @@ class R21SecretScan:
     exempt_label = "policy-exempt:secret-scan"
 
     def check(self, ctx: RuleContext) -> RuleResult:
+        if self.exempt_label in ctx.pr_labels:
+            return RuleResult(
+                rule_id=self.rule_id,
+                status=Status.SKIP,
+                message=f"Skipped by exemption label: {self.exempt_label}.",
+                exempt_label=self.exempt_label,
+            )
+
+        tier = (ctx.config or {}).get("tier")
+        if tier != "shareable":
+            return RuleResult(
+                rule_id=self.rule_id,
+                status=Status.PASS,
+                message=(
+                    f"tier={tier!r}; R-21 enforces only tier=shareable. "
+                    "Not applicable."
+                ),
+            )
+
         hits: list[str] = []
         for path in _iter_text_files(ctx.repo_root):
             rel = path.relative_to(ctx.repo_root).as_posix()

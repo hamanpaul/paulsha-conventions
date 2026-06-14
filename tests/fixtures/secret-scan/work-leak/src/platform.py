@@ -1,0 +1,1 @@
+DEVICE = "BGW720"
