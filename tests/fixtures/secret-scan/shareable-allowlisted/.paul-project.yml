@@ -1,0 +1,6 @@
+policy_profile: flat
+policy_version: 1.0.3
+tier: shareable
+secret_scan:
+  allow:
+    - "docs/**"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from fnmatch import fnmatch
 from pathlib import Path
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
@@ -16,6 +17,22 @@ _PRIVATE_KEY = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
 _SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
 _BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip",
                ".gz", ".bin", ".ico", ".woff", ".woff2"}
+
+_SELF_EXEMPT = (
+    "policy_check/rules/r21_secret_scan.py",
+    "tests/test_rule_r21_secret_scan.py",
+    "tests/fixtures/secret-scan/**",
+)
+
+
+def _is_exempt(rel: str, allow: list[str]) -> bool:
+    for pat in (*_SELF_EXEMPT, *allow):
+        if fnmatch(rel, pat):
+            return True
+        base = pat[:-2] if pat.endswith("/**") else pat
+        if rel == base or rel.startswith(base.rstrip("/") + "/"):
+            return True
+    return False
 
 
 def _iter_text_files(root: Path):
@@ -55,9 +72,12 @@ class R21SecretScan:
                 ),
             )
 
+        allow = ((ctx.config or {}).get("secret_scan") or {}).get("allow", [])
         hits: list[str] = []
         for path in _iter_text_files(ctx.repo_root):
             rel = path.relative_to(ctx.repo_root).as_posix()
+            if _is_exempt(rel, allow):
+                continue
             try:
                 text = path.read_text(encoding="utf-8")
             except (UnicodeDecodeError, OSError):

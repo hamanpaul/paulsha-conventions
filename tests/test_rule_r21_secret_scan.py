@@ -50,3 +50,28 @@ def test_r21_skip_with_exemption_label(fixture_repo):
     )
     assert result.status == Status.SKIP
     assert result.exempt_label == "policy-exempt:secret-scan"
+
+
+def test_r21_respects_config_allowlist(fixture_repo):
+    repo = fixture_repo("secret-scan/shareable-allowlisted")
+    result = get_rule().check(make_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r21_exempts_own_rule_file(tmp_path):
+    # 模擬 repo 內含本規則檔（其 denylist 字串不應觸發）
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.3\ntier: shareable\n",
+        encoding="utf-8",
+    )
+    rules_dir = tmp_path / "policy_check" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "r21_secret_scan.py").write_text(
+        'MARKERS = "brcm broadcom BGW720"\n', encoding="utf-8"
+    )
+    from policy_check import config as cfg
+    ctx = RuleContext(
+        repo_root=tmp_path, profile="flat", policy_version="1.0.3",
+        config=cfg.load(tmp_path),
+    )
+    assert get_rule().check(ctx).status == Status.PASS
