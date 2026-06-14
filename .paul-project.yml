@@ -1,5 +1,5 @@
 policy_profile: flat
-policy_version: 1.0.2
+policy_version: 1.0.3
 code_paths:
   - "**/*.py"
   - "**/*.sh"
@@ -17,3 +17,9 @@ secret_scan:
     - "tests/fixtures/secret-scan/**"
     - "openspec/**"
     - "docs/**"
+    - "CLAUDE.md"
+    - "AGENTS.md"
+    - "GEMINI.md"
+    - ".github/copilot-instructions.md"
+    - "README.md"
+    - "CHANGELOG.md"

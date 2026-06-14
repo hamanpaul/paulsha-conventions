@@ -18,11 +18,11 @@
 - 防止「分支命名混亂、版號語意不一致」
 - 防止「policy 說要遵守但 policy repo 自己不遵守」
 
-本 repo 自身亦 **dog-food** 本套 policy（`profile: flat`, `policy_version: 1.0.2`）。
+本 repo 自身亦 **dog-food** 本套 policy（`profile: flat`, `policy_version: 1.0.3`）。
 
 版本譜系（policy_version ↔ engine tag/SHA 對照）見 [`RELEASES.md`](./RELEASES.md)。
 
-## 規則總覽（R-01 ~ R-20）
+## 規則總覽（R-01 ~ R-21）
 
 | ID | 檢查項 | 失敗條件 | 豁免 label |
 |----|--------|----------|------------|
@@ -46,6 +46,7 @@
 | R-18 | docs/README 對齊 code 變動 | code_paths 有變動但 `README.md` / `docs/**` 未同步（**WARN**，不擋 merge） | `policy-exempt:docs-sync` |
 | R-19 | repo 有測試則 CI 必須執行 | 存在 `tests/`（含 `test_*.py` / `*_test.py`）但 `.github/workflows/**` 無任何測試執行指令（pytest / unittest / npm test 等） | `policy-exempt:ci-tests` |
 | R-20 | Workflow policy_version 與 config 同步 | workflow 內宣告的 `policy_version` / `POLICY_VERSION` 字面值與 `.paul-project.yml` 的 `policy_version` 不一致 | — |
+| R-21 | tier=shareable repo 機密掃描 | 宣告 `tier: shareable` 的 repo 含雇主標記（brcm/broadcom/BGW720…）／個人絕對路徑／憑證模式，且不在 `secret_scan.allow` 或自我豁免範圍 | `policy-exempt:secret-scan` |
 
 **Exemption Labels 白名單**：上表所列 `policy-exempt:*` / `skip-changelog` / `wip` 即所有可用豁免 label；gate 只認這些，其他一律視同未豁免。
 
