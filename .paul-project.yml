@@ -9,3 +9,11 @@ cli:
     help_args: ["--help"]
     reflected_in: "README.md"
     marker: "policy-check-help"
+tier: shareable
+secret_scan:
+  allow:
+    - "policy_check/rules/r21_secret_scan.py"
+    - "tests/test_rule_r21_secret_scan.py"
+    - "tests/fixtures/secret-scan/**"
+    - "openspec/**"
+    - "docs/**"
