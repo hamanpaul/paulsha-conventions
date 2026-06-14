@@ -7,7 +7,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- **R-21 改掃 git-tracked 檔案**：`_iter_text_files()` 從 `rglob("*")` 改為優先以 `git ls-files` 列舉已追蹤檔案，自動尊重 `.gitignore`，避免 `build/`、`dist/`、`*.egg-info/` 等本地產物含雇主標記時誤報 FAIL；非 git 目錄（如測試 fixture 的暫存目錄）自動 fallback 至原有 rglob 行為，現有測試無需修改。
+
 ### Added
+- **R-08 接受 optional `tier` 欄位**：`.paul-project.yml` 新增可選欄位 `tier`，允許值為 `shareable` / `work` / `personal`；提供非法值（如 `public`）時 FAIL，並回報允許值清單。
+- **新增 R-21（機密掃描）**：宣告 `tier: shareable` 的 repo 若含雇主標記（內部代號、裝置型號、build 主機等）、個人絕對路徑或憑證模式則 FAIL；`tier: work`/`personal` 視為 not-applicable；自身規則檔/fixtures 與 `.paul-project.yml` 的 `secret_scan.allow` 路徑豁免；豁免 label `policy-exempt:secret-scan`。同時 `.paul-project.yml` 新增 `secret_scan.allow` 設定。
 - **新增 R-19（repo 有測試則 CI 必須執行）**：repo 根目錄存在 `tests/`（含 `test_*.py` / `*_test.py`）時，`.github/workflows/**` 必須有至少一個 workflow 實際執行測試（pytest / unittest / npm test / go test / cargo test 等），否則 FAIL；豁免 label `policy-exempt:ci-tests`。無測試套件的 repo 空轉通過。動機：多個 repo 擁有大量測試但 CI 僅跑 policy check，測試從未在 PR gate 上執行。
 - **新增 R-20（workflow policy_version 與 config 同步）**：workflow 內宣告的 `policy_version` / `POLICY_VERSION` semver 字面值必須與 `.paul-project.yml` 的 `policy_version` 一致，否則 FAIL（無豁免 label，比照 R-14）；input 宣告與 `${{ inputs.* }}` 模板表達式不在檢查範圍。動機：1.0.2 升版時本 repo 自身的 caller workflow 殘留 1.0.1，僅被 reusable workflow 的 shell 驗證在 CI 階段攔截，本地 policy_check 無法發現——將該驗證提升為引擎規則
 - **新增 `RELEASES.md` 版本譜系**：`policy_version` ↔ engine tag/SHA 的權威對照表；1.0.0 / 1.0.1 的 SHA 由下游釘選值事後考據回填，自 1.0.2 起發版流程為「merge → 打 `vX.Y.Z` tag → 回填本表」。

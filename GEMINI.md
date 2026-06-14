@@ -1,15 +1,15 @@
-<!-- managed-by: hamanpaul/paulsha-conventions@v1.0.2 -->
+<!-- managed-by: hamanpaul/paulsha-conventions@v1.0.3 -->
 <!-- 若修改此檔，同步更新 CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md 四份 -->
-policy_version: 1.0.2
+policy_version: 1.0.3
 
 # Agent Policy Checklist
 
-本 repo 受 hamanpaul project policy v1.0.2 管轄。
+本 repo 受 hamanpaul project policy v1.0.3 管轄。
 所有 agent 進入 session 時，必須依下列 checklist 行動。
 
 ## 本 repo 的 profile
 - policy_profile: `flat` （見 `.paul-project.yml`）
-- policy_version: `1.0.2`
+- policy_version: `1.0.3`
 
 ## 動工前
 - [ ] 確認當前分支不是 `main`
@@ -42,6 +42,7 @@ policy_version: 1.0.2
 - [ ] R-17：PR body 若引用 issue（`#N`），必須是 closing-keyword 形式（`Closes/Fixes/Resolves #N`）；只引用不關閉時上 `policy-exempt:issue-link`
 - [ ] R-18：code 有變動時已評估並（如需要）同步 `README.md` / `docs/**`，或上 `policy-exempt:docs-sync`
 - [ ] R-19：repo 有 `tests/` 時，CI workflow 有實際執行測試（pytest 等）；新增測試套件而 CI 未涵蓋時同步補上
+- [ ] R-21：宣告 `tier: shareable` 的 repo 不得含雇主機敏標記（內部代號、裝置型號等）、個人絕對路徑或憑證模式；合法引用上 `secret_scan.allow` 或命中時上 `policy-exempt:secret-scan` 並附理由
 - [ ] 語言：PR 標題／內文與所有 comment 的語言符合本 repo 規範（見「語言規範」段）
 - [ ] 若跳過任何檢查，PR 必須帶對應豁免 label + 理由
 
@@ -69,5 +70,6 @@ policy_version: 1.0.2
 - `policy-exempt:issue-link` — R-17 PR body issue 參照需 closing-keyword 形式
 - `policy-exempt:docs-sync` — R-18 code 變動需同步 README/docs
 - `policy-exempt:ci-tests` — R-19 repo 有測試則 CI 必須執行
+- `policy-exempt:secret-scan` — R-21 機密掃描（tier=shareable 命中雇主標記）
 - `skip-changelog` — R-09 code 變動要求 CHANGELOG entry（特殊用途，需附理由）
 - `wip` — R-11 自動通過 PR body checkbox 未全勾（work in progress）
