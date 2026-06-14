@@ -60,6 +60,18 @@ class R08PolicyConfigSchema:
                 ),
             )
 
+        valid_tiers = {"shareable", "work", "personal"}
+        tier = data.get("tier")
+        if tier is not None and tier not in valid_tiers:
+            return RuleResult(
+                rule_id=self.rule_id,
+                status=Status.FAIL,
+                message=(
+                    "tier must be one of "
+                    f"{sorted(valid_tiers)}, got {tier!r}"
+                ),
+            )
+
         return RuleResult(
             rule_id=self.rule_id,
             status=Status.PASS,

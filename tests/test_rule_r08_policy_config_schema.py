@@ -56,3 +56,16 @@ def test_r08_policy_config_schema_fail(fixture_repo, fixture_name: str, expected
 
     assert result.status == Status.FAIL
     assert expected_text in result.message
+
+
+def test_r08_accepts_valid_tier(fixture_repo):
+    repo = fixture_repo("policy-config/tier-valid")
+    result = get_rule("R-08").check(make_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r08_rejects_invalid_tier(fixture_repo):
+    repo = fixture_repo("policy-config/tier-invalid")
+    result = get_rule("R-08").check(make_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "tier" in result.message
