@@ -14,6 +14,7 @@ class R08PolicyConfigSchema:
 
     _required_keys = ("policy_profile", "policy_version")
     _valid_profiles = {"stage-driven", "flat"}
+    _valid_tiers = {"shareable", "work", "personal"}
 
     def check(self, ctx: RuleContext) -> RuleResult:
         path = config_path(ctx.repo_root)
@@ -60,15 +61,14 @@ class R08PolicyConfigSchema:
                 ),
             )
 
-        valid_tiers = {"shareable", "work", "personal"}
         tier = data.get("tier")
-        if tier is not None and tier not in valid_tiers:
+        if tier is not None and tier not in self._valid_tiers:
             return RuleResult(
                 rule_id=self.rule_id,
                 status=Status.FAIL,
                 message=(
                     "tier must be one of "
-                    f"{sorted(valid_tiers)}, got {tier!r}"
+                    f"{sorted(self._valid_tiers)}, got {tier!r}"
                 ),
             )
 
