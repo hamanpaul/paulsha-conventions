@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+> **1.0.4 主題**：R-21 機密標記 config 化（baseline 資料檔 + per-repo extend-only 疊加、結構偵測器 always-on、vendor/OS 名減敏）＋ R-08 驗證 `secret_scan` 標記欄位 schema。`policy_version` 1.0.3 → 1.0.4（`VERSION` / `pyproject.toml` / `.paul-project.yml` / 四份 agent 慣例檔 / caller workflow 同步升版）。
+
 ### Fixed
 - **打包 `policy_check/data/*.yml`**：`pyproject.toml` 新增 `[tool.setuptools.package-data]`，將 `policy_check.data` 下的 `*.yml` 納入 wheel/sdist，確保 R-21 baseline 資料檔（`secret_scan_defaults.yml`）在 pip-install 後可由 `importlib.resources` 載入；否則下游 repo 釘選安裝引擎時 `load_baseline()` 會在 runtime 找不到資料檔。
 - **R-21 改掃 git-tracked 檔案**：`_iter_text_files()` 從 `rglob("*")` 改為優先以 `git ls-files` 列舉已追蹤檔案，自動尊重 `.gitignore`，避免 `build/`、`dist/`、`*.egg-info/` 等本地產物含雇主標記時誤報 FAIL；非 git 目錄（如測試 fixture 的暫存目錄）自動 fallback 至原有 rglob 行為，現有測試無需修改。
