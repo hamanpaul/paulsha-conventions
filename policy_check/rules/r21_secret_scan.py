@@ -10,7 +10,8 @@ from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.rules.registry import register
 
 # 結構偵測器（恆開，寫死在 code）：個人絕對路徑、私鑰
-_STRUCTURAL = re.compile(r"/home/[a-z_][a-z0-9_-]*/")
+# IGNORECASE 還原原 _EMPLOYER_MARKERS 行為：大寫 username（/home/Paul/）與 /HOME/ 也須命中
+_STRUCTURAL = re.compile(r"/home/[a-z_][a-z0-9_-]*/", re.IGNORECASE)
 _PRIVATE_KEY = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
 
 

@@ -117,6 +117,15 @@ def test_structural_detectors_always_on(tmp_path):
     assert get_rule().check(make_ctx(tmp_path)).status == Status.FAIL
 
 
+def test_structural_path_detector_is_case_insensitive(tmp_path):
+    # 個人絕對路徑須不分大小寫命中（大寫 username），還原原 IGNORECASE 行為
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.3\ntier: shareable\n", encoding="utf-8")
+    (tmp_path / "f.txt").write_text("path /home/Paul/secret\n", encoding="utf-8")
+    _git_init(tmp_path)
+    assert get_rule().check(make_ctx(tmp_path)).status == Status.FAIL
+
+
 def test_public_vendor_name_not_flagged(tmp_path):
     # 廠商／OS 名（baseline public_names）已減敏，不再觸發
     (tmp_path / ".paul-project.yml").write_text(
