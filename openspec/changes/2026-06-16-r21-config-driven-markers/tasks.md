@@ -19,7 +19,7 @@
 - Create: `policy_check/rules/_secret_scan_config.py`（loader + merge helper）
 - Test: `tests/test_secret_scan_config.py`
 
-- [ ] **1.1 寫 baseline 資料檔** `policy_check/data/secret_scan_defaults.yml`：
+- [x] **1.1 寫 baseline 資料檔** `policy_check/data/secret_scan_defaults.yml`：
 ```yaml
 # R-21 機密標記 baseline；減敏＝改此檔（移出 markers / 加入 public_names）後發版。
 markers:
@@ -36,7 +36,7 @@ public_names:
   - marvell
 ```
 
-- [ ] **1.2 寫失敗測試** `tests/test_secret_scan_config.py`：
+- [x] **1.2 寫失敗測試** `tests/test_secret_scan_config.py`：
 ```python
 from policy_check.rules._secret_scan_config import load_baseline, resolve_markers
 
@@ -61,9 +61,9 @@ def test_resolve_with_no_repo_config_uses_baseline():
     assert "broadcom" not in eff
 ```
 
-- [ ] **1.3 跑測試** → FAIL（module 不存在）：`python3 -m pytest tests/test_secret_scan_config.py -q`
+- [x] **1.3 跑測試** → FAIL（module 不存在）：`python3 -m pytest tests/test_secret_scan_config.py -q`
 
-- [ ] **1.4 實作 loader** `policy_check/rules/_secret_scan_config.py`：
+- [x] **1.4 實作 loader** `policy_check/rules/_secret_scan_config.py`：
 ```python
 """R-21 機密標記設定：載入 baseline 資料檔並與 repo config 疊加（extend-only）。"""
 from __future__ import annotations
@@ -100,9 +100,9 @@ def resolve_markers(config: dict[str, Any]) -> set[str]:
     return markers - public
 ```
 
-- [ ] **1.5 跑測試** → PASS：`python3 -m pytest tests/test_secret_scan_config.py -q`
+- [x] **1.5 跑測試** → PASS：`python3 -m pytest tests/test_secret_scan_config.py -q`
 
-- [ ] **1.6 Commit**：`git add policy_check/data policy_check/rules/_secret_scan_config.py tests/test_secret_scan_config.py && git commit -m "feat(r21): 機密標記 baseline 資料檔 + config 疊加 loader"`
+- [x] **1.6 Commit**：`git add policy_check/data policy_check/rules/_secret_scan_config.py tests/test_secret_scan_config.py && git commit -m "feat(r21): 機密標記 baseline 資料檔 + config 疊加 loader"`
 
 ---
 
@@ -112,7 +112,7 @@ def resolve_markers(config: dict[str, Any]) -> set[str]:
 - Modify: `policy_check/rules/r21_secret_scan.py`（拆 `_EMPLOYER_MARKERS`；check 改用 `resolve_markers`）
 - Test: `tests/test_rule_r21_secret_scan.py`（新增結構 always-on 案例）
 
-- [ ] **2.1 寫失敗測試**（加到 `tests/test_rule_r21_secret_scan.py`）：結構偵測器在 markers 為空時仍咬，且 vendor 名不再咬。用既有 `make_ctx`/fixture 風格，於 tmp repo 寫入：
+- [x] **2.1 寫失敗測試**（加到 `tests/test_rule_r21_secret_scan.py`）：結構偵測器在 markers 為空時仍咬，且 vendor 名不再咬。用既有 `make_ctx`/fixture 風格，於 tmp repo 寫入：
 ```python
 def test_structural_detectors_always_on(tmp_path):
     (tmp_path / ".paul-project.yml").write_text(
@@ -131,9 +131,9 @@ def test_public_vendor_name_not_flagged(tmp_path):
 ```
 （若本檔已有 git-init helper 就重用；否則加一個 `_git_init`。）
 
-- [ ] **2.2 跑** → FAIL（broadcom 仍被舊 regex 咬）：`python3 -m pytest tests/test_rule_r21_secret_scan.py -q`
+- [x] **2.2 跑** → FAIL（broadcom 仍被舊 regex 咬）：`python3 -m pytest tests/test_rule_r21_secret_scan.py -q`
 
-- [ ] **2.3 改 `r21_secret_scan.py`**：移除 `_EMPLOYER_MARKERS`，改：
+- [x] **2.3 改 `r21_secret_scan.py`**：移除 `_EMPLOYER_MARKERS`，改：
 ```python
 from policy_check.rules._secret_scan_config import resolve_markers
 
@@ -170,9 +170,9 @@ check 內（取代 line 94、104-107）：
 ```
 （`_SELF_EXEMPT` 內把 `_secret_scan_config.py`、`data/secret_scan_defaults.yml` 也加入豁免，避免規則掃到自身的 token 清單。）
 
-- [ ] **2.4 跑** → 新測試 PASS：`python3 -m pytest tests/test_rule_r21_secret_scan.py -q`
+- [x] **2.4 跑** → 新測試 PASS：`python3 -m pytest tests/test_rule_r21_secret_scan.py -q`
 
-- [ ] **2.5 Commit**：`git commit -am "feat(r21): 偵測改 config-driven markers + always-on 結構偵測器"`
+- [x] **2.5 Commit**：`git commit -am "feat(r21): 偵測改 config-driven markers + always-on 結構偵測器"`
 
 ---
 
@@ -182,7 +182,7 @@ check 內（取代 line 94、104-107）：
 - Modify: `policy_check/rules/r08_policy_config_schema.py`
 - Test: `tests/test_rule_r08_policy_config_schema.py`
 
-- [ ] **3.1 寫失敗測試**（加到 R-08 測試檔；沿用其建 ctx 風格）：
+- [x] **3.1 寫失敗測試**（加到 R-08 測試檔；沿用其建 ctx 風格）：
 ```python
 def test_r08_accepts_secret_scan_marker_lists(tmp_path):
     cfg = ("policy_profile: flat\npolicy_version: \"1.0.4\"\ntier: shareable\n"
@@ -196,9 +196,9 @@ def test_r08_rejects_non_str_list_markers(tmp_path):
 ```
 （`_run_r08` 為該檔既有 helper；若無則依現有測試模式建立。）
 
-- [ ] **3.2 跑** → FAIL：`python3 -m pytest tests/test_rule_r08_policy_config_schema.py -q`
+- [x] **3.2 跑** → FAIL：`python3 -m pytest tests/test_rule_r08_policy_config_schema.py -q`
 
-- [ ] **3.3 在 R-08 `check()` 的 tier 驗證後、回 PASS 前插入**：
+- [x] **3.3 在 R-08 `check()` 的 tier 驗證後、回 PASS 前插入**：
 ```python
         secret_scan = data.get("secret_scan")
         if secret_scan is not None:
@@ -214,9 +214,9 @@ def test_r08_rejects_non_str_list_markers(tmp_path):
                                       message=f"secret_scan.{key} must be a list of strings")
 ```
 
-- [ ] **3.4 跑** → PASS：`python3 -m pytest tests/test_rule_r08_policy_config_schema.py -q`
+- [x] **3.4 跑** → PASS：`python3 -m pytest tests/test_rule_r08_policy_config_schema.py -q`
 
-- [ ] **3.5 Commit**：`git commit -am "feat(r08): 驗證 secret_scan.markers/public_names 為 list[str]"`
+- [x] **3.5 Commit**：`git commit -am "feat(r08): 驗證 secret_scan.markers/public_names 為 list[str]"`
 
 ---
 
@@ -226,9 +226,9 @@ def test_r08_rejects_non_str_list_markers(tmp_path):
 - Modify: `tests/fixtures/secret-scan/shareable-leak/src/platform.py`、`tests/fixtures/secret-scan/shareable-allowlisted/docs/markers.md`、`tests/fixtures/secret-scan/work-leak/src/platform.py`
 - Test: `tests/test_rule_r21_secret_scan.py`
 
-- [ ] **4.1 清 fixtures**：把含 `brcm broadcom BGW720` 的行改為僅 `BGW720`（vendor 名移除），確保 leak fixture 仍因 `BGW720` FAIL、但不是因 vendor 名。逐檔讀後改。
+- [x] **4.1 清 fixtures**：把含 `brcm broadcom BGW720` 的行改為僅 `BGW720`（vendor 名移除），確保 leak fixture 仍因 `BGW720` FAIL、但不是因 vendor 名。逐檔讀後改。
 
-- [ ] **4.2 加 per-repo extend 測試**：
+- [x] **4.2 加 per-repo extend 測試**：
 ```python
 def test_repo_can_extend_markers(tmp_path):
     (tmp_path / ".paul-project.yml").write_text(
@@ -247,9 +247,9 @@ def test_repo_public_names_suppresses(tmp_path):
     assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
 ```
 
-- [ ] **4.3 跑既有+新 R-21 測試全綠**：`python3 -m pytest tests/test_rule_r21_secret_scan.py -q`
+- [x] **4.3 跑既有+新 R-21 測試全綠**：`python3 -m pytest tests/test_rule_r21_secret_scan.py -q`
 
-- [ ] **4.4 Commit**：`git commit -am "test(r21): 更新 fixtures 並補 extend/抑制/結構 always-on 測試"`
+- [x] **4.4 Commit**：`git commit -am "test(r21): 更新 fixtures 並補 extend/抑制/結構 always-on 測試"`
 
 ---
 
@@ -258,20 +258,20 @@ def test_repo_public_names_suppresses(tmp_path):
 **Files:**
 - Modify: `pyproject.toml`
 
-- [ ] **5.1 在 `pyproject.toml` 加 package-data**（確保 `.yml` 隨安裝），於 `[tool.setuptools]` 區：
+- [x] **5.1 在 `pyproject.toml` 加 package-data**（確保 `.yml` 隨安裝），於 `[tool.setuptools]` 區：
 ```toml
 [tool.setuptools.package-data]
 "policy_check.data" = ["*.yml"]
 ```
 並確認 `[tool.setuptools.packages.find]` 的 `include = ["policy_check*"]` 已涵蓋 `policy_check.data`（有 `__init__.py` 即可）。
 
-- [ ] **5.2 驗證 importlib.resources 載入**（從非 repo 根目錄跑，模擬安裝後）：
+- [x] **5.2 驗證 importlib.resources 載入**（從非 repo 根目錄跑，模擬安裝後）：
 ```bash
 cd /tmp && python3 -c "import sys; sys.path.insert(0, '$OLDPWD'); from policy_check.rules._secret_scan_config import load_baseline; print(load_baseline()['markers'])"
 ```
 Expected：印出 `['bgw720', 'build20']`。
 
-- [ ] **5.3 Commit**：`git commit -am "build: 打包 policy_check/data/*.yml（R-21 baseline）"`
+- [x] **5.3 Commit**：`git commit -am "build: 打包 policy_check/data/*.yml（R-21 baseline）"`
 
 ---
 
@@ -280,17 +280,17 @@ Expected：印出 `['bgw720', 'build20']`。
 **Files:**
 - Modify: `VERSION`、`CHANGELOG.md`、`.paul-project.yml`、`CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.github/copilot-instructions.md`、`.github/workflows/*`（依本 repo 既有 1.0.3→自身版本標記慣例）
 
-- [ ] **6.1 `VERSION`** 1.0.3 → `1.0.4`。
+- [x] **6.1 `VERSION`** 1.0.3 → `1.0.4`。
 
-- [ ] **6.2 `CHANGELOG.md [Unreleased]`** 加條目：R-21 機密標記 config 化（baseline 資料檔 + per-repo extend-only；結構偵測器 always-on；vendor/OS 名減敏）；R-08 驗證 secret_scan 標記欄位。
+- [x] **6.2 `CHANGELOG.md [Unreleased]`** 加條目：R-21 機密標記 config 化（baseline 資料檔 + per-repo extend-only；結構偵測器 always-on；vendor/OS 名減敏）；R-08 驗證 secret_scan 標記欄位。
 
-- [ ] **6.3 同步本 repo policy_version 標記** 1.0.3 → 1.0.4：`.paul-project.yml` + 四份 agent 檔的 `managed-by@vX`/`policy_version` 裸行（R-14）。本 repo 為 engine 本體，無下游 engine pin 需改。
+- [x] **6.3 同步本 repo policy_version 標記** 1.0.3 → 1.0.4：`.paul-project.yml` + 四份 agent 檔的 `managed-by@vX`/`policy_version` 裸行（R-14）。本 repo 為 engine 本體，無下游 engine pin 需改。
 
-- [ ] **6.4 自掃**：`python3 -m policy_check --repo .` → 0 fail（含 R-21 對 conventions 自身 tier=shareable：確認自身 `r21_secret_scan.py`/data/fixtures 已被 `_SELF_EXEMPT` 豁免、不誤報）。
+- [x] **6.4 自掃**：`python3 -m policy_check --repo .` → 0 fail（含 R-21 對 conventions 自身 tier=shareable：確認自身 `r21_secret_scan.py`/data/fixtures 已被 `_SELF_EXEMPT` 豁免、不誤報）。
 
-- [ ] **6.5 全測試**：`python3 -m pytest -q` → 全綠。
+- [x] **6.5 全測試**：`python3 -m pytest -q` → 全綠。
 
-- [ ] **6.6 Commit**：`git commit -am "chore(release): policy 1.0.4（R-21 config 化 + R-08 schema）"`
+- [x] **6.6 Commit**：`git commit -am "chore(release): policy 1.0.4（R-21 config 化 + R-08 schema）"`
 
 ---
 
