@@ -72,6 +72,26 @@ class R08PolicyConfigSchema:
                 ),
             )
 
+        # 驗證 secret_scan 區塊：allow/markers/public_names 須為 list[str]
+        secret_scan = data.get("secret_scan")
+        if secret_scan is not None:
+            if not isinstance(secret_scan, dict):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="secret_scan must be a mapping",
+                )
+            for key in ("allow", "markers", "public_names"):
+                val = secret_scan.get(key)
+                if val is None:
+                    continue
+                if not isinstance(val, list) or not all(isinstance(x, str) for x in val):
+                    return RuleResult(
+                        rule_id=self.rule_id,
+                        status=Status.FAIL,
+                        message=f"secret_scan.{key} must be a list of strings",
+                    )
+
         return RuleResult(
             rule_id=self.rule_id,
             status=Status.PASS,
