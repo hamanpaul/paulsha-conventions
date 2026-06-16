@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **打包 `policy_check/data/*.yml`**：`pyproject.toml` 新增 `[tool.setuptools.package-data]`，將 `policy_check.data` 下的 `*.yml` 納入 wheel/sdist，確保 R-21 baseline 資料檔（`secret_scan_defaults.yml`）在 pip-install 後可由 `importlib.resources` 載入；否則下游 repo 釘選安裝引擎時 `load_baseline()` 會在 runtime 找不到資料檔。
 - **R-21 改掃 git-tracked 檔案**：`_iter_text_files()` 從 `rglob("*")` 改為優先以 `git ls-files` 列舉已追蹤檔案，自動尊重 `.gitignore`，避免 `build/`、`dist/`、`*.egg-info/` 等本地產物含雇主標記時誤報 FAIL；非 git 目錄（如測試 fixture 的暫存目錄）自動 fallback 至原有 rglob 行為，現有測試無需修改。
 
 ### Added
