@@ -1,1 +1,1 @@
-This documentation legitimately mentions BGW720 and brcm as examples.
+This documentation legitimately mentions BGW720 as an example.

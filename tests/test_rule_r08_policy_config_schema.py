@@ -69,3 +69,26 @@ def test_r08_rejects_invalid_tier(fixture_repo):
     result = get_rule("R-08").check(make_ctx(repo))
     assert result.status == Status.FAIL
     assert "tier" in result.message
+
+
+def _write_config(tmp_path: Path, cfg_text: str) -> Path:
+    # 直接把 config 寫到 repo root，沿用 config_path 的 .paul-project.yml 解析
+    (tmp_path / ".paul-project.yml").write_text(cfg_text, encoding="utf-8")
+    return tmp_path
+
+
+def test_r08_accepts_secret_scan_marker_lists(tmp_path):
+    cfg = ("policy_profile: flat\npolicy_version: \"1.0.4\"\ntier: shareable\n"
+           "secret_scan:\n  markers: [\"FOO123\"]\n  public_names: [\"broadcom\"]\n")
+    repo = _write_config(tmp_path, cfg)
+    result = get_rule("R-08").check(make_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r08_rejects_non_str_list_markers(tmp_path):
+    cfg = ("policy_profile: flat\npolicy_version: \"1.0.4\"\ntier: shareable\n"
+           "secret_scan:\n  markers: \"not-a-list\"\n")
+    repo = _write_config(tmp_path, cfg)
+    result = get_rule("R-08").check(make_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "secret_scan.markers" in result.message

@@ -5,15 +5,22 @@ import subprocess
 from fnmatch import fnmatch
 from pathlib import Path
 
+from policy_check.rules._secret_scan_config import resolve_markers
 from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.rules.registry import register
 
-_EMPLOYER_MARKERS = re.compile(
-    r"\b(brcm|broadcom|airoha|prplos|prplog|bgw720|build20)\b"
-    r"|/home/[a-z_][a-z0-9_-]*/",
-    re.IGNORECASE,
-)
+# 結構偵測器（恆開，寫死在 code）：個人絕對路徑、私鑰
+# IGNORECASE 還原原 _EMPLOYER_MARKERS 行為：大寫 username（/home/Paul/）與 /HOME/ 也須命中
+_STRUCTURAL = re.compile(r"/home/[a-z_][a-z0-9_-]*/", re.IGNORECASE)
 _PRIVATE_KEY = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+
+
+def _build_marker_re(tokens: set[str]) -> re.Pattern[str] | None:
+    """由 config-driven 的 marker tokens 組成單一不分大小寫的字界 regex。"""
+    if not tokens:
+        return None
+    alt = "|".join(re.escape(t) for t in sorted(tokens))
+    return re.compile(rf"\b({alt})\b", re.IGNORECASE)
 
 _SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
 _BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip",
@@ -21,7 +28,10 @@ _BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip",
 
 _SELF_EXEMPT = (
     "policy_check/rules/r21_secret_scan.py",
+    "policy_check/rules/_secret_scan_config.py",
+    "policy_check/data/secret_scan_defaults.yml",
     "tests/test_rule_r21_secret_scan.py",
+    "tests/test_secret_scan_config.py",
     "tests/fixtures/secret-scan/**",
 )
 
@@ -91,7 +101,9 @@ class R21SecretScan:
                 ),
             )
 
-        allow = ((ctx.config or {}).get("secret_scan") or {}).get("allow", [])
+        config = ctx.config or {}
+        allow = (config.get("secret_scan") or {}).get("allow", [])
+        marker_re = _build_marker_re(resolve_markers(config))
         hits: list[str] = []
         for path in _iter_text_files(ctx.repo_root):
             rel = path.relative_to(ctx.repo_root).as_posix()
@@ -102,7 +114,9 @@ class R21SecretScan:
             except (UnicodeDecodeError, OSError):
                 continue
             for ln, line in enumerate(text.splitlines(), 1):
-                if _EMPLOYER_MARKERS.search(line) or _PRIVATE_KEY.search(line):
+                if _STRUCTURAL.search(line) or _PRIVATE_KEY.search(line) or (
+                    marker_re is not None and marker_re.search(line)
+                ):
                     hits.append(f"{rel}:{ln}")
                     break
         if hits:

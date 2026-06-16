@@ -7,7 +7,10 @@
 
 ## [Unreleased]
 
+> **1.0.4 主題**：R-21 機密標記 config 化（baseline 資料檔 + per-repo extend-only 疊加、結構偵測器 always-on、vendor/OS 名減敏）＋ R-08 驗證 `secret_scan` 標記欄位 schema。`policy_version` 1.0.3 → 1.0.4（`VERSION` / `pyproject.toml` / `.paul-project.yml` / 四份 agent 慣例檔 / caller workflow 同步升版）。
+
 ### Fixed
+- **打包 `policy_check/data/*.yml`**：`pyproject.toml` 新增 `[tool.setuptools.package-data]`，將 `policy_check.data` 下的 `*.yml` 納入 wheel/sdist，確保 R-21 baseline 資料檔（`secret_scan_defaults.yml`）在 pip-install 後可由 `importlib.resources` 載入；否則下游 repo 釘選安裝引擎時 `load_baseline()` 會在 runtime 找不到資料檔。
 - **R-21 改掃 git-tracked 檔案**：`_iter_text_files()` 從 `rglob("*")` 改為優先以 `git ls-files` 列舉已追蹤檔案，自動尊重 `.gitignore`，避免 `build/`、`dist/`、`*.egg-info/` 等本地產物含雇主標記時誤報 FAIL；非 git 目錄（如測試 fixture 的暫存目錄）自動 fallback 至原有 rglob 行為，現有測試無需修改。
 
 ### Added
@@ -18,6 +21,7 @@
 - **新增 `RELEASES.md` 版本譜系**：`policy_version` ↔ engine tag/SHA 的權威對照表；1.0.0 / 1.0.1 的 SHA 由下游釘選值事後考據回填，自 1.0.2 起發版流程為「merge → 打 `vX.Y.Z` tag → 回填本表」。
 
 ### Changed
+- **R-21 偵測改 config-driven markers + always-on 結構偵測器**：偵測拆為兩類——結構偵測器（個人絕對路徑 `/home/<user>/`、私鑰 PEM）恆開且寫死於 code；marker tokens（內部代號／裝置型號等）改由 `resolve_markers(ctx.config)` 從 baseline 資料檔疊加 repo config 動態解析（extend-only、扣除 `public_names`）。一行命中任一結構偵測器或任一 marker token 即 FAIL。行為相較先前一致，唯廠商／OS 名（brcm/broadcom/airoha/prplos/prplog/marvell/mtk 等）已列入 baseline `public_names`、不再觸發。`_SELF_EXEMPT` 新增 `_secret_scan_config.py`、`secret_scan_defaults.yml` 與 `tests/test_secret_scan_config.py`，避免引擎掃描自身的 baseline token 清單時誤報。R-08 schema 同步擴充：`secret_scan` 的 `allow` / `markers` / `public_names` 若存在須為 `list[str]`，型別不符時 FAIL。
 - **policy_version 1.0.1 → 1.0.2**：隨 R-19 升版；四份 agent convention 檔（`policy_version`、`managed-by@v1.0.2`、白名單與完成前 checklist 加入 R-19）、`.paul-project.yml`、README 規則表與版本敘述一併更新
 - **引擎 `VERSION` 與 policy_version 對齊**：`VERSION` 0.0.0 → 1.0.2（pyproject 同步），引擎自此開始打 release tag，R-07 不再因永無 tag 而空轉
 - **pytest 設定排除 fixtures**：`--ignore=tests/fixtures`，避免 R-19 fixture 內的假 `test_*.py` 被引擎自身測試蒐集（同名 module 會碰撞）

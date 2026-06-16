@@ -1,15 +1,15 @@
-<!-- managed-by: hamanpaul/paulsha-conventions@v1.0.3 -->
+<!-- managed-by: hamanpaul/paulsha-conventions@v1.0.4 -->
 <!-- 若修改此檔，同步更新 CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md 四份 -->
-policy_version: 1.0.3
+policy_version: 1.0.4
 
 # Agent Policy Checklist
 
-本 repo 受 hamanpaul project policy v1.0.3 管轄。
+本 repo 受 hamanpaul project policy v1.0.4 管轄。
 所有 agent 進入 session 時，必須依下列 checklist 行動。
 
 ## 本 repo 的 profile
 - policy_profile: `flat` （見 `.paul-project.yml`）
-- policy_version: `1.0.3`
+- policy_version: `1.0.4`
 
 ## 動工前
 - [ ] 確認當前分支不是 `main`
