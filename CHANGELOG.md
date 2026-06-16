@@ -18,6 +18,7 @@
 - **新增 `RELEASES.md` 版本譜系**：`policy_version` ↔ engine tag/SHA 的權威對照表；1.0.0 / 1.0.1 的 SHA 由下游釘選值事後考據回填，自 1.0.2 起發版流程為「merge → 打 `vX.Y.Z` tag → 回填本表」。
 
 ### Changed
+- **R-21 偵測改 config-driven markers + always-on 結構偵測器**：偵測拆為兩類——結構偵測器（個人絕對路徑 `/home/<user>/`、私鑰 PEM）恆開且寫死於 code；marker tokens（內部代號／裝置型號等）改由 `resolve_markers(ctx.config)` 從 baseline 資料檔疊加 repo config 動態解析（extend-only、扣除 `public_names`）。一行命中任一結構偵測器或任一 marker token 即 FAIL。行為相較先前一致，唯廠商／OS 名（brcm/broadcom/airoha/prplos/prplog/marvell/mtk 等）已列入 baseline `public_names`、不再觸發。`_SELF_EXEMPT` 新增 `_secret_scan_config.py`、`secret_scan_defaults.yml` 與 `tests/test_secret_scan_config.py`，避免引擎掃描自身的 baseline token 清單時誤報。
 - **policy_version 1.0.1 → 1.0.2**：隨 R-19 升版；四份 agent convention 檔（`policy_version`、`managed-by@v1.0.2`、白名單與完成前 checklist 加入 R-19）、`.paul-project.yml`、README 規則表與版本敘述一併更新
 - **引擎 `VERSION` 與 policy_version 對齊**：`VERSION` 0.0.0 → 1.0.2（pyproject 同步），引擎自此開始打 release tag，R-07 不再因永無 tag 而空轉
 - **pytest 設定排除 fixtures**：`--ignore=tests/fixtures`，避免 R-19 fixture 內的假 `test_*.py` 被引擎自身測試蒐集（同名 module 會碰撞）

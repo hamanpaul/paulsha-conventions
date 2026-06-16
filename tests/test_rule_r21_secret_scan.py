@@ -23,6 +23,14 @@ def get_rule():
     return loaded["R-21"]
 
 
+def _git_init(path: Path) -> None:
+    # _iter_text_files 走 git ls-files；tmp repo 的檔案需先被 git 追蹤才會被掃描
+    import subprocess
+
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    subprocess.run(["git", "-C", str(path), "add", "-A"], check=True)
+
+
 def test_r21_pass_when_shareable_clean(fixture_repo):
     repo = fixture_repo("secret-scan/shareable-clean")
     result = get_rule().check(make_ctx(repo))
@@ -97,3 +105,31 @@ def test_r21_skips_gitignored_files(tmp_path):
     )
     # build/ is gitignored → its marker file is untracked → R-21 must not scan it
     assert get_rule().check(ctx).status == Status.PASS
+
+
+def test_structural_detectors_always_on(tmp_path):
+    # 結構偵測器（/home/<user>/ 絕對路徑）恆開，不受 markers 設定影響
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.3\ntier: shareable\n"
+        "secret_scan:\n  public_names: [bgw720, build20]\n", encoding="utf-8")
+    (tmp_path / "f.txt").write_text("see /home/paul_chen/secret\n", encoding="utf-8")
+    _git_init(tmp_path)
+    assert get_rule().check(make_ctx(tmp_path)).status == Status.FAIL
+
+
+def test_public_vendor_name_not_flagged(tmp_path):
+    # 廠商／OS 名（baseline public_names）已減敏，不再觸發
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.3\ntier: shareable\n", encoding="utf-8")
+    (tmp_path / "doc.md").write_text("supports broadcom brcm prplOS marvell\n", encoding="utf-8")
+    _git_init(tmp_path)
+    assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
+
+
+def test_marker_token_still_flagged(tmp_path):
+    # 內部代號（baseline markers）仍觸發
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.3\ntier: shareable\n", encoding="utf-8")
+    (tmp_path / "doc.md").write_text("verify on BGW720 board\n", encoding="utf-8")
+    _git_init(tmp_path)
+    assert get_rule().check(make_ctx(tmp_path)).status == Status.FAIL
