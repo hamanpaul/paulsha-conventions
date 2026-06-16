@@ -133,3 +133,23 @@ def test_marker_token_still_flagged(tmp_path):
     (tmp_path / "doc.md").write_text("verify on BGW720 board\n", encoding="utf-8")
     _git_init(tmp_path)
     assert get_rule().check(make_ctx(tmp_path)).status == Status.FAIL
+
+
+def test_repo_can_extend_markers(tmp_path):
+    # 每 repo 的 secret_scan.markers 會「疊加」到 baseline，新代號也應觸發
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.3\ntier: shareable\n"
+        "secret_scan:\n  markers: [\"acme9000\"]\n", encoding="utf-8")
+    (tmp_path / "x.md").write_text("internal acme9000 board\n", encoding="utf-8")
+    _git_init(tmp_path)
+    assert get_rule().check(make_ctx(tmp_path)).status == Status.FAIL
+
+
+def test_repo_public_names_suppresses(tmp_path):
+    # 每 repo 的 secret_scan.public_names 會抑制對應代號（即使屬 baseline markers）
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.3\ntier: shareable\n"
+        "secret_scan:\n  public_names: [\"bgw720\"]\n", encoding="utf-8")
+    (tmp_path / "x.md").write_text("legacy BGW720 note\n", encoding="utf-8")
+    _git_init(tmp_path)
+    assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
