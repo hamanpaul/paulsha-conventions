@@ -129,3 +129,36 @@ def test_r22_preexisting_dangling_is_warn_even_with_base(tmp_path):
     _commit(tmp_path, "head")
     res = get_rule().check(make_ctx(tmp_path, base=base))
     assert res.status == Status.WARN
+
+
+def test_r22_symbol_removed_this_pr_is_fail(tmp_path):
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "docs/api.md", "call `validate_wifi_llapi_case` to check\n")
+    _write(tmp_path, "core.py", "def validate_wifi_llapi_case():\n    return 1\n")
+    base = _commit(tmp_path, "base")
+    (tmp_path / "core.py").write_text("def something_else():\n    return 1\n", encoding="utf-8")
+    _commit(tmp_path, "head")                   # 本次移除該 def
+    res = get_rule().check(make_ctx(tmp_path, base=base))
+    assert res.status == Status.FAIL
+    assert "validate_wifi_llapi_case" in res.detail
+
+
+def test_r22_symbol_still_present_passes(tmp_path):
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "docs/api.md", "call `validate_wifi_llapi_case`\n")
+    _write(tmp_path, "core.py", "def validate_wifi_llapi_case():\n    return 1\n")
+    base = _commit(tmp_path, "base")
+    _write(tmp_path, "docs/api.md", "call `validate_wifi_llapi_case` now\n")
+    _commit(tmp_path, "head")
+    assert get_rule().check(make_ctx(tmp_path, base=base)).status == Status.PASS
+
+
+def test_r22_symbol_prong_off_without_base(tmp_path):
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "docs/api.md", "call `ghost_symbol_xyz`\n")
+    _commit(tmp_path)
+    # 無 base：symbol prong 關閉，且無懸空路徑 → PASS
+    assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS

@@ -78,6 +78,32 @@ def _resolve_base(root: Path, base_ref: str | None) -> str | None:
     return None
 
 
+def _defined_in_head(root: Path, name: str) -> bool:
+    try:
+        subprocess.check_output(
+            ["git", "-C", str(root), "grep", "-qE",
+             rf"(def|class)[[:space:]]+{re.escape(name)}\b", "HEAD"],
+            stderr=subprocess.DEVNULL)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def _removed_symbols(root: Path, base: str) -> set[str]:
+    try:
+        diff = subprocess.check_output(
+            ["git", "-C", str(root), "diff", f"{base}...HEAD", "--", "*.py"],
+            text=True, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        return set()
+    candidates: set[str] = set()
+    for line in diff.splitlines():
+        m = _DEFCLASS_RE.match(line)
+        if m and m.group(1) == "-":
+            candidates.add(m.group(2))
+    return {name for name in candidates if not _defined_in_head(root, name)}
+
+
 def _path_candidates(doc_rel: str, target: str) -> list[str]:
     """正規化成 repo-relative posix 候選（doc-relative 與 root-relative 各一）。"""
     target = target.split("#", 1)[0].strip()
@@ -128,6 +154,7 @@ class R22DocReference:
         head_files = _git_tracked(root)
         base = _resolve_base(root, ctx.pr_base_ref)
         base_files = _git_tracked(root, base) if base else set()
+        removed_syms = _removed_symbols(root, base) if base else set()
 
         fails: list[str] = []
         warns: list[str] = []
@@ -144,6 +171,8 @@ class R22DocReference:
                         fails.append(f"{rel} -> {token} (removed this change)")
                     else:
                         warns.append(f"{rel} -> {token}")
+                elif kind == "symbol" and payload in removed_syms:
+                    fails.append(f"{rel} -> `{payload}` (def/class removed this change)")
 
         if fails:
             return RuleResult(self.rule_id, Status.FAIL,
