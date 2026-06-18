@@ -3,25 +3,17 @@
 本專案所有重大變更都會記錄在此檔案。
 
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
-本專案遵循 hamanpaul project policy v1.0.2。
+本專案遵循 hamanpaul project policy v1.0.4。
 
 ## [Unreleased]
-
-> **1.0.4 主題**：R-21 機密標記 config 化（baseline 資料檔 + per-repo extend-only 疊加、結構偵測器 always-on、vendor/OS 名減敏）＋ R-08 驗證 `secret_scan` 標記欄位 schema。`policy_version` 1.0.3 → 1.0.4（`VERSION` / `pyproject.toml` / `.paul-project.yml` / 四份 agent 慣例檔 / caller workflow 同步升版）。
-
-### Fixed
-- **打包 `policy_check/data/*.yml`**：`pyproject.toml` 新增 `[tool.setuptools.package-data]`，將 `policy_check.data` 下的 `*.yml` 納入 wheel/sdist，確保 R-21 baseline 資料檔（`secret_scan_defaults.yml`）在 pip-install 後可由 `importlib.resources` 載入；否則下游 repo 釘選安裝引擎時 `load_baseline()` 會在 runtime 找不到資料檔。
-- **R-21 改掃 git-tracked 檔案**：`_iter_text_files()` 從 `rglob("*")` 改為優先以 `git ls-files` 列舉已追蹤檔案，自動尊重 `.gitignore`，避免 `build/`、`dist/`、`*.egg-info/` 等本地產物含雇主標記時誤報 FAIL；非 git 目錄（如測試 fixture 的暫存目錄）自動 fallback 至原有 rglob 行為，現有測試無需修改。
 
 ### Added
 - **R-08 接受 optional `tier` 欄位**：`.paul-project.yml` 新增可選欄位 `tier`，允許值為 `shareable` / `work` / `personal`；提供非法值（如 `public`）時 FAIL，並回報允許值清單。
 - **新增 R-21（機密掃描）**：宣告 `tier: shareable` 的 repo 若含雇主標記（內部代號、裝置型號、build 主機等）、個人絕對路徑或憑證模式則 FAIL；`tier: work`/`personal` 視為 not-applicable；自身規則檔/fixtures 與 `.paul-project.yml` 的 `secret_scan.allow` 路徑豁免；豁免 label `policy-exempt:secret-scan`。同時 `.paul-project.yml` 新增 `secret_scan.allow` 設定。
 - **新增 R-19（repo 有測試則 CI 必須執行）**：repo 根目錄存在 `tests/`（含 `test_*.py` / `*_test.py`）時，`.github/workflows/**` 必須有至少一個 workflow 實際執行測試（pytest / unittest / npm test / go test / cargo test 等），否則 FAIL；豁免 label `policy-exempt:ci-tests`。無測試套件的 repo 空轉通過。動機：多個 repo 擁有大量測試但 CI 僅跑 policy check，測試從未在 PR gate 上執行。
 - **新增 R-20（workflow policy_version 與 config 同步）**：workflow 內宣告的 `policy_version` / `POLICY_VERSION` semver 字面值必須與 `.paul-project.yml` 的 `policy_version` 一致，否則 FAIL（無豁免 label，比照 R-14）；input 宣告與 `${{ inputs.* }}` 模板表達式不在檢查範圍。動機：1.0.2 升版時本 repo 自身的 caller workflow 殘留 1.0.1，僅被 reusable workflow 的 shell 驗證在 CI 階段攔截，本地 policy_check 無法發現——將該驗證提升為引擎規則
-- **新增 `RELEASES.md` 版本譜系**：`policy_version` ↔ engine tag/SHA 的權威對照表；1.0.0 / 1.0.1 的 SHA 由下游釘選值事後考據回填，自 1.0.2 起發版流程為「merge → 打 `vX.Y.Z` tag → 回填本表」。
 
 ### Changed
-- **R-21 偵測改 config-driven markers + always-on 結構偵測器**：偵測拆為兩類——結構偵測器（個人絕對路徑 `/home/<user>/`、私鑰 PEM）恆開且寫死於 code；marker tokens（內部代號／裝置型號等）改由 `resolve_markers(ctx.config)` 從 baseline 資料檔疊加 repo config 動態解析（extend-only、扣除 `public_names`）。一行命中任一結構偵測器或任一 marker token 即 FAIL。行為相較先前一致，唯廠商／OS 名（brcm/broadcom/airoha/prplos/prplog/marvell/mtk 等）已列入 baseline `public_names`、不再觸發。`_SELF_EXEMPT` 新增 `_secret_scan_config.py`、`secret_scan_defaults.yml` 與 `tests/test_secret_scan_config.py`，避免引擎掃描自身的 baseline token 清單時誤報。R-08 schema 同步擴充：`secret_scan` 的 `allow` / `markers` / `public_names` 若存在須為 `list[str]`，型別不符時 FAIL。
 - **policy_version 1.0.1 → 1.0.2**：隨 R-19 升版；四份 agent convention 檔（`policy_version`、`managed-by@v1.0.2`、白名單與完成前 checklist 加入 R-19）、`.paul-project.yml`、README 規則表與版本敘述一併更新
 - **引擎 `VERSION` 與 policy_version 對齊**：`VERSION` 0.0.0 → 1.0.2（pyproject 同步），引擎自此開始打 release tag，R-07 不再因永無 tag 而空轉
 - **pytest 設定排除 fixtures**：`--ignore=tests/fixtures`，避免 R-19 fixture 內的假 `test_*.py` 被引擎自身測試蒐集（同名 module 會碰撞）
@@ -90,3 +82,17 @@
 - **reusable workflow policy engine 版本漂移**：`Checkout policy engine` 步驟加入 `ref: ${{ github.workflow_sha }}`，確保 policy engine 版本與呼叫者所鎖定的 workflow 版本一致，消除未鎖定時永遠抓 main branch 的風險；同步新增回歸測試 `test_reusable_workflow_policy_engine_checkout_is_pinned`
 - **跨 repo reusable workflow 中 `github.workflow_sha` 指向錯誤 repo**：根據 GitHub 官方文件，reusable workflow 中 `github` context 始終屬於 caller workflow，因此 `github.workflow_sha` 是 caller repo 的 SHA，而非 `paulsha-conventions` 的 SHA；改為在 `workflow_call.inputs` 新增必填 `policy_engine_ref` 參數，由呼叫者明確傳入指向 `hamanpaul/paulsha-conventions` 的完整 40 字元 commit SHA；同步更新 `policy-check.yml`（self-dogfood 以 `${{ github.sha }}` 傳入）、README CI 範例、及測試 `test_reusable_workflow_interface_contract` 與 `test_reusable_workflow_policy_engine_checkout_is_pinned`
 - **reusable workflow metadata 解析錯誤**：`workflow_call.inputs.policy_engine_ref.description` 不再包含 GitHub expression syntax；避免跨 repo 呼叫時在 job 啟動前就被 GitHub 判定為 invalid workflow
+
+## [1.0.4] - 2026-06-18
+
+> **主題**：R-21 機密標記 config 化（baseline 資料檔 + per-repo extend-only 疊加、結構偵測器 always-on、vendor/OS 名減敏）＋ R-08 驗證 `secret_scan` 標記欄位 schema。`policy_version` 1.0.3 → 1.0.4（`VERSION` / `pyproject.toml` / `.paul-project.yml` / 四份 agent 慣例檔 / caller workflow 同步升版）。對應 engine tag `v1.0.4`、SHA `77a3e8381eeced9dbba623e450ed6a5c1fcc7b18`（見 `RELEASES.md`）。
+
+### Added
+- **新增 `RELEASES.md` 版本譜系**：`policy_version` ↔ engine tag/SHA 的權威對照表；1.0.0 / 1.0.1 的 SHA 由下游釘選值事後考據回填，自 1.0.2 起發版流程為「merge → 打 `vX.Y.Z` tag → 回填本表」。
+
+### Changed
+- **R-21 偵測改 config-driven markers + always-on 結構偵測器**：偵測拆為兩類——結構偵測器（個人絕對路徑 `/home/<user>/`、私鑰 PEM）恆開且寫死於 code；marker tokens（內部代號／裝置型號等）改由 `resolve_markers(ctx.config)` 從 baseline 資料檔疊加 repo config 動態解析（extend-only、扣除 `public_names`）。一行命中任一結構偵測器或任一 marker token 即 FAIL。行為相較先前一致，唯廠商／OS 名（brcm/broadcom/airoha/prplos/prplog/marvell/mtk 等）已列入 baseline `public_names`、不再觸發。`_SELF_EXEMPT` 新增 `_secret_scan_config.py`、`secret_scan_defaults.yml` 與 `tests/test_secret_scan_config.py`，避免引擎掃描自身的 baseline token 清單時誤報。R-08 schema 同步擴充：`secret_scan` 的 `allow` / `markers` / `public_names` 若存在須為 `list[str]`，型別不符時 FAIL。
+
+### Fixed
+- **打包 `policy_check/data/*.yml`**：`pyproject.toml` 新增 `[tool.setuptools.package-data]`，將 `policy_check.data` 下的 `*.yml` 納入 wheel/sdist，確保 R-21 baseline 資料檔（`secret_scan_defaults.yml`）在 pip-install 後可由 `importlib.resources` 載入；否則下游 repo 釘選安裝引擎時 `load_baseline()` 會在 runtime 找不到資料檔。
+- **R-21 改掃 git-tracked 檔案**：`_iter_text_files()` 從 `rglob("*")` 改為優先以 `git ls-files` 列舉已追蹤檔案，自動尊重 `.gitignore`，避免 `build/`、`dist/`、`*.egg-info/` 等本地產物含雇主標記時誤報 FAIL；非 git 目錄（如測試 fixture 的暫存目錄）自動 fallback 至原有 rglob 行為，現有測試無需修改。
