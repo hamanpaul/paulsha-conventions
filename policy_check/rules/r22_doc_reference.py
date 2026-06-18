@@ -63,6 +63,21 @@ def _git_tracked(root: Path, rev: str | None = None) -> set[str]:
     return {l.strip() for l in out.splitlines() if l.strip()}
 
 
+def _resolve_base(root: Path, base_ref: str | None) -> str | None:
+    if not base_ref:
+        return None
+    for cand in (base_ref, f"origin/{base_ref}"):
+        try:
+            sha = subprocess.check_output(
+                ["git", "-C", str(root), "rev-parse", "--verify", "-q", f"{cand}^{{commit}}"],
+                text=True, stderr=subprocess.DEVNULL).strip()
+        except subprocess.CalledProcessError:
+            continue
+        if sha:
+            return sha
+    return None
+
+
 def _path_candidates(doc_rel: str, target: str) -> list[str]:
     """正規化成 repo-relative posix 候選（doc-relative 與 root-relative 各一）。"""
     target = target.split("#", 1)[0].strip()
@@ -111,6 +126,8 @@ class R22DocReference:
         config = ctx.config or {}
         allow = (config.get("doc_reference") or {}).get("allow", [])
         head_files = _git_tracked(root)
+        base = _resolve_base(root, ctx.pr_base_ref)
+        base_files = _git_tracked(root, base) if base else set()
 
         fails: list[str] = []
         warns: list[str] = []
@@ -123,7 +140,10 @@ class R22DocReference:
                 continue
             for kind, token, payload in _extract_refs(rel, text):
                 if kind == "path" and not any(c in head_files for c in payload):
-                    warns.append(f"{rel} -> {token}")   # Task 2 會把新破壞升 FAIL
+                    if base and any(c in base_files for c in payload):
+                        fails.append(f"{rel} -> {token} (removed this change)")
+                    else:
+                        warns.append(f"{rel} -> {token}")
 
         if fails:
             return RuleResult(self.rule_id, Status.FAIL,

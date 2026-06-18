@@ -105,3 +105,27 @@ def test_r22_excludes_spec_trees(tmp_path):
     _write(tmp_path, "openspec/changes/y/proposal.md", "[future](./not_yet.py)\n")
     _commit(tmp_path)
     assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
+
+
+def test_r22_path_removed_this_pr_is_fail(tmp_path):
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "docs/guide.md", "see `policy_check/rules/r99_old.py`\n")
+    _write(tmp_path, "policy_check/rules/r99_old.py", "x = 1\n")
+    base = _commit(tmp_path, "base")            # r99_old.py 存在
+    (tmp_path / "policy_check/rules/r99_old.py").unlink()
+    _commit(tmp_path, "head")                   # 本次刪除
+    res = get_rule().check(make_ctx(tmp_path, base=base))
+    assert res.status == Status.FAIL
+    assert "r99_old.py" in res.detail
+
+
+def test_r22_preexisting_dangling_is_warn_even_with_base(tmp_path):
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "docs/guide.md", "see `policy_check/rules/never.py`\n")
+    base = _commit(tmp_path, "base")            # never.py 從未存在
+    _write(tmp_path, "docs/guide.md", "see `policy_check/rules/never.py` (touch)\n")
+    _commit(tmp_path, "head")
+    res = get_rule().check(make_ctx(tmp_path, base=base))
+    assert res.status == Status.WARN
