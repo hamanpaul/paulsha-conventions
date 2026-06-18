@@ -12,7 +12,6 @@
 - **新增 R-21（機密掃描）**：宣告 `tier: shareable` 的 repo 若含雇主標記（內部代號、裝置型號、build 主機等）、個人絕對路徑或憑證模式則 FAIL；`tier: work`/`personal` 視為 not-applicable；自身規則檔/fixtures 與 `.paul-project.yml` 的 `secret_scan.allow` 路徑豁免；豁免 label `policy-exempt:secret-scan`。同時 `.paul-project.yml` 新增 `secret_scan.allow` 設定。
 - **新增 R-19（repo 有測試則 CI 必須執行）**：repo 根目錄存在 `tests/`（含 `test_*.py` / `*_test.py`）時，`.github/workflows/**` 必須有至少一個 workflow 實際執行測試（pytest / unittest / npm test / go test / cargo test 等），否則 FAIL；豁免 label `policy-exempt:ci-tests`。無測試套件的 repo 空轉通過。動機：多個 repo 擁有大量測試但 CI 僅跑 policy check，測試從未在 PR gate 上執行。
 - **新增 R-20（workflow policy_version 與 config 同步）**：workflow 內宣告的 `policy_version` / `POLICY_VERSION` semver 字面值必須與 `.paul-project.yml` 的 `policy_version` 一致，否則 FAIL（無豁免 label，比照 R-14）；input 宣告與 `${{ inputs.* }}` 模板表達式不在檢查範圍。動機：1.0.2 升版時本 repo 自身的 caller workflow 殘留 1.0.1，僅被 reusable workflow 的 shell 驗證在 CI 階段攔截，本地 policy_check 無法發現——將該驗證提升為引擎規則
-- **新增 R-22（doc-reference 懸空引用）**：偵測 `README.md` / `docs/**` 對 code 產物（檔案路徑、markdown 內部連結、反引號 symbol）的結構化懸空引用。**Prong P**（路徑/連結）走快照存在性、**Prong S**（symbol）走 `base..head` diff（本次刪/改名的 Python `def`/`class`）。diff-aware 分級：本次新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）Prong P 降 WARN 且 Prong S 關閉。掃描排除 `openspec/**`、`docs/superpowers/**` 與自身 fixtures；`.paul-project.yml` 新增 `doc_reference.allow`（R-08 驗其為 `list[str]`）；豁免 label `policy-exempt:doc-reference`。同步三層治理：Tier 1 checklist（搬/改/刪 code 產物時同步 docs）、Tier 3「PR review 留意語意陳舊」導引（四份 agent 檔），並新增「defer 的版本 bump 須於 merge 當下立即補做」convention。對應 issue #11；`policy_version` 1.0.4 → 1.0.5（PATCH，merge 當下 bump）。
 
 ### Changed
 - **policy_version 1.0.1 → 1.0.2**：隨 R-19 升版；四份 agent convention 檔（`policy_version`、`managed-by@v1.0.2`、白名單與完成前 checklist 加入 R-19）、`.paul-project.yml`、README 規則表與版本敘述一併更新
@@ -83,6 +82,11 @@
 - **reusable workflow policy engine 版本漂移**：`Checkout policy engine` 步驟加入 `ref: ${{ github.workflow_sha }}`，確保 policy engine 版本與呼叫者所鎖定的 workflow 版本一致，消除未鎖定時永遠抓 main branch 的風險；同步新增回歸測試 `test_reusable_workflow_policy_engine_checkout_is_pinned`
 - **跨 repo reusable workflow 中 `github.workflow_sha` 指向錯誤 repo**：根據 GitHub 官方文件，reusable workflow 中 `github` context 始終屬於 caller workflow，因此 `github.workflow_sha` 是 caller repo 的 SHA，而非 `paulsha-conventions` 的 SHA；改為在 `workflow_call.inputs` 新增必填 `policy_engine_ref` 參數，由呼叫者明確傳入指向 `hamanpaul/paulsha-conventions` 的完整 40 字元 commit SHA；同步更新 `policy-check.yml`（self-dogfood 以 `${{ github.sha }}` 傳入）、README CI 範例、及測試 `test_reusable_workflow_interface_contract` 與 `test_reusable_workflow_policy_engine_checkout_is_pinned`
 - **reusable workflow metadata 解析錯誤**：`workflow_call.inputs.policy_engine_ref.description` 不再包含 GitHub expression syntax；避免跨 repo 呼叫時在 job 啟動前就被 GitHub 判定為 invalid workflow
+
+## [1.0.5] - 2026-06-18
+
+### Added
+- **新增 R-22（doc-reference 懸空引用）**：偵測 `README.md` / `docs/**` 對 code 產物（檔案路徑、markdown 內部連結、反引號 symbol）的結構化懸空引用。**Prong P**（路徑/連結）走快照存在性、**Prong S**（symbol）走 `base..head` diff（本次刪/改名的 Python `def`/`class`）。diff-aware 分級：本次新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）Prong P 降 WARN 且 Prong S 關閉。掃描排除 `openspec/**`、`docs/superpowers/**` 與自身 fixtures；`.paul-project.yml` 新增 `doc_reference.allow`（R-08 驗其為 `list[str]`）；豁免 label `policy-exempt:doc-reference`。同步三層治理：Tier 1 checklist（搬/改/刪 code 產物時同步 docs）、Tier 3「PR review 留意語意陳舊」導引（四份 agent 檔），並新增「defer 的版本 bump 須於 merge 當下立即補做」convention。對應 issue #11。
 
 ## [1.0.4] - 2026-06-18
 
