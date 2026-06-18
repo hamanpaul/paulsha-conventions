@@ -22,7 +22,7 @@
 
 版本譜系（policy_version ↔ engine tag/SHA 對照）見 [`RELEASES.md`](./RELEASES.md)。
 
-## 規則總覽（R-01 ~ R-21）
+## 規則總覽（R-01 ~ R-22）
 
 | ID | 檢查項 | 失敗條件 | 豁免 label |
 |----|--------|----------|------------|
@@ -47,8 +47,17 @@
 | R-19 | repo 有測試則 CI 必須執行 | 存在 `tests/`（含 `test_*.py` / `*_test.py`）但 `.github/workflows/**` 無任何測試執行指令（pytest / unittest / npm test 等） | `policy-exempt:ci-tests` |
 | R-20 | Workflow policy_version 與 config 同步 | workflow 內宣告的 `policy_version` / `POLICY_VERSION` 字面值與 `.paul-project.yml` 的 `policy_version` 不一致 | — |
 | R-21 | tier=shareable repo 機密掃描 | 宣告 `tier: shareable` 的 repo 含雇主標記（內部代號、裝置型號等）／個人絕對路徑／憑證模式，且不在 `secret_scan.allow` 或自我豁免範圍 | `policy-exempt:secret-scan` |
+| R-22 | docs 對 code 產物引用無懸空 | `README.md` / `docs/**` 引用的路徑／內部連結／反引號 symbol 在 repo 不存在；本次變更新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）降 WARN | `policy-exempt:doc-reference` |
 
 **Exemption Labels 白名單**：上表所列 `policy-exempt:*` / `skip-changelog` / `wip` 即所有可用豁免 label；gate 只認這些，其他一律視同未豁免。
+
+## Doc-alignment governance（三層）
+
+文件陳舊分三層治理，只有 Tier 2 為確定性 gate：
+
+- **Tier 1（預防）**：agent 改 code 時同步更新引用該產物的 docs（見四份 agent 慣例檔 checklist）。
+- **Tier 2（確定性 gate）**：R-22 在 CI 偵測 `README.md` / `docs/**` 的結構化懸空引用——本次新破壞 FAIL、陳年 WARN。確定性層只看「結構性 rot」（引用死掉），不判斷語意。
+- **Tier 3（語意複審）**：建議將 GitHub Copilot 設為 PR reviewer，複審「引用仍在但描述已過時」的語意陳舊（advisory，不擋 merge）。
 
 ## Install
 

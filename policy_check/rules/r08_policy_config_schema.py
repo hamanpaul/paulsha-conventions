@@ -92,6 +92,25 @@ class R08PolicyConfigSchema:
                         message=f"secret_scan.{key} must be a list of strings",
                     )
 
+        # 驗證 doc_reference 區塊：allow 須為 list[str]
+        doc_reference = data.get("doc_reference")
+        if doc_reference is not None:
+            if not isinstance(doc_reference, dict):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="doc_reference must be a mapping",
+                )
+            allow = doc_reference.get("allow")
+            if allow is not None and (
+                not isinstance(allow, list) or not all(isinstance(x, str) for x in allow)
+            ):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="doc_reference.allow must be a list of strings",
+                )
+
         return RuleResult(
             rule_id=self.rule_id,
             status=Status.PASS,

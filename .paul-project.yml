@@ -17,3 +17,5 @@ secret_scan:
     - "tests/fixtures/secret-scan/**"
     - "openspec/**"
     - "docs/**"
+doc_reference:
+  allow: []
