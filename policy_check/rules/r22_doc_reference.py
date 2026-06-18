@@ -77,8 +77,17 @@ def _resolve_base(root: Path, base_ref: str | None) -> str | None:
                 text=True, stderr=subprocess.DEVNULL).strip()
         except subprocess.CalledProcessError:
             continue
-        if sha:
-            return sha
+        if not sha:
+            continue
+        # 回傳 merge-base：讓 path prong（base_files）與 symbol prong（base...HEAD）
+        # 用同一歸責基準，避免上游分歧（base 落後分支）造成的偽 FAIL
+        try:
+            mb = subprocess.check_output(
+                ["git", "-C", str(root), "merge-base", sha, "HEAD"],
+                text=True, stderr=subprocess.DEVNULL).strip()
+        except subprocess.CalledProcessError:
+            mb = ""
+        return mb or sha
     return None
 
 

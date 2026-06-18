@@ -19,7 +19,7 @@ MUST 為 WARN。
 - **THEN** R-22 不將該連結列為懸空
 
 ### Requirement: diff 驅動偵測 docs 對本次移除 symbol 的引用
-R-22 MUST 從 `base..head` diff 找出 `code_paths` 涵蓋檔案中本次被刪除或改名的 Python
+R-22 MUST 從 `base..head` diff 找出 Python 原始檔（`*.py`，v1 範圍）中本次被刪除或改名的
 `def`/`class` 定義（在 base 有定義、在 head 無）。若任一 in-scope doc 在 head 仍以反引號
 引用該 symbol 名稱，MUST 回報 FAIL。R-22 MUST NOT 對 docs 引用的 symbol 做全域稽核
 （不得僅因某 symbol 在 repo 找不到、但非本次移除而回報）。

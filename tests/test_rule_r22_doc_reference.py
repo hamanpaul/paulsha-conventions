@@ -164,6 +164,31 @@ def test_r22_symbol_prong_off_without_base(tmp_path):
     assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
 
 
+def test_r22_unresolvable_base_degrades_to_warn(tmp_path):
+    # base ref 無法解析（如 CI 傳入壞的 base）→ 等同無 base：路徑降 WARN、symbol prong 關閉、不崩
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "docs/g.md", "see `missing_thing.py`\n")
+    _commit(tmp_path)
+    res = get_rule().check(make_ctx(tmp_path, base="no-such-ref-xyz"))
+    assert res.status == Status.WARN
+
+
+def test_r22_upstream_divergence_not_attributed_as_new_break(tmp_path):
+    # base 落後分支：main 才有的檔、分支沒有、doc 引用它 → 應 WARN（非本次刪除），不可 FAIL。
+    # 以 merge-base 對齊兩條 prong 的歸責基準後此案例為 WARN（two-dot base-tip 會誤判 FAIL）。
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "docs/g.md", "see `mod_only_on_main.py`\n")
+    c0 = _commit(tmp_path, "c0")                       # merge-base：該檔不存在
+    _git(tmp_path, "checkout", "-q", "-b", "mainref")
+    _write(tmp_path, "mod_only_on_main.py", "x = 1\n")
+    _commit(tmp_path, "main adds mod")                 # mainref tip 有該檔
+    _git(tmp_path, "checkout", "-q", "-b", "feature", c0)  # HEAD 回到 c0（無該檔）
+    res = get_rule().check(make_ctx(tmp_path, base="mainref"))
+    assert res.status == Status.WARN
+
+
 def test_r22_directory_ref_not_flagged(tmp_path):
     # 反引號裡的目錄（無副檔名）不應被當成本地檔懸空
     _init_repo(tmp_path)
