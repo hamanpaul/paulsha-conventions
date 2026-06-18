@@ -206,8 +206,8 @@ def _is_symbol(tok: str) -> bool:
 
 def _looks_like_path(tok: str) -> bool:
     tok = tok.strip()
-    if not tok or " " in tok:
-        return False
+    if not tok or " " in tok or any(c in tok for c in "<>{}*$"):
+        return False  # 排除 placeholder/glob（如 feature/<slug>、${{ inputs.x }}）
     return "/" in tok or tok.endswith(_CODE_EXTS)
 
 
