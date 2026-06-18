@@ -33,7 +33,7 @@ R-18 只看「PR 有沒有碰 docs」、不看內容。issue #11 要求補上。
   未建產物。理由：避免引擎掃自己與規格文件誤報。
 - **設定與 schema 同屬 doc-reference capability**：`doc_reference.allow` 與其 R-08 型別
   驗證是本 capability 的契約，故不改既有 capability 需求（無 MODIFIED）。
-- **版本 1.1.0（MINOR）**：新增可強制規則＝行為變更，下游 pin 者需明確版本訊號。
+- **版本 1.0.5（PATCH）**：比照 R-17~R-21（每條新規則皆 PATCH）；flat profile PATCH = 「一個 feature batch 完成」。本 PR 不 bump、merge 當下立即補做。
 
 ## Risks / Trade-offs
 
@@ -45,11 +45,12 @@ R-18 只看「PR 有沒有碰 docs」、不看內容。issue #11 要求補上。
 
 ## Migration Plan
 
-- 實作先進 `CHANGELOG [Unreleased]`，`policy_version` 維持 1.0.4-dev；發版時統一 bump
-  1.1.0（`VERSION`/`pyproject`/`.paul-project.yml`/四份 agent 檔/`managed-by@v1.1.0`）、補
-  `RELEASES.md`、打 `v1.1.0` tag → R-07/R-14/R-20 保持綠。
+- 實作先進 `CHANGELOG [Unreleased]`，本 PR 不 bump（保 R-07 綠、免 `release:*` label）。
+- **merge 當下立即** bump 1.0.5（`VERSION`/`pyproject`/`.paul-project.yml`/四份 agent 檔/
+  `managed-by@v1.0.5`）、補 `RELEASES.md`、打 `v1.0.5` tag → R-07/R-14/R-20 保持綠。此「立即
+  bump」要求一併寫進四份 agent 檔成為 convention。
 - Rollback：規則隔離於 `r22_doc_reference.py`，移除檔案即停用；無資料遷移。
-- 下游：pin 新 engine SHA + 設 `policy_version: 1.1.0`；陳年 rot 僅 WARN，首個 PR 不被擋。
+- 下游：pin 新 engine SHA + 設 `policy_version: 1.0.5`；陳年 rot 僅 WARN，首個 PR 不被擋。
 
 ## Open Questions
 

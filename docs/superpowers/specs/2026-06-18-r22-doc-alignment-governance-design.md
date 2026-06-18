@@ -4,7 +4,7 @@
 > 狀態：approved（使用者已逐段拍板）
 > 對應 issue：#11（doc-alignment governance：偵測文件陳舊）
 > 範圍：`paulsha-conventions`（policy 引擎 + 四份 agent 慣例檔 + README）
-> 目標版本：`policy_version` 1.0.4 → **1.1.0**（MINOR，新增可強制規則）
+> 目標版本：`policy_version` 1.0.4 → **1.0.5**（PATCH，比照 R-17~R-21；merge 當下立即 bump）
 
 ## 1. 背景與目標
 
@@ -163,15 +163,18 @@ CI 已有 R-19 保證 pytest 執行（`self-test.yml`），新測試自動納入
 
 ## 7. 版本與 rollout
 
-- 新增可強制 rule = 行為變更 → 應 bump：`policy_version` 1.0.4 → **1.1.0**（MINOR）。
-- 落地時一起 bump `VERSION`、`pyproject.toml`、`.paul-project.yml`、四份 agent 檔
-  `policy_version` 與 `managed-by@v1.1.0` 標記、補 `RELEASES.md` 一列、發版打 `v1.1.0`
-  tag → R-07 / R-14 / R-20 同步保持綠。
-- policy 的「MINOR 需 feature 群組全 landed + 7 天無 hotfix」是發版品質閘：實作先進
-  `[Unreleased]`，tag 時機與使用者確認後再切（MINOR 不需如 MAJOR 般明確核可）。
+- 版本級別 **1.0.5（PATCH）**：比照 R-17~R-21（每條新規則皆 PATCH bump）；flat profile 的
+  PATCH = 「一個 feature batch 完成」，R-22 正是一個 batch。
+- **本實作 PR 不 bump**（R-22 先進 `[Unreleased]`）：避免 `VERSION` 偏離最新 tag `v1.0.4`
+  使 R-07 變紅、得掛 `release:*` label。
+- **merge 當下立即** 執行 release bump：`VERSION`、`pyproject.toml`、`.paul-project.yml`、
+  四份 agent 檔 `policy_version` 與 `managed-by@v1.0.5` 標記、打 `v1.0.5` tag、補
+  `RELEASES.md` 一列 → R-07 / R-14 / R-20 同步保持綠。
+- **新增 convention**：「PR 若 defer 版本 bump，merge 當下必須立即補做（不得留置）」寫進
+  四份 agent 檔的「改版號時／claim done 前」段——補上 1.0.4 bump 半套的洞。
 - **下游導入無痛**：陳年 rot → WARN 不擋，只有新破壞 FAIL，故 serialwrap / testpilot /
   paulshaclaw 第一個 PR 不會被舊帳紅；按自己步調 pin 新 engine SHA + 設
-  `policy_version: 1.1.0` 即可。
+  `policy_version: 1.0.5` 即可。
 
 ## 8. Non-goals / 未來（明確排除，避免 scope 蔓延）
 
@@ -198,5 +201,5 @@ CI 已有 R-19 保證 pytest 執行（`self-test.yml`），新測試自動納入
 - `README.md`（規則表 + 豁免清單 + 三層治理段）
 - `CHANGELOG.md`（`[Unreleased]` entry）
 - `VERSION` / `pyproject.toml` / `.paul-project.yml` / 四份 agent 檔 `policy_version`
-  （發版時 bump 1.1.0）
-- `RELEASES.md`（發版時補 1.1.0 列）
+  （merge 當下 bump 1.0.5）
+- `RELEASES.md`（merge 後補 1.0.5 列）

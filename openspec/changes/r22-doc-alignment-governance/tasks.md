@@ -28,7 +28,8 @@
 
 - [ ] 5.1 四份檔「改 code 時」「claim done 前」加 R-22 條目；白名單加 `policy-exempt:doc-reference`
 - [ ] 5.2 四份檔新增「Doc-alignment review（PR review 時）」語意陳舊導引段
-- [ ] 5.3 確認四份內容一致（R-13/R-14 綠）
+- [ ] 5.3 四份檔「改版號時／claim done 前」新增 convention：PR 若 defer 版本 bump，merge 當下必須立即補做（`VERSION`/`policy_version`/四份檔/`managed-by`/tag/`RELEASES.md`）
+- [ ] 5.4 確認四份內容一致（R-13/R-14 綠）
 
 ## 6. README
 
@@ -40,5 +41,6 @@
 - [ ] 7.2 全套 `python3 -m pytest -q` 綠
 - [ ] 7.3 `python3 -m policy_check --repo .` fail:0 / warn:0（self-dogfood）
 
-> 註：`policy_version` bump 與 `RELEASES.md` 回填屬發版步驟、不在本實作 PR；版本級別
-> （PATCH vs MINOR）待使用者確認後定（見 design §Migration 與本 change 的版本討論）。
+> 註：版本級別 **1.0.5（PATCH）**；本實作 PR 不 bump，R-22 先進 `[Unreleased]`。`policy_version`
+> bump、`v1.0.5` tag、`RELEASES.md` 回填屬 **merge 當下立即執行** 的 release 步驟（見 design
+> §Migration），並由 task 5.3 的新 convention 固化此要求。

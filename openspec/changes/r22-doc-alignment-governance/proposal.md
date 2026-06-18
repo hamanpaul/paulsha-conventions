@@ -28,5 +28,6 @@
 - **測試**：`tests/test_rule_r22_doc_reference.py`、`tests/fixtures/doc-reference/**`、R-08 測試擴充。
 - **設定**：`.paul-project.yml`（`doc_reference.allow`，自身 dogfood）。
 - **agent 慣例檔（四份同步）**：`CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md`。
-- **文件 / 版本**：`README.md`、`CHANGELOG.md`；發版時 `VERSION` / `pyproject.toml` / `.paul-project.yml` / 四份 agent 檔 `policy_version` → **1.1.0**（MINOR），補 `RELEASES.md` 一列。
-- **下游**：陳年 rot 僅 WARN、不擋，導入無痛；按步調 pin 新 engine SHA + 設 `policy_version: 1.1.0`。
+- **文件 / 版本**：`README.md`、`CHANGELOG.md`；本 PR 不 bump（R-22 先進 `[Unreleased]`）。**merge 當下立即** bump `VERSION` / `pyproject.toml` / `.paul-project.yml` / 四份 agent 檔 `policy_version` → **1.0.5**（PATCH，比照 R-17~R-21）、打 `v1.0.5` tag、補 `RELEASES.md` 一列。
+- **新增 convention**：「defer 的版本 bump 必須在 merge 當下立即做掉」寫進四份 agent 檔（補 1.0.4 半套的洞）。
+- **下游**：陳年 rot 僅 WARN、不擋，導入無痛；按步調 pin 新 engine SHA + 設 `policy_version: 1.0.5`。
