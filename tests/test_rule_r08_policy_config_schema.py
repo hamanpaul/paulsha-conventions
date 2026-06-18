@@ -92,3 +92,20 @@ def test_r08_rejects_non_str_list_markers(tmp_path):
     result = get_rule("R-08").check(make_ctx(repo))
     assert result.status == Status.FAIL
     assert "secret_scan.markers" in result.message
+
+
+def test_r08_fail_when_doc_reference_allow_not_list(tmp_path):
+    cfg = ("policy_profile: flat\npolicy_version: \"1.0.4\"\n"
+           "doc_reference:\n  allow: \"docs/legacy\"\n")
+    repo = _write_config(tmp_path, cfg)
+    result = get_rule("R-08").check(make_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "doc_reference.allow" in result.message
+
+
+def test_r08_pass_when_doc_reference_allow_is_list(tmp_path):
+    cfg = ("policy_profile: flat\npolicy_version: \"1.0.4\"\n"
+           "doc_reference:\n  allow: [\"docs/legacy/**\"]\n")
+    repo = _write_config(tmp_path, cfg)
+    result = get_rule("R-08").check(make_ctx(repo))
+    assert result.status == Status.PASS
