@@ -5,6 +5,7 @@
 
 | policy_version | engine tag | engine SHA | 摘要 |
 |----------------|-----------|------------|------|
+| 1.0.5 | `v1.0.5` | `e9c806984f1df5b7adbe79b4bdc9930a8cea1932` | R-22 doc-alignment 三層治理：`README.md` / `docs/**` 結構化懸空引用偵測（Prong P 路徑／連結快照 + Prong S diff 驅動 symbol、diff-aware 分級）＋ Tier 1/3 convention ＋ R-08 `doc_reference.allow` schema |
 | 1.0.4 | `v1.0.4` | `77a3e8381eeced9dbba623e450ed6a5c1fcc7b18` | R-21 機密標記 config 化（baseline 資料檔 + per-repo extend-only 疊加、結構偵測器 always-on、廠商／OS 名列入 `public_names` 減敏）＋ R-08 驗證 `secret_scan` 標記欄位 schema |
 | 1.0.3 | `v1.0.3` | `614caf23f6514d865cb43e77b53837a273b0b07f` | 新增 R-21（機密掃描：`tier: shareable` 的 repo 含雇主標記／個人絕對路徑／私鑰標頭則 FAIL，掃 git-tracked 檔，自身與 `secret_scan.allow` 豁免，label `policy-exempt:secret-scan`）與 `.paul-project.yml` 的 `tier` 欄位 |
 | 1.0.2 | `v1.0.2` | `98487868a098e22647074c677a58633ce4fa19be` | 新增 R-19（repo 有測試則 CI 必須執行，豁免 `policy-exempt:ci-tests`）與 R-20（workflow 宣告的 policy_version 須與 `.paul-project.yml` 一致）；引擎 `VERSION` 自此與 policy_version 對齊並開始打 tag |
