@@ -95,7 +95,7 @@ def _defined_in_head(root: Path, name: str) -> bool:
     try:
         subprocess.check_output(
             ["git", "-C", str(root), "grep", "-qE",
-             rf"(def|class)[[:space:]]+{re.escape(name)}\b", "HEAD"],
+             rf"(def|class)[[:space:]]+{re.escape(name)}\b", "HEAD", "--", "*.py"],
             stderr=subprocess.DEVNULL)
         return True
     except subprocess.CalledProcessError:

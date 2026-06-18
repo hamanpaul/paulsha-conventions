@@ -1,7 +1,12 @@
 # doc-reference Specification
 
 ## Purpose
-TBD - created by archiving change r22-doc-alignment-governance. Update Purpose after archive.
+R-22（doc-reference）為 doc-alignment 三層治理的 **Tier 2**（確定性 gate）。它在 CI 偵測
+`README.md` 與 `docs/**` 對 code 產物（檔案路徑、markdown 內部連結、反引號 symbol）的
+**結構化懸空引用**——當被引用的產物被搬移／刪除後文件仍殘留引用時標記，降低文件結構性
+陳舊（doc rot）長期累積。Tier 1（agent checklist 預防）與 Tier 3（Copilot 語意複審）為其
+互補的 advisory 層；語意陳舊（引用仍在但描述過時）不屬本規格範圍。
+
 ## Requirements
 ### Requirement: 偵測 docs 對檔案路徑與內部連結的懸空引用
 R-22 MUST 掃描 `README.md` 與 `docs/**` 中的結構化路徑引用（markdown 內部連結與
