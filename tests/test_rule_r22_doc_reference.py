@@ -162,3 +162,21 @@ def test_r22_symbol_prong_off_without_base(tmp_path):
     _commit(tmp_path)
     # 無 base：symbol prong 關閉，且無懸空路徑 → PASS
     assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
+
+
+def test_r22_directory_ref_not_flagged(tmp_path):
+    # 反引號裡的目錄（無副檔名）不應被當成本地檔懸空
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "README.md", "tests live under `tests/`\n")
+    _commit(tmp_path)
+    assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
+
+
+def test_r22_github_org_repo_slug_not_flagged(tmp_path):
+    # GitHub org/repo slug（含 / 但非本地檔）不應誤報
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "README.md", "uses `hamanpaul/paulsha-conventions` engine\n")
+    _commit(tmp_path)
+    assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS

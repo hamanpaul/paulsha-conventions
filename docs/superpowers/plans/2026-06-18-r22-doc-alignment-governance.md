@@ -208,7 +208,10 @@ def _looks_like_path(tok: str) -> bool:
     tok = tok.strip()
     if not tok or " " in tok or any(c in tok for c in "<>{}*$"):
         return False  # 排除 placeholder/glob（如 feature/<slug>、${{ inputs.x }}）
-    return "/" in tok or tok.endswith(_CODE_EXTS)
+    if tok.startswith(("./", "../")):
+        return True
+    # 需 code 副檔名才算本地路徑候選——避免目錄（tests/）與 GitHub org/repo slug 誤報
+    return tok.endswith(_CODE_EXTS)
 
 
 def _git_tracked(root: Path, rev: str | None = None) -> set[str]:
