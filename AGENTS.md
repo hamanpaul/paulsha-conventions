@@ -24,6 +24,7 @@ policy_version: 1.0.4
 - [ ] 除非可明確標示為 docs-only / test-only / chore，否則不得省略 CHANGELOG
 - [ ] code_paths 涵蓋的檔案變動皆視為 code change
 - [ ] 評估 `README.md` / `docs/**` 是否需隨本 PR 同步（R-18；行為或介面有變動務必更新，純內部變動可上 `policy-exempt:docs-sync`）
+- [ ] R-22：搬移／改名／刪除 code 產物（檔案、`def`/`class`）時，同步更新 `README.md` / `docs/**` 中引用它的段落；無法即時處理上 `policy-exempt:doc-reference` 並附理由
 
 ## 改版號時（release 觸發時）
 - [ ] 嚴格遵循 `<MAJOR>.<MINOR>.<PATCH>[-fix.N]`
@@ -32,6 +33,7 @@ policy_version: 1.0.4
   - `flat`: 一個 feature batch 完成
 - [ ] MINOR bump 需滿足：feature 群組全 landed + 7 天無 hotfix
 - [ ] MAJOR bump 需使用者明確核可
+- [ ] 若本 PR 將版本 bump 延後（feature 先進 `[Unreleased]`），merge 當下必須**立即**補做對應 release bump（`VERSION` / `policy_version` / 四份 agent 檔 / `managed-by` 標記 / tag / `RELEASES.md`），不得留置
 
 ## 完成任務（claim done）前
 - [ ] `CHANGELOG.md [Unreleased]` 有對應 entry（或 PR 標 `skip-changelog` + 理由）
@@ -43,6 +45,7 @@ policy_version: 1.0.4
 - [ ] R-18：code 有變動時已評估並（如需要）同步 `README.md` / `docs/**`，或上 `policy-exempt:docs-sync`
 - [ ] R-19：repo 有 `tests/` 時，CI workflow 有實際執行測試（pytest 等）；新增測試套件而 CI 未涵蓋時同步補上
 - [ ] R-21：宣告 `tier: shareable` 的 repo 不得含雇主機敏標記（內部代號、裝置型號等）、個人絕對路徑或憑證模式；合法引用上 `secret_scan.allow` 或命中時上 `policy-exempt:secret-scan` 並附理由
+- [ ] R-22：docs 對本次刪改 code 產物的引用無懸空（CI 報「本次新破壞」FAIL、陳年 WARN），或上 `policy-exempt:doc-reference`
 - [ ] 語言：PR 標題／內文與所有 comment 的語言符合本 repo 規範（見「語言規範」段）
 - [ ] 若跳過任何檢查，PR 必須帶對應豁免 label + 理由
 
@@ -71,5 +74,9 @@ policy_version: 1.0.4
 - `policy-exempt:docs-sync` — R-18 code 變動需同步 README/docs
 - `policy-exempt:ci-tests` — R-19 repo 有測試則 CI 必須執行
 - `policy-exempt:secret-scan` — R-21 機密掃描（tier=shareable 命中雇主標記）
+- `policy-exempt:doc-reference` — R-22 文件懸空引用（doc dangling reference）
 - `skip-changelog` — R-09 code 變動要求 CHANGELOG entry（特殊用途，需附理由）
 - `wip` — R-11 自動通過 PR body checkbox 未全勾（work in progress）
+
+## Doc-alignment review（PR review 時）
+review 變更時，除了 R-22 抓得到的懸空引用，另留意**語意陳舊**：引用都還在、但 docs 描述了已被這次變更改掉的架構／行為；發現時於 PR 留言指出、建議作者更新。Advisory，不擋 merge。建議將 GitHub Copilot 設為 PR reviewer 以啟用此層。
