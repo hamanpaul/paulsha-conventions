@@ -39,7 +39,37 @@ class R24MocAlignment:
                     f"static MOC '{static}' 未隨 trigger 變更同步；命中：{', '.join(hit[:5])}"
                 )
 
+        map_rel = moc.get("map")
+        root = ctx.repo_root
+        head_files = git_tracked(root)
+        if map_rel and map_rel in head_files:
+            try:
+                text = (root / map_rel).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                text = ""
+            base = resolve_base(root, ctx.pr_base_ref)
+            base_files = git_tracked(root, base) if base else set()
+            for token, cands in self._map_refs(map_rel, text):
+                if any(c in head_files for c in cands):
+                    continue
+                if base and any(c in base_files for c in cands):
+                    fails.append(f"{map_rel} -> {token}（本次移除）")
+                else:
+                    warns.append(f"{map_rel} -> {token}")
+
         return self._verdict(fails, warns)
+
+    @staticmethod
+    def _map_refs(map_rel: str, text: str):
+        """yield (token, candidates)：僅取指向受治理產物的連結。"""
+        seen: set[str] = set()
+        for m in LINK_RE.finditer(text):
+            tok = m.group(1)
+            cands = [c for c in path_candidates(map_rel, tok)
+                     if c.startswith(_GOVERNED_PREFIXES)]
+            if cands and tok not in seen:
+                seen.add(tok)
+                yield tok, cands
 
     def _verdict(self, fails, warns) -> RuleResult:
         if fails:

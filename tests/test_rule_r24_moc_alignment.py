@@ -61,3 +61,28 @@ def test_r24_pass_when_static_updated_with_trigger(tmp_path):
     moc = {"static": "docs/ctx.yml", "triggers": ["Dockerfile*"]}
     result = _rule().check(_ctx(repo, moc=moc, changed=["Dockerfile", "docs/ctx.yml"]))
     assert result.status == Status.PASS
+
+
+def test_r24_warn_on_chronic_dangling_link(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / "docs").mkdir()
+    (repo / "docs" / "MOC.md").write_text("[p](../docs/superpowers/plans/gone.md)", encoding="utf-8")
+    _commit(repo)  # gone.md never existed → chronic
+    result = _rule().check(_ctx(repo, moc={"map": "docs/MOC.md"}))
+    assert result.status == Status.WARN
+    assert "gone.md" in result.detail
+
+
+def test_r24_fail_on_dangling_introduced_this_change(tmp_path):
+    repo = _git_repo(tmp_path)
+    plans = repo / "docs" / "superpowers" / "plans"
+    plans.mkdir(parents=True)
+    (plans / "p.md").write_text("plan", encoding="utf-8")
+    (repo / "docs" / "MOC.md").write_text("[p](superpowers/plans/p.md)", encoding="utf-8")
+    _commit(repo, "base")
+    subprocess.run(["git", "-C", str(repo), "branch", "base"], check=True)
+    (plans / "p.md").unlink()  # remove the target this change
+    _commit(repo, "head")
+    result = _rule().check(_ctx(repo, moc={"map": "docs/MOC.md"}, base="base"))
+    assert result.status == Status.FAIL
+    assert "p.md" in result.detail
