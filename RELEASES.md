@@ -5,6 +5,7 @@
 
 | policy_version | engine tag | engine SHA | 摘要 |
 |----------------|-----------|------------|------|
+| 1.0.7 | `v1.0.7` | `e24fbd679d35d04a79ea21aff7733fadebd5e77e` | R-24（moc-alignment）：repo 宣告 `moc` 後盯靜態脈絡／動態連結地圖與本次變更同步（靜態鮮度 WARN／連結懸空 diff-aware FAIL-WARN／連結孤兒 WARN，永不 FAIL）；platform-agnostic（純 git-level）；R-08 擴充驗 `moc`；r22/r24 共用 link helper 抽至 `_doc_links`；新增豁免 label `policy-exempt:moc-alignment` |
 | 1.0.6 | `v1.0.6` | `261f3f64bfe33a9762355c65cdc702b00110fea3` | agent 慣例檔 symlink 單一真檔（canonical `CLAUDE.md`，R-14 config-gated `agent_files.mode`）＋ R-23 engine pin ⟷ `policy_version` attestation（`conventions_engine.repo`，tag 或 SHA+`# vX.Y.Z`）＋ R-08 擴充驗證；新增豁免 label `policy-exempt:engine-pin` |
 | 1.0.5 | `v1.0.5` | `e9c806984f1df5b7adbe79b4bdc9930a8cea1932` | R-22 doc-alignment 三層治理：`README.md` / `docs/**` 結構化懸空引用偵測（Prong P 路徑／連結快照 + Prong S diff 驅動 symbol、diff-aware 分級）＋ Tier 1/3 convention ＋ R-08 `doc_reference.allow` schema |
 | 1.0.4 | `v1.0.4` | `77a3e8381eeced9dbba623e450ed6a5c1fcc7b18` | R-21 機密標記 config 化（baseline 資料檔 + per-repo extend-only 疊加、結構偵測器 always-on、廠商／OS 名列入 `public_names` 減敏）＋ R-08 驗證 `secret_scan` 標記欄位 schema |
