@@ -4,9 +4,7 @@
 本 repo 以 `moc.map: docs/MOC.md` 宣告，由 R-24（moc-alignment）盯其與本次變更同步。
 
 ## Active openspec changes
-| change | stage |
-|---|---|
-| [moc-alignment-rule](../openspec/changes/moc-alignment-rule/proposal.md) | 實作中（R-24） |
+（目前無 active openspec change；已落地者見 `openspec/changes/archive/`。R-24 / moc-alignment 已於本批落地並 archive。）
 
 ## Plans（docs/superpowers/plans）
 - [moc-alignment-rule](superpowers/plans/2026-06-23-moc-alignment-rule.md) — 實作中
