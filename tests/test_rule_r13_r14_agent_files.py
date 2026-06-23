@@ -84,3 +84,63 @@ def test_r14_fail_when_policy_versions_drift(
 
     assert result.status == Status.FAIL
     assert expected_text in result.detail
+
+
+import os
+
+
+def _symlink_ctx(repo_root, policy_version="1.0.0"):
+    return RuleContext(
+        repo_root=repo_root,
+        profile="flat",
+        policy_version=policy_version,
+        config={"agent_files": {"mode": "symlink"}},
+    )
+
+
+def _build_symlink_repo(tmp_path, *, canonical_symlink=False, mirror_as_copy=False, wrong_target=False):
+    repo = tmp_path / "repo"
+    (repo / ".github").mkdir(parents=True)
+    if canonical_symlink:
+        (repo / "OTHER.md").write_text("policy_version: 1.0.0\n", encoding="utf-8")
+        os.symlink("OTHER.md", repo / "CLAUDE.md")
+    else:
+        (repo / "CLAUDE.md").write_text("policy_version: 1.0.0\n", encoding="utf-8")
+    # mirrors
+    for name in ("AGENTS.md", "GEMINI.md"):
+        if mirror_as_copy and name == "AGENTS.md":
+            (repo / name).write_text("policy_version: 1.0.0\n", encoding="utf-8")
+        elif wrong_target and name == "AGENTS.md":
+            (repo / "DECOY.md").write_text("policy_version: 1.0.0\n", encoding="utf-8")
+            os.symlink("DECOY.md", repo / name)
+        else:
+            os.symlink("CLAUDE.md", repo / name)
+    os.symlink("../CLAUDE.md", repo / ".github" / "copilot-instructions.md")
+    return repo
+
+
+def test_r14_symlink_pass_on_valid_topology(tmp_path):
+    repo = _build_symlink_repo(tmp_path)
+    result = get_rule("R-14").check(_symlink_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r14_symlink_fail_when_mirror_is_copy(tmp_path):
+    repo = _build_symlink_repo(tmp_path, mirror_as_copy=True)
+    result = get_rule("R-14").check(_symlink_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "expected symlink" in result.detail
+
+
+def test_r14_symlink_fail_when_target_wrong(tmp_path):
+    repo = _build_symlink_repo(tmp_path, wrong_target=True)
+    result = get_rule("R-14").check(_symlink_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "target mismatch" in result.detail
+
+
+def test_r14_symlink_fail_when_canonical_is_symlink(tmp_path):
+    repo = _build_symlink_repo(tmp_path, canonical_symlink=True)
+    result = get_rule("R-14").check(_symlink_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "canonical must be a regular file" in result.detail
