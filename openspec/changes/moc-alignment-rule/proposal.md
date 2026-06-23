@@ -9,7 +9,7 @@ brainstorm / openspec 都是**單一 feature 視角**，對整個專案全貌太
 - 新增 **R-24（moc-alignment）**：repo 於 `.paul-project.yml` 宣告 `moc` 後生效（未宣告 → NA，opt-in）。三瓣：
   - **靜態鮮度（WARN，advisory）**：`moc.triggers` 命中的檔案在本次 diff 變動，但 `moc.static` 未在同 diff → WARN（啟發式提醒，比照 R-18）。
   - **動態連結懸空（diff-aware FAIL/WARN）**：`moc.map` 內的連結指向不存在的 spec / plan / openspec 產物 → 本次新破壞 FAIL、陳年 WARN（比照 R-22）。
-  - **動態連結孤兒（WARN）**：存在 active openspec change / `docs/superpowers/plans/*` 卻未被 `moc.map` 連結 → WARN。
+  - **動態連結孤兒（WARN，永不 FAIL）**：存在 active openspec change / `docs/superpowers/plans/*` / `docs/superpowers/specs/*` 卻未被 `moc.map` 連結 → WARN（涵蓋 specs 但只提醒，舊專案導入不被打掉）。
 - 規則邏輯純 git-level（`changed_files` + repo 檔案），**不依賴 GitHub/GitLab**——落地後可在任一平台 CI 執行。
 - `.paul-project.yml` 新增 `moc` 區塊（`static` / `map` / `triggers`），R-08 擴充驗證。
 - 新增豁免 label `policy-exempt:moc-alignment`。

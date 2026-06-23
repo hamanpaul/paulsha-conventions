@@ -43,7 +43,7 @@ R-24 MUST 掃描 `moc.map` 宣告的地圖檔，對其中指向 `openspec/change
 - **THEN** R-24 回報 WARN
 
 ### Requirement: 動態地圖連結孤兒
-R-24 MUST 檢查存在於 repo 的 active openspec change（`openspec/changes/<name>/`，不含 `archive/`）與 `docs/superpowers/plans/*` 是否皆被 `moc.map` 連結；未被任何連結涵蓋者 MUST 回報 **WARN**（提醒補入地圖）。
+R-24 MUST 檢查存在於 repo 的 active openspec change（`openspec/changes/<name>/`，不含 `archive/`）、`docs/superpowers/plans/*` 與 `docs/superpowers/specs/*` 是否皆被 `moc.map` 連結；未被任何連結涵蓋者 MUST 回報 **WARN**（提醒補入地圖）。此瓣 MUST NOT 回報 FAIL——使舊專案首次宣告 `moc` 時不因既有未連結產物被擋。
 
 #### Scenario: 新 plan 未被地圖連結
 - **WHEN** 存在一份 `docs/superpowers/plans/X.md`，而 `moc.map` 無任何指向它的連結

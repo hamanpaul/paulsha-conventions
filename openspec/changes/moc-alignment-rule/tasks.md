@@ -25,8 +25,8 @@
 
 ## 5. 動態連結孤兒瓣（WARN）
 
-- [ ] 5.1 撰寫測試：存在 active openspec change / plan 未被 map 連結→WARN；全連結→不報；archived 不算
-- [ ] 5.2 實作：列舉 `openspec/changes/*`（排除 `archive/`）與 `docs/superpowers/plans/*`，比對 `moc.map` 連結集合，缺者 WARN
+- [ ] 5.1 撰寫測試：存在 active openspec change / plan / spec 未被 map 連結→WARN；全連結→不報；archived 不算；確認此瓣永不 FAIL
+- [ ] 5.2 實作：列舉 `openspec/changes/*`（排除 `archive/`）、`docs/superpowers/plans/*` 與 `docs/superpowers/specs/*`，比對 `moc.map` 連結集合，缺者 WARN（不 FAIL）
 - [ ] 5.3 測試全綠
 
 ## 6. 嚴重度彙整與輸出

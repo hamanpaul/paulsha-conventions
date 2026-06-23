@@ -23,7 +23,7 @@ brainstorm / openspec 為單一 feature 視角，缺專案層全貌；大型重�
 **D3 — 嚴重度：只有「確定性破壞」硬 FAIL。**
 - 靜態鮮度（trigger 檔變但 `moc.static` 未變）→ **WARN**（啟發式，可能誤判，比照 R-18 不擋 merge）。
 - 連結懸空（`moc.map` 連到不存在的產物）→ **本次新破壞 FAIL、陳年 WARN**（比照 R-22 diff-aware）。
-- 連結孤兒（active openspec change / plan 未被 link）→ **WARN**（提醒補 link）。
+- 連結孤兒（active openspec change / plan / spec 未被 link）→ **WARN**（提醒補 link；**永不 FAIL**，支援舊專案漸進導入——首次宣告 `moc` 時一堆未連結產物只會是提醒）。
 *替代*：全部 FAIL——否決（啟發式 FAIL 摩擦大、誤報傷信任）。
 
 **D4 — L2 狀態對齊為 advisory，不入 R-24。** 「stage 真的 done 嗎」是語意，無法確定性判；比照既有「Doc-alignment review」段，於 CLAUDE.md 記為 Copilot advisory 層。
@@ -34,7 +34,7 @@ brainstorm / openspec 為單一 feature 視角，缺專案層全貌；大型重�
 
 - **靜態鮮度誤報**（trigger 檔因無關原因變動）→ 設 WARN + 可豁免；triggers 由 repo 自訂縮小範圍。
 - **「連結」定義模糊**（什麼算 map 裡的 link）→ 重用 R-22 的 link/path token 抽取（markdown 內部連結 + path-shaped token），對象限 `openspec/changes/**`、`docs/superpowers/{specs,plans}/**`。
-- **孤兒範圍**（哪些產物「必須」被 link）→ 限 active openspec change 與 `docs/superpowers/plans/*`；archived 不算。
+- **孤兒範圍**（哪些產物「應」被 link）→ active openspec change、`docs/superpowers/plans/*` 與 `docs/superpowers/specs/*`；archived 不算。一律 WARN，故涵蓋 specs 也不會打掉導入中的舊專案。
 - **無 diff context（本地非 PR）** → 靜態鮮度無法證明「本次新破壞」降 WARN／略過；懸空降 WARN（比照 R-22 graceful degradation）。
 
 ## Migration Plan
@@ -44,8 +44,8 @@ brainstorm / openspec 為單一 feature 視角，缺專案層全貌；大型重�
 - Rollback：移除 r24 module 與 `moc` 設定即可。
 - Release：merge 當下 PATCH bump（`flat` profile，一個 feature batch）。
 
-## Open Questions
+## Resolved（原 Open Questions）
 
-- `moc.triggers` 預設集（`Dockerfile*` / `build/**` / `install/**` / `toolchain/**`）是否提供 profile 預設，或一律 repo 自填。
-- 孤兒檢查是否涵蓋 `docs/superpowers/specs/*`（設計文件），或只 plans + openspec changes。
-- 靜態 MOC 可為「CLAUDE.md 內一段」而非獨立檔時，鮮度如何判（需 anchor/標記區段）——v1 先限獨立檔 `moc.static`，CLAUDE.md 段落模式留待後續。
+- **D6 — `moc.triggers` 一律 repo 自填，不提供 profile 預設。** 不是每個 repo 都 embedded（web/docs repo 無 Dockerfile/toolchain）；預設集會誤套。未設 `triggers` → 靜態鮮度瓣不適用。
+- **D7 — 孤兒涵蓋 specs + plans + openspec changes，但一律 WARN（永不 FAIL）。** 涵蓋 specs 提高完整度，WARN 確保舊專案首次導入 `moc` 時不被既有未連結產物打掉。
+- **D8 — `moc.static` 一律獨立檔；CLAUDE.md 以連結引用它（teach-face），不做 CLAUDE.md 內嵌段落模式。** agent 進場讀 CLAUDE.md → 跟連結找到 static MOC。v1 不強制檢查「CLAUDE.md 有連結 moc.static」（純 advisory 慣例，enforce 留待後續）。
