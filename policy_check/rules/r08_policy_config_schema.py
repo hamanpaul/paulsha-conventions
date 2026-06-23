@@ -156,6 +156,24 @@ class R08PolicyConfigSchema:
                     message="conventions_engine.repo must be 'owner/repo' form (no trailing slash or extra path segment)",
                 )
 
+        # 驗證 moc 區塊：mapping；static/map 為 str；triggers 為 list[str]
+        moc = data.get("moc")
+        if moc is not None:
+            if not isinstance(moc, dict):
+                return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                                  message="moc must be a mapping")
+            for key in ("static", "map"):
+                val = moc.get(key)
+                if val is not None and not isinstance(val, str):
+                    return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                                      message=f"moc.{key} must be a string")
+            triggers = moc.get("triggers")
+            if triggers is not None and (
+                not isinstance(triggers, list) or not all(isinstance(x, str) for x in triggers)
+            ):
+                return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                                  message="moc.triggers must be a list of strings")
+
         return RuleResult(
             rule_id=self.rule_id,
             status=Status.PASS,

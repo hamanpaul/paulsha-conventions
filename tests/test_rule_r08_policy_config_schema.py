@@ -164,3 +164,23 @@ def test_r08_pass_on_empty_engine_repo(tmp_path):
     repo = _write_config(tmp_path, 'policy_profile: flat\npolicy_version: 1.0.0\nconventions_engine:\n  repo: ""\n')
     result = _r08().check(_ctx(repo))
     assert result.status == Status.PASS
+
+
+def test_r08_fail_on_moc_triggers_not_list(tmp_path):
+    repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.0\nmoc:\n  triggers: \"Dockerfile\"\n")
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "moc.triggers" in result.message
+
+
+def test_r08_fail_on_moc_static_not_str(tmp_path):
+    repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.0\nmoc:\n  static: [a, b]\n")
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "moc.static" in result.message
+
+
+def test_r08_pass_on_valid_moc(tmp_path):
+    repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.0\nmoc:\n  static: docs/ctx.yml\n  map: docs/MOC.md\n  triggers: [\"Dockerfile*\"]\n")
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
