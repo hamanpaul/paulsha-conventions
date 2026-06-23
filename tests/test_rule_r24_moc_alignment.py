@@ -86,3 +86,24 @@ def test_r24_fail_on_dangling_introduced_this_change(tmp_path):
     result = _rule().check(_ctx(repo, moc={"map": "docs/MOC.md"}, base="base"))
     assert result.status == Status.FAIL
     assert "p.md" in result.detail
+
+
+def test_r24_warn_on_orphan_plan(tmp_path):
+    repo = _git_repo(tmp_path)
+    plans = repo / "docs" / "superpowers" / "plans"; plans.mkdir(parents=True)
+    (plans / "p.md").write_text("plan", encoding="utf-8")
+    (repo / "docs" / "MOC.md").write_text("（空地圖，沒 link 到 p.md）", encoding="utf-8")
+    _commit(repo)
+    result = _rule().check(_ctx(repo, moc={"map": "docs/MOC.md"}))
+    assert result.status == Status.WARN
+    assert "p.md" in result.detail
+
+
+def test_r24_pass_when_plan_linked(tmp_path):
+    repo = _git_repo(tmp_path)
+    plans = repo / "docs" / "superpowers" / "plans"; plans.mkdir(parents=True)
+    (plans / "p.md").write_text("plan", encoding="utf-8")
+    (repo / "docs" / "MOC.md").write_text("[p](superpowers/plans/p.md)", encoding="utf-8")
+    _commit(repo)
+    result = _rule().check(_ctx(repo, moc={"map": "docs/MOC.md"}))
+    assert result.status == Status.PASS

@@ -57,6 +57,25 @@ class R24MocAlignment:
                 else:
                     warns.append(f"{map_rel} -> {token}")
 
+            linked = {c for _t, cs in self._map_refs(map_rel, text) for c in cs}
+            # plans / specs：精確檔路徑須被 link
+            for rel in sorted(head_files):
+                if rel.endswith(".md") and rel.startswith(
+                    ("docs/superpowers/plans/", "docs/superpowers/specs/")
+                ) and rel not in linked:
+                    warns.append(f"孤兒：{rel} 未被 {map_rel} 連結")
+            # active openspec changes：change dir 下任一連結即算
+            change_names = sorted({
+                rel.split("/")[2] for rel in head_files
+                if rel.startswith("openspec/changes/")
+                and not rel.startswith("openspec/changes/archive/")
+                and len(rel.split("/")) >= 3
+            })
+            for name in change_names:
+                prefix = f"openspec/changes/{name}/"
+                if not any(t.startswith(prefix) for t in linked):
+                    warns.append(f"孤兒：openspec change '{name}' 未被 {map_rel} 連結")
+
         return self._verdict(fails, warns)
 
     @staticmethod
