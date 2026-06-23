@@ -109,3 +109,43 @@ def test_r08_pass_when_doc_reference_allow_is_list(tmp_path):
     repo = _write_config(tmp_path, cfg)
     result = get_rule("R-08").check(make_ctx(repo))
     assert result.status == Status.PASS
+
+
+def _r08():
+    from policy_check.rules import registry
+    return {r.rule_id: r for r in registry.load_all()}["R-08"]
+
+
+def _ctx(repo_root):
+    from policy_check.rules.base import RuleContext
+    return RuleContext(repo_root=repo_root, profile="flat", policy_version="1.0.0")
+
+
+def test_r08_fail_on_invalid_agent_files_mode(tmp_path):
+    from policy_check.rules.base import Status
+    repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.0\nagent_files:\n  mode: link\n")
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "agent_files.mode" in result.message
+
+
+def test_r08_pass_on_valid_agent_files_mode(tmp_path):
+    from policy_check.rules.base import Status
+    repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.0\nagent_files:\n  mode: symlink\n")
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r08_fail_on_non_string_engine_repo(tmp_path):
+    from policy_check.rules.base import Status
+    repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.0\nconventions_engine:\n  repo: [a, b]\n")
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "conventions_engine.repo" in result.message
+
+
+def test_r08_pass_on_string_engine_repo(tmp_path):
+    from policy_check.rules.base import Status
+    repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.0\nconventions_engine:\n  repo: hamanpaul/paulsha-conventions\n")
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
