@@ -1,7 +1,7 @@
 # agent-files-single-source Specification
 
 ## Purpose
-TBD - created by archiving change agent-files-single-source-attestation. Update Purpose after archive.
+本 capability 定義 agent 慣例檔的**單一真檔模型**：canonical `CLAUDE.md` + symlink 鏡像，取代四份 byte-identical 複本（業界視為 anti-pattern、且維護負擔重）。R-14 依 `.paul-project.yml` 的 `agent_files.mode`（`copy` 預設 / `symlink`）gate 行為——`symlink` 模式強制三鏡像檔為 resolve 到 canonical 的 symlink，divergent 複本／錯誤目標／canonical 自身為 symlink 即 FAIL；`copy` 維持既有四檔版本相等比對，讓下游可漸進遷移而不被打斷。R-08 驗證 `agent_files` 設定 schema。
 ## Requirements
 ### Requirement: agent 慣例檔以 canonical CLAUDE.md 為單一真檔
 R-14 MUST 將 `CLAUDE.md` 視為唯一 canonical agent 慣例檔。當 `.paul-project.yml` 的 `agent_files.mode` 為 `symlink` 時：`CLAUDE.md` MUST 為一般檔（非 symlink）且其 `policy_version:` 宣告 MUST 等於專案 declared policy_version；`AGENTS.md`、`GEMINI.md`、`.github/copilot-instructions.md` MUST 各為 symlink 且 `resolve()` 指向 canonical `CLAUDE.md`。違反者 MUST 回報 FAIL。缺檔或斷鏈（`is_file()` 為假）交由 R-13 處理。R-14 MUST NOT 提供豁免 label（單一真檔為不可豁免之真相）。

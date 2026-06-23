@@ -39,7 +39,7 @@
 | R-11 | PR body checkbox 全勾 | 必勾項未勾滿 | `wip` 時自動通過 |
 | R-12 | 分支來源正確 | 目標=main 時來源非 `feature/*`；目標=`feature/*` 時來源非 `wt/<feature>/*` | `policy-exempt:branch-name` |
 | R-13 | Agent convention files 存在 | 缺 `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md` | `policy-exempt:agent-files` |
-| R-14 | Agent files policy 版本一致 | 內容 `policy_version` 與 `.paul-project.yml` 不符 | — |
+| R-14 | Agent files 單一真檔完整性（config-gated） | `copy`（預設）：四檔 `policy_version` 與 `.paul-project.yml` 不符；`symlink`：鏡像檔非 symlink／未 resolve 到 `CLAUDE.md`／canonical 自身為 symlink | — |
 | R-15 | Caller workflow 用 tag / SHA 鎖定（本 repo 的 policy-check dual-pinning path 另要求完整 40 字元 SHA） | `uses:` 指向 branch ref（`@main`、`@develop`）或無 ref | — |
 | R-16 | CLI help 與 docs 同步 | `.paul-project.yml.cli` 宣告項目，實跑 help 輸出與 marker 區塊不一致 | `policy-exempt:cli-help` |
 | R-17 | PR↔issue 連結 | PR body 出現 `#N` 但非 closing-keyword（`Closes`/`Fixes`/`Resolves #N`）形式 | `policy-exempt:issue-link` |

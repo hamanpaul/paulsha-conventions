@@ -1,7 +1,7 @@
 # engine-version-attestation Specification
 
 ## Purpose
-TBD - created by archiving change agent-files-single-source-attestation. Update Purpose after archive.
+本 capability 閉合「repo 實際 pin 的 conventions 引擎版本 ⟷ 宣告的 `policy_version`」這條既有引擎（R-14/R-20 僅驗 intra-repo 自洽）結構性看不到的缺口——下游可升級引擎卻忘改版號（或反之）而全規則照樣 PASS，即 P0 跨 repo 漂移成因。R-23 掃描 workflow `uses:` 對 `conventions_engine.repo` 的外部 pin，比對其版本（tag `@vX.Y.Z`，或 SHA + 尾註 `# vX.Y.Z`）與 `policy_version`：不齊 FAIL、純 SHA 無註解 WARN、`./` 在地引用或未設則 NA。R-08 驗證 `conventions_engine` 設定 schema。
 ## Requirements
 ### Requirement: 引擎 pin 版本與 policy_version 對齊
 R-23 MUST 掃描 `.github/workflows/*.yml` 中 `uses:` 指向 `conventions_engine.repo` 的引用。對每一**外部**引用，R-23 MUST 嘗試取出引擎版本：tag ref `@vX.Y.Z` 取其字面版本；SHA ref `@<40hex>` 且**同行尾註** `# vX.Y.Z` 取註解版本。取得版本後若 ≠ 專案 declared `policy_version` MUST 回報 FAIL。`./` 在地引用 MUST 跳過。
