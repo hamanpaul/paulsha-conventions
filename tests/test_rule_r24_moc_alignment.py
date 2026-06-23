@@ -107,3 +107,34 @@ def test_r24_pass_when_plan_linked(tmp_path):
     _commit(repo)
     result = _rule().check(_ctx(repo, moc={"map": "docs/MOC.md"}))
     assert result.status == Status.PASS
+
+
+def test_r24_fail_on_path_token_dangling_introduced_this_change(tmp_path):
+    # backtick path token（非 markdown link）也須掃，本次移除 → FAIL
+    repo = _git_repo(tmp_path)
+    plans = repo / "docs" / "superpowers" / "plans"; plans.mkdir(parents=True)
+    (plans / "p.md").write_text("plan", encoding="utf-8")
+    (repo / "docs" / "MOC.md").write_text("see `superpowers/plans/p.md`", encoding="utf-8")
+    _commit(repo, "base")
+    subprocess.run(["git", "-C", str(repo), "branch", "base"], check=True)
+    (plans / "p.md").unlink()
+    _commit(repo, "head")
+    result = _rule().check(_ctx(repo, moc={"map": "docs/MOC.md"}, base="base"))
+    assert result.status == Status.FAIL
+    assert "p.md" in result.detail
+
+
+def test_r24_warn_on_declared_but_missing_map(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / "README.md").write_text("x", encoding="utf-8"); _commit(repo)
+    result = _rule().check(_ctx(repo, moc={"map": "docs/NOPE.md"}))
+    assert result.status == Status.WARN
+    assert "NOPE.md" in result.detail
+
+
+def test_r24_no_crash_on_non_str_map(tmp_path):
+    # malformed config（R-08 會 FAIL，但 R-24 不得 crash）
+    repo = _git_repo(tmp_path)
+    (repo / "README.md").write_text("x", encoding="utf-8"); _commit(repo)
+    result = _rule().check(_ctx(repo, moc={"map": ["docs/MOC.md"]}))
+    assert result.status in (Status.PASS, Status.WARN)
