@@ -75,3 +75,33 @@ def test_r23_skip_on_exempt_label(tmp_path):
     repo = _wf(tmp_path, f"uses: {ENGINE}@v1.0.2")
     result = _rule().check(_ctx(repo, labels=["policy-exempt:engine-pin"]))
     assert result.status == Status.SKIP
+
+
+def test_r23_fail_on_partial_major_tag(tmp_path):
+    # 偏 semver tag（無法等於完整 policy_version）必須 FAIL，而非 WARN（非阻擋）
+    repo = _wf(tmp_path, f"uses: {ENGINE}@v1")
+    assert _rule().check(_ctx(repo)).status == Status.FAIL
+
+
+def test_r23_fail_on_minor_only_tag(tmp_path):
+    repo = _wf(tmp_path, f"uses: {ENGINE}@v1.0")
+    assert _rule().check(_ctx(repo)).status == Status.FAIL
+
+
+def test_r23_warn_on_ambiguous_sha_comment(tmp_path):
+    # 尾註非「以 vX.Y.Z 起首」時不得誤取任意 token → 視為無法驗證（WARN）
+    sha = "c" * 40
+    repo = _wf(tmp_path, f"uses: {ENGINE}@{sha}  # previous v1.0.5; actual v1.0.6")
+    assert _rule().check(_ctx(repo)).status == Status.WARN
+
+
+def test_r23_normalizes_trailing_slash_repo(tmp_path):
+    # malformed config（trailing slash）不得讓真實 pin 靜默變成 NA
+    repo = _wf(tmp_path, f"uses: {ENGINE}@v1.0.2")
+    ctx = RuleContext(
+        repo_root=repo,
+        profile="flat",
+        policy_version="1.0.5",
+        config={"conventions_engine": {"repo": REPO + "/"}},
+    )
+    assert _rule().check(ctx).status == Status.FAIL

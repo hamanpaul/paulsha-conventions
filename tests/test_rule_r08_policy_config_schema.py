@@ -149,3 +149,18 @@ def test_r08_pass_on_string_engine_repo(tmp_path):
     repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.0\nconventions_engine:\n  repo: hamanpaul/paulsha-conventions\n")
     result = _r08().check(_ctx(repo))
     assert result.status == Status.PASS
+
+
+def test_r08_fail_on_malformed_engine_repo(tmp_path):
+    # owner/repo 以外的形狀（trailing slash、額外路徑段）必須 FAIL，避免 R-23 靜默 NA
+    repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.0\nconventions_engine:\n  repo: hamanpaul/paulsha-conventions/\n")
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "conventions_engine.repo" in result.message
+
+
+def test_r08_pass_on_empty_engine_repo(tmp_path):
+    # 空字串為「未設/NA」sentinel，須放行
+    repo = _write_config(tmp_path, 'policy_profile: flat\npolicy_version: 1.0.0\nconventions_engine:\n  repo: ""\n')
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS

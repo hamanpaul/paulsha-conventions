@@ -9,8 +9,10 @@ _USES_RE = re.compile(
     r'^\s*(?:-\s*)?uses:\s*["\']?(?P<target>[^"\'@#\s]+)@(?P<ref>[^"\'#\s]+)["\']?'
     r'\s*(?:#\s*(?P<comment>.*?))?\s*$'
 )
-_TAG_VER_RE = re.compile(r'^v?(\d+\.\d+\.\d+(?:-fix\.\d+)?)$')
-_COMMENT_VER_RE = re.compile(r'v?(\d+\.\d+\.\d+(?:-fix\.\d+)?)')
+# 「偏 semver」tag（v1 / v1.2 也納入比對 → 與完整 policy_version 不齊即 FAIL，不放生 WARN）
+_TAG_LOOSE_RE = re.compile(r'^v?(\d+(?:\.\d+){0,2}(?:-fix\.\d+)?)$')
+# 尾註版本須以 vX.Y.Z 起首（錨定），避免誤取註解中任意 version token
+_COMMENT_VER_RE = re.compile(r'^v?(\d+\.\d+\.\d+(?:-fix\.\d+)?)\b')
 _SHA_RE = re.compile(r'^[0-9a-fA-F]{40}$')
 
 
@@ -36,6 +38,7 @@ class R23EnginePinAttestation:
                 status=Status.PASS,
                 message="No conventions_engine.repo configured; R-23 not applicable.",
             )
+        repo = repo.rstrip("/")  # 容忍 config 末尾斜線，避免真實 pin 靜默變 NA
 
         workflows_dir = ctx.repo_root / ".github" / "workflows"
         if not workflows_dir.is_dir():
@@ -69,24 +72,24 @@ class R23EnginePinAttestation:
                 comment = m.group("comment") or ""
                 loc = f"{workflow.name}:{line_no}"
 
-                tag_match = _TAG_VER_RE.match(ref)
-                if tag_match:
-                    version = tag_match.group(1)
-                elif _SHA_RE.match(ref):
-                    cm = _COMMENT_VER_RE.search(comment)
+                if _SHA_RE.match(ref):
+                    cm = _COMMENT_VER_RE.match(comment.strip())
                     if not cm:
                         warns.append(
-                            f"{loc}: engine pinned by SHA without '# vX.Y.Z' annotation; "
-                            f"version not verifiable offline"
+                            f"{loc}: engine pinned by SHA without a leading '# vX.Y.Z' "
+                            f"annotation; version not verifiable offline"
                         )
                         continue
                     version = cm.group(1)
                 else:
-                    warns.append(
-                        f"{loc}: engine ref '{ref}' is neither semver tag nor 40-char SHA; "
-                        f"version not verifiable"
-                    )
-                    continue
+                    loose = _TAG_LOOSE_RE.match(ref)
+                    if not loose:
+                        warns.append(
+                            f"{loc}: engine ref '{ref}' is neither a version tag nor a "
+                            f"40-char SHA; version not verifiable"
+                        )
+                        continue
+                    version = loose.group(1)
 
                 if version != declared:
                     fails.append(
