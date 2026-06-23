@@ -47,6 +47,7 @@ policy_version: 1.0.6
 - [ ] R-21：宣告 `tier: shareable` 的 repo 不得含雇主機敏標記（內部代號、裝置型號等）、個人絕對路徑或憑證模式；合法引用上 `secret_scan.allow` 或命中時上 `policy-exempt:secret-scan` 並附理由
 - [ ] R-22：docs 對本次刪改 code 產物的引用無懸空（CI 報「本次新破壞」FAIL、陳年 WARN），或上 `policy-exempt:doc-reference`
 - [ ] R-23：workflow 對引擎的 pin 版本與 `policy_version` 一致（tag `@vX.Y.Z`，或 SHA `@<sha>` + 尾註 `# vX.Y.Z`），或上 `policy-exempt:engine-pin`（`./` 在地引用或未設 `conventions_engine.repo` 時不適用）
+- [ ] R-24：repo 宣告 `moc` 時，本次變更已同步靜態脈絡（`moc.static`）與動態地圖（`moc.map` 無懸空、新產物已連結），或上 `policy-exempt:moc-alignment`（未宣告 `moc` 時不適用）
 - [ ] 語言：PR 標題／內文與所有 comment 的語言符合本 repo 規範（見「語言規範」段）
 - [ ] 若跳過任何檢查，PR 必須帶對應豁免 label + 理由
 
@@ -77,8 +78,11 @@ policy_version: 1.0.6
 - `policy-exempt:secret-scan` — R-21 機密掃描（tier=shareable 命中雇主標記）
 - `policy-exempt:doc-reference` — R-22 文件懸空引用（doc dangling reference）
 - `policy-exempt:engine-pin` — R-23 引擎 pin 版本與 policy_version 對齊
+- `policy-exempt:moc-alignment` — R-24 MOC 與本次變更對齊
 - `skip-changelog` — R-09 code 變動要求 CHANGELOG entry（特殊用途，需附理由）
 - `wip` — R-11 自動通過 PR body checkbox 未全勾（work in progress）
 
 ## Doc-alignment review（PR review 時）
 review 變更時，除了 R-22 抓得到的懸空引用，另留意**語意陳舊**：引用都還在、但 docs 描述了已被這次變更改掉的架構／行為；發現時於 PR 留言指出、建議作者更新。Advisory，不擋 merge。建議將 GitHub Copilot 設為 PR reviewer 以啟用此層。
+
+MOC 的**狀態語意對齊**（`moc.map` 上某 stage 宣稱 done 是否真 done、被 postpone 的 stage 是否還誤掛 done）同屬此 advisory 層：R-24 只確定性檢查連結懸空／孤兒與靜態鮮度，狀態是否真對齊由 Copilot reviewer 留言提醒。

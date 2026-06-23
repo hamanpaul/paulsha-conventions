@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from fnmatch import fnmatch
@@ -8,6 +7,13 @@ from pathlib import Path
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.rules.registry import register
+from policy_check.rules._doc_links import (
+    LINK_RE as _LINK_RE,
+    looks_like_path as _looks_like_path,
+    path_candidates as _path_candidates,
+    git_tracked as _git_tracked,
+    resolve_base as _resolve_base,
+)
 
 _IN_SCOPE_PREFIXES = ("docs/",)           # 加上 README.md（見 _in_scope）
 _EXCLUDE_PREFIXES = ("openspec/", "docs/superpowers/", "tests/fixtures/doc-reference/")
@@ -16,10 +22,7 @@ _SELF_EXEMPT = (
     "tests/test_rule_r22_doc_reference.py",
     "tests/fixtures/doc-reference/**",
 )
-_CODE_EXTS = (".py", ".sh", ".yml", ".yaml", ".toml", ".js", ".ts",
-              ".json", ".cfg", ".ini", ".md")
 
-_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 _CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 _CAMEL_RE = re.compile(r"^[A-Za-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*$")
@@ -46,51 +49,6 @@ def _is_symbol(tok: str) -> bool:
     return len(tok) >= 3 and bool(_SNAKE_RE.match(tok) or _CAMEL_RE.match(tok))
 
 
-def _looks_like_path(tok: str) -> bool:
-    tok = tok.strip()
-    if not tok or " " in tok or any(c in tok for c in "<>{}*$"):
-        return False  # 排除 placeholder/glob（如 feature/<slug>、${{ inputs.x }}）
-    if tok.startswith(("./", "../")):
-        return True
-    # 需有 code 副檔名才視為本地路徑候選——避免把目錄（tests/）與
-    # GitHub org/repo slug（hamanpaul/paulsha-conventions）誤判為本地檔
-    return tok.endswith(_CODE_EXTS)
-
-
-def _git_tracked(root: Path, rev: str | None = None) -> set[str]:
-    cmd = ["git", "-C", str(root)]
-    cmd += (["ls-tree", "-r", "--name-only", rev] if rev else ["ls-files"])
-    try:
-        out = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
-    except subprocess.CalledProcessError:
-        return set()
-    return {l.strip() for l in out.splitlines() if l.strip()}
-
-
-def _resolve_base(root: Path, base_ref: str | None) -> str | None:
-    if not base_ref:
-        return None
-    for cand in (base_ref, f"origin/{base_ref}"):
-        try:
-            sha = subprocess.check_output(
-                ["git", "-C", str(root), "rev-parse", "--verify", "-q", f"{cand}^{{commit}}"],
-                text=True, stderr=subprocess.DEVNULL).strip()
-        except subprocess.CalledProcessError:
-            continue
-        if not sha:
-            continue
-        # 回傳 merge-base：讓 path prong（base_files）與 symbol prong（base...HEAD）
-        # 用同一歸責基準，避免上游分歧（base 落後分支）造成的偽 FAIL
-        try:
-            mb = subprocess.check_output(
-                ["git", "-C", str(root), "merge-base", sha, "HEAD"],
-                text=True, stderr=subprocess.DEVNULL).strip()
-        except subprocess.CalledProcessError:
-            mb = ""
-        return mb or sha
-    return None
-
-
 def _defined_in_head(root: Path, name: str) -> bool:
     try:
         subprocess.check_output(
@@ -115,23 +73,6 @@ def _removed_symbols(root: Path, base: str) -> set[str]:
         if m and m.group(1) == "-":
             candidates.add(m.group(2))
     return {name for name in candidates if not _defined_in_head(root, name)}
-
-
-def _path_candidates(doc_rel: str, target: str) -> list[str]:
-    """正規化成 repo-relative posix 候選（doc-relative 與 root-relative 各一）。"""
-    target = target.split("#", 1)[0].strip()
-    if not target or target.startswith(("http://", "https://", "mailto:")):
-        return []
-    doc_dir = Path(doc_rel).parent
-    cands: list[str] = []
-    for base in (doc_dir / target, Path(target)):
-        norm = os.path.normpath(base.as_posix())
-        if norm == "." or norm.startswith("..") or norm.startswith("/"):
-            continue
-        posix = Path(norm).as_posix()
-        if posix not in cands:
-            cands.append(posix)
-    return cands
 
 
 def _extract_refs(doc_rel: str, text: str):

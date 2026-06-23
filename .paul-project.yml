@@ -25,3 +25,6 @@ conventions_engine:
   # 本 repo 即引擎本體，workflow 以 ./ 在地引用 → R-23 NA。
   # 下游 repo 在此填 hamanpaul/paulsha-conventions 以啟用 attestation。
   repo: ""
+moc:
+  # 本 repo 無 build/install trigger，故不設 static/triggers；只用動態地圖 dogfood R-24。
+  map: docs/MOC.md

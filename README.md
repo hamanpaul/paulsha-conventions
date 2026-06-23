@@ -22,7 +22,7 @@
 
 版本譜系（policy_version ↔ engine tag/SHA 對照）見 [`RELEASES.md`](./RELEASES.md)。
 
-## 規則總覽（R-01 ~ R-23）
+## 規則總覽（R-01 ~ R-24）
 
 | ID | 檢查項 | 失敗條件 | 豁免 label |
 |----|--------|----------|------------|
@@ -49,6 +49,7 @@
 | R-21 | tier=shareable repo 機密掃描 | 宣告 `tier: shareable` 的 repo 含雇主標記（內部代號、裝置型號等）／個人絕對路徑／憑證模式，且不在 `secret_scan.allow` 或自我豁免範圍 | `policy-exempt:secret-scan` |
 | R-22 | docs 對 code 產物引用無懸空 | `README.md` / `docs/**` 引用的路徑／內部連結／反引號 symbol 在 repo 不存在；本次變更新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）降 WARN | `policy-exempt:doc-reference` |
 | R-23 | 引擎 pin 版本與 policy_version 對齊 | workflow `uses:` 指向 `conventions_engine.repo` 的引擎版本（tag `@vX.Y.Z` 或 SHA `@<sha>` + 尾註 `# vX.Y.Z`）與 `.paul-project.yml` 的 `policy_version` 不一致 **FAIL**；純 SHA 無註解 **WARN**；`./` 在地引用或未設 `conventions_engine.repo` 則 NA | `policy-exempt:engine-pin` |
+| R-24 | MOC 與本次變更對齊 | repo 宣告 `moc` 時：`moc.triggers` 命中但 `moc.static` 未同步（**WARN**）／`moc.map` 連結懸空（本次新破壞 **FAIL**、陳年 **WARN**）／active openspec change・plan・spec 未被連結（**WARN**，永不 FAIL）；未宣告 `moc` 則 NA | `policy-exempt:moc-alignment` |
 
 **Exemption Labels 白名單**：上表所列 `policy-exempt:*` / `skip-changelog` / `wip` 即所有可用豁免 label；gate 只認這些，其他一律視同未豁免。
 
