@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import re
+
 import yaml
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.config import CONFIG_NAMES_DISPLAY, config_path
 from policy_check.rules.registry import register
+
+# conventions_engine.repo 須為 'owner/repo'（空字串 = 未設/NA sentinel，放行）
+_ENGINE_REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 
 
 @register
@@ -109,6 +114,46 @@ class R08PolicyConfigSchema:
                     rule_id=self.rule_id,
                     status=Status.FAIL,
                     message="doc_reference.allow must be a list of strings",
+                )
+
+        # 驗證 agent_files 區塊：須為 mapping；mode（若存在）須 ∈ {symlink, copy}
+        agent_files = data.get("agent_files")
+        if agent_files is not None:
+            if not isinstance(agent_files, dict):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="agent_files must be a mapping",
+                )
+            mode = agent_files.get("mode")
+            if mode is not None and mode not in ("symlink", "copy"):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="agent_files.mode must be one of ['copy', 'symlink']",
+                )
+
+        # 驗證 conventions_engine 區塊：須為 mapping；repo（若存在）須為 str
+        conventions_engine = data.get("conventions_engine")
+        if conventions_engine is not None:
+            if not isinstance(conventions_engine, dict):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="conventions_engine must be a mapping",
+                )
+            repo = conventions_engine.get("repo")
+            if repo is not None and not isinstance(repo, str):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="conventions_engine.repo must be a string",
+                )
+            if isinstance(repo, str) and repo != "" and not _ENGINE_REPO_RE.match(repo):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="conventions_engine.repo must be 'owner/repo' form (no trailing slash or extra path segment)",
                 )
 
         return RuleResult(

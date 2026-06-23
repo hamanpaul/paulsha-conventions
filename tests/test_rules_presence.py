@@ -68,3 +68,9 @@ def test_r05_version_exists_fail_when_missing(fixture_repo):
 
     assert result.status == Status.FAIL
     assert "VERSION" in result.message
+
+
+def test_r23_is_registered():
+    rule = get_rule("R-23")
+    assert rule.rule_id == "R-23"
+    assert rule.exempt_label == "policy-exempt:engine-pin"

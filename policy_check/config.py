@@ -41,4 +41,9 @@ def load(repo_root: Path) -> dict:
         )
     data.setdefault("code_paths", DEFAULT_CODE_PATHS[data["policy_profile"]])
     data.setdefault("cli", [])
+    agent_files = data.get("agent_files")
+    if not isinstance(agent_files, dict):
+        agent_files = {}
+    agent_files.setdefault("mode", "copy")
+    data["agent_files"] = agent_files
     return data

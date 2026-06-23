@@ -19,3 +19,9 @@ secret_scan:
     - "docs/**"
 doc_reference:
   allow: []
+agent_files:
+  mode: symlink
+conventions_engine:
+  # 本 repo 即引擎本體，workflow 以 ./ 在地引用 → R-23 NA。
+  # 下游 repo 在此填 hamanpaul/paulsha-conventions 以啟用 attestation。
+  repo: ""

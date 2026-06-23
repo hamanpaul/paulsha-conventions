@@ -1,5 +1,5 @@
 <!-- managed-by: hamanpaul/paulsha-conventions@v1.0.5 -->
-<!-- 若修改此檔，同步更新 CLAUDE.md / AGENTS.md / GEMINI.md / .github/copilot-instructions.md 四份 -->
+<!-- 此為 canonical 真檔；AGENTS.md / GEMINI.md / .github/copilot-instructions.md 為指向本檔的 symlink，只維護本檔 -->
 policy_version: 1.0.5
 
 # Agent Policy Checklist
@@ -33,7 +33,7 @@ policy_version: 1.0.5
   - `flat`: 一個 feature batch 完成
 - [ ] MINOR bump 需滿足：feature 群組全 landed + 7 天無 hotfix
 - [ ] MAJOR bump 需使用者明確核可
-- [ ] 若本 PR 將版本 bump 延後（feature 先進 `[Unreleased]`），merge 當下必須**立即**補做對應 release bump（`VERSION` / `policy_version` / 四份 agent 檔 / `managed-by` 標記 / tag / `RELEASES.md`），不得留置
+- [ ] 若本 PR 將版本 bump 延後（feature 先進 `[Unreleased]`），merge 當下必須**立即**補做對應 release bump（`VERSION` / `policy_version` / canonical `CLAUDE.md`（其餘三檔 symlink 自動跟隨）/ `managed-by` 標記 / tag / `RELEASES.md`），不得留置
 
 ## 完成任務（claim done）前
 - [ ] `CHANGELOG.md [Unreleased]` 有對應 entry（或 PR 標 `skip-changelog` + 理由）
@@ -46,6 +46,7 @@ policy_version: 1.0.5
 - [ ] R-19：repo 有 `tests/` 時，CI workflow 有實際執行測試（pytest 等）；新增測試套件而 CI 未涵蓋時同步補上
 - [ ] R-21：宣告 `tier: shareable` 的 repo 不得含雇主機敏標記（內部代號、裝置型號等）、個人絕對路徑或憑證模式；合法引用上 `secret_scan.allow` 或命中時上 `policy-exempt:secret-scan` 並附理由
 - [ ] R-22：docs 對本次刪改 code 產物的引用無懸空（CI 報「本次新破壞」FAIL、陳年 WARN），或上 `policy-exempt:doc-reference`
+- [ ] R-23：workflow 對引擎的 pin 版本與 `policy_version` 一致（tag `@vX.Y.Z`，或 SHA `@<sha>` + 尾註 `# vX.Y.Z`），或上 `policy-exempt:engine-pin`（`./` 在地引用或未設 `conventions_engine.repo` 時不適用）
 - [ ] 語言：PR 標題／內文與所有 comment 的語言符合本 repo 規範（見「語言規範」段）
 - [ ] 若跳過任何檢查，PR 必須帶對應豁免 label + 理由
 
@@ -60,7 +61,7 @@ policy_version: 1.0.5
 - 直接 commit 到 `main`
 - 建立不符合命名規則的分支（必須 `feature/<slug>` 或 `wt/<feature>/<subtask>`）
 - 發明新 `policy-exempt:*` label（**只能用 policy 列舉的白名單**）
-- 修改本檔而不同步其他三份 agent convention 檔
+- 把 agent symlink（AGENTS.md / GEMINI.md / .github/copilot-instructions.md）還原成獨立複本（`agent_files.mode: symlink` 下 R-14 會 FAIL）
 
 ## Exemption Labels 白名單
 僅允許使用以下 labels 豁免對應規則（其他一律視同未豁免）：
@@ -75,6 +76,7 @@ policy_version: 1.0.5
 - `policy-exempt:ci-tests` — R-19 repo 有測試則 CI 必須執行
 - `policy-exempt:secret-scan` — R-21 機密掃描（tier=shareable 命中雇主標記）
 - `policy-exempt:doc-reference` — R-22 文件懸空引用（doc dangling reference）
+- `policy-exempt:engine-pin` — R-23 引擎 pin 版本與 policy_version 對齊
 - `skip-changelog` — R-09 code 變動要求 CHANGELOG entry（特殊用途，需附理由）
 - `wip` — R-11 自動通過 PR body checkbox 未全勾（work in progress）
 

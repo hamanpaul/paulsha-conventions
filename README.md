@@ -22,7 +22,7 @@
 
 版本譜系（policy_version ↔ engine tag/SHA 對照）見 [`RELEASES.md`](./RELEASES.md)。
 
-## 規則總覽（R-01 ~ R-22）
+## 規則總覽（R-01 ~ R-23）
 
 | ID | 檢查項 | 失敗條件 | 豁免 label |
 |----|--------|----------|------------|
@@ -39,7 +39,7 @@
 | R-11 | PR body checkbox 全勾 | 必勾項未勾滿 | `wip` 時自動通過 |
 | R-12 | 分支來源正確 | 目標=main 時來源非 `feature/*`；目標=`feature/*` 時來源非 `wt/<feature>/*` | `policy-exempt:branch-name` |
 | R-13 | Agent convention files 存在 | 缺 `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md` | `policy-exempt:agent-files` |
-| R-14 | Agent files policy 版本一致 | 內容 `policy_version` 與 `.paul-project.yml` 不符 | — |
+| R-14 | Agent files 單一真檔完整性（config-gated） | `copy`（預設）：四檔 `policy_version` 與 `.paul-project.yml` 不符；`symlink`：鏡像檔非 symlink／未 resolve 到 `CLAUDE.md`／canonical 自身為 symlink | — |
 | R-15 | Caller workflow 用 tag / SHA 鎖定（本 repo 的 policy-check dual-pinning path 另要求完整 40 字元 SHA） | `uses:` 指向 branch ref（`@main`、`@develop`）或無 ref | — |
 | R-16 | CLI help 與 docs 同步 | `.paul-project.yml.cli` 宣告項目，實跑 help 輸出與 marker 區塊不一致 | `policy-exempt:cli-help` |
 | R-17 | PR↔issue 連結 | PR body 出現 `#N` 但非 closing-keyword（`Closes`/`Fixes`/`Resolves #N`）形式 | `policy-exempt:issue-link` |
@@ -48,6 +48,7 @@
 | R-20 | Workflow policy_version 與 config 同步 | workflow 內宣告的 `policy_version` / `POLICY_VERSION` 字面值與 `.paul-project.yml` 的 `policy_version` 不一致 | — |
 | R-21 | tier=shareable repo 機密掃描 | 宣告 `tier: shareable` 的 repo 含雇主標記（內部代號、裝置型號等）／個人絕對路徑／憑證模式，且不在 `secret_scan.allow` 或自我豁免範圍 | `policy-exempt:secret-scan` |
 | R-22 | docs 對 code 產物引用無懸空 | `README.md` / `docs/**` 引用的路徑／內部連結／反引號 symbol 在 repo 不存在；本次變更新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）降 WARN | `policy-exempt:doc-reference` |
+| R-23 | 引擎 pin 版本與 policy_version 對齊 | workflow `uses:` 指向 `conventions_engine.repo` 的引擎版本（tag `@vX.Y.Z` 或 SHA `@<sha>` + 尾註 `# vX.Y.Z`）與 `.paul-project.yml` 的 `policy_version` 不一致 **FAIL**；純 SHA 無註解 **WARN**；`./` 在地引用或未設 `conventions_engine.repo` 則 NA | `policy-exempt:engine-pin` |
 
 **Exemption Labels 白名單**：上表所列 `policy-exempt:*` / `skip-changelog` / `wip` 即所有可用豁免 label；gate 只認這些，其他一律視同未豁免。
 
@@ -172,10 +173,10 @@ options:
 **本 repo 版號語意**（`profile: flat`）：
 - **MAJOR**: 正式 release（feature 達到對外可用狀態）
 - **MINOR**: 功能穩定（已規劃 feature 全 landed + 7 天無 hotfix）
-- **PATCH**: 累積已完成的 feature batch 計數（本 repo 為 R-01~R-18 完整實作）
+- **PATCH**: 累積已完成的 feature batch 計數（本 repo 為 R-01~R-23 完整實作）
 - **-fix.N**: 落地後 bug fix（非新 feature、非穩定、非 release）
 
-當前版本：`0.0.0`（R-01~R-18 baseline 建立中，待 merge 後升版）
+當前版本：見 `VERSION`（現為 `1.0.5`）；本批變更（agent 慣例檔 symlink 單一真檔 + R-23 attestation）於 `[Unreleased]`，merge 當下升版。
 
 ## 相關專案
 
