@@ -177,7 +177,7 @@ options:
 - **PATCH**: 累積已完成的 feature batch 計數（本 repo 為 R-01~R-23 完整實作）
 - **-fix.N**: 落地後 bug fix（非新 feature、非穩定、非 release）
 
-當前版本：見 `VERSION`（現為 `1.0.6`）。
+當前版本：見 `VERSION`（現為 `1.0.7`）。
 
 ## 相關專案
 
