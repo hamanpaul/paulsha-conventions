@@ -74,3 +74,9 @@ def test_r23_is_registered():
     rule = get_rule("R-23")
     assert rule.rule_id == "R-23"
     assert rule.exempt_label == "policy-exempt:engine-pin"
+
+
+def test_r24_is_registered():
+    rule = get_rule("R-24")
+    assert rule.rule_id == "R-24"
+    assert rule.exempt_label == "policy-exempt:moc-alignment"
