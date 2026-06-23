@@ -176,7 +176,7 @@ options:
 - **PATCH**: 累積已完成的 feature batch 計數（本 repo 為 R-01~R-23 完整實作）
 - **-fix.N**: 落地後 bug fix（非新 feature、非穩定、非 release）
 
-當前版本：見 `VERSION`（現為 `1.0.5`）；本批變更（agent 慣例檔 symlink 單一真檔 + R-23 attestation）於 `[Unreleased]`，merge 當下升版。
+當前版本：見 `VERSION`（現為 `1.0.6`）。
 
 ## 相關專案
 
