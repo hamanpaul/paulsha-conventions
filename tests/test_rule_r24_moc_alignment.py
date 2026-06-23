@@ -44,3 +44,20 @@ def test_r24_skip_on_exempt_label(tmp_path):
     (repo / "README.md").write_text("x", encoding="utf-8"); _commit(repo)
     result = _rule().check(_ctx(repo, moc={"map": "docs/MOC.md"}, labels=["policy-exempt:moc-alignment"]))
     assert result.status == Status.SKIP
+
+
+def test_r24_warn_when_trigger_changed_but_static_not(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / "README.md").write_text("x", encoding="utf-8"); _commit(repo)
+    moc = {"static": "docs/ctx.yml", "triggers": ["Dockerfile*"]}
+    result = _rule().check(_ctx(repo, moc=moc, changed=["Dockerfile"]))
+    assert result.status == Status.WARN
+    assert "docs/ctx.yml" in result.detail
+
+
+def test_r24_pass_when_static_updated_with_trigger(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / "README.md").write_text("x", encoding="utf-8"); _commit(repo)
+    moc = {"static": "docs/ctx.yml", "triggers": ["Dockerfile*"]}
+    result = _rule().check(_ctx(repo, moc=moc, changed=["Dockerfile", "docs/ctx.yml"]))
+    assert result.status == Status.PASS

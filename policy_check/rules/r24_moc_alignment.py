@@ -28,7 +28,17 @@ class R24MocAlignment:
 
         fails: list[str] = []
         warns: list[str] = []
-        # prongs filled in later tasks
+
+        changed = set(ctx.changed_files or [])
+        static = moc.get("static")
+        triggers = moc.get("triggers") or []
+        if static and triggers and changed:
+            hit = sorted(f for f in changed if any(fnmatch(f, g) for g in triggers))
+            if hit and static not in changed:
+                warns.append(
+                    f"static MOC '{static}' 未隨 trigger 變更同步；命中：{', '.join(hit[:5])}"
+                )
+
         return self._verdict(fails, warns)
 
     def _verdict(self, fails, warns) -> RuleResult:
