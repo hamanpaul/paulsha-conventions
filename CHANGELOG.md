@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Added
+- **新增 R-24（moc-alignment）**：repo 於 `.paul-project.yml` 宣告 `moc`（`static` / `map` / `triggers`）後生效（未宣告 → NA）。三瓣：靜態鮮度（`moc.triggers` 命中但 `moc.static` 未同步 → WARN）／動態連結懸空（`moc.map` 連到不存在產物，本次新破壞 FAIL、陳年 WARN）／動態連結孤兒（active openspec change・`docs/superpowers/{plans,specs}` 未被連結 → WARN，永不 FAIL）。platform-agnostic（純 git-level，不依賴 GitHub/GitLab）。豁免 `policy-exempt:moc-alignment`。R-08 擴充驗 `moc`；r22/r24 共用 link helper 抽至 `policy_check/rules/_doc_links.py`。
 - **R-08 接受 optional `tier` 欄位**：`.paul-project.yml` 新增可選欄位 `tier`，允許值為 `shareable` / `work` / `personal`；提供非法值（如 `public`）時 FAIL，並回報允許值清單。
 - **新增 R-21（機密掃描）**：宣告 `tier: shareable` 的 repo 若含雇主標記（內部代號、裝置型號、build 主機等）、個人絕對路徑或憑證模式則 FAIL；`tier: work`/`personal` 視為 not-applicable；自身規則檔/fixtures 與 `.paul-project.yml` 的 `secret_scan.allow` 路徑豁免；豁免 label `policy-exempt:secret-scan`。同時 `.paul-project.yml` 新增 `secret_scan.allow` 設定。
 - **新增 R-19（repo 有測試則 CI 必須執行）**：repo 根目錄存在 `tests/`（含 `test_*.py` / `*_test.py`）時，`.github/workflows/**` 必須有至少一個 workflow 實際執行測試（pytest / unittest / npm test / go test / cargo test 等），否則 FAIL；豁免 label `policy-exempt:ci-tests`。無測試套件的 repo 空轉通過。動機：多個 repo 擁有大量測試但 CI 僅跑 policy check，測試從未在 PR gate 上執行。
