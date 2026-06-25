@@ -61,6 +61,16 @@
 - **Tier 2（確定性 gate）**：R-22 在 CI 偵測 `README.md` / `docs/**` 的結構化懸空引用——本次新破壞 FAIL、陳年 WARN。確定性層只看「結構性 rot」（引用死掉），不判斷語意。
 - **Tier 3（語意複審）**：建議將 GitHub Copilot 設為 PR reviewer，複審「引用仍在但描述已過時」的語意陳舊（advisory，不擋 merge）。
 
+### 跨 repo 升版傳播（機制層，#23）
+
+確定性的三層 doc-alignment 是 **intra-repo**；跨 repo 的 `policy_version` 漂移由本機制層治理（engine 只強制＋偵測＋文件，**不主動改下游**）：
+
+- **強制（擋）**：org ruleset 的 `Policy Freshness` required workflow 跑 `python3 -m policy_check.drift check`，落後 canonical 的 repo PR 無法 merge。設定見 [`docs/org-ruleset-runbook.md`](docs/org-ruleset-runbook.md)。
+- **偵測（點名）**：`python3 -m policy_check.drift report --org hamanpaul` 唯讀列出各 repo `policy_version` 與漂移狀態（`current` / `behind` / `ahead` / `unmanaged`）。
+- **修復（升）**：落後 repo 由其自身 agent 依 [RELEASES.md](RELEASES.md) 的「升版傳播 SOP」自助升版。
+
+> `policy_check.drift` 是 ops 工具，**非 R-xx gate 規則**，不進 `python3 -m policy_check --repo .` 的 FAIL 集合。
+
 ## Install
 
 ```bash
