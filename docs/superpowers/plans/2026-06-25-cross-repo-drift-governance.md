@@ -228,11 +228,13 @@ def local_policy_version(path: str = ".") -> str | None:
     return parse_policy_version(cfg.read_text(encoding="utf-8"))
 
 
+# 注意：shipped 實作改用 tags API（取最高 vX.Y.Z[-fix.N] tag），不用 releases/latest。
+# canonical repo 只打 tag、無 GitHub Release 物件，releases/latest 會 404（實作時 smoke 發現）。
+# 見 policy_check/drift.py 的 canonical_version_live + highest_version。
 def canonical_version_live(org: str = CANONICAL_ORG, repo: str = CANONICAL_REPO) -> str:
-    """Latest release tag of canonical repo, e.g. 'v1.0.7' -> '1.0.7'."""
-    out = _gh(["api", f"repos/{org}/{repo}/releases/latest"])
-    tag = json.loads(out)["tag_name"]
-    return tag.lstrip("v")
+    """Highest vX.Y.Z[-fix.N] tag of canonical repo, e.g. -> '1.0.7'."""
+    out = _gh(["api", f"repos/{org}/{repo}/tags", "--paginate", "--jq", ".[].name"])
+    return highest_version(out.splitlines())
 
 
 def list_managed_repos(org: str = CANONICAL_ORG) -> list[str]:

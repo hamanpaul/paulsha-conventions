@@ -56,7 +56,7 @@ paulsha-conventions 是**規則引擎 + canonical 來源**，職責是「定義�
 ### I/O 邊緣（gh CLI，不進單測）
 
 - `local_policy_version(path=".") -> str | None`：讀指定 repo 工作目錄的 `.paul-project.yml`（gate 模式在下游 CI 用）。
-- `canonical_version_live(org, repo) -> str`：取 canonical 的**最新** `vX.Y.Z` release tag（單一真相來源，與 RELEASES.md tag-driven 一致）。gate 模式據此判斷下游是否落後。
+- `canonical_version_live(org, repo) -> str`：取 canonical 的**最新** `vX.Y.Z` **tag**（用 tags API，非 GitHub Release——本 repo 只打 tag、無 Release 物件，`releases/latest` 會 404；單一真相來源，與 RELEASES.md tag-driven 一致）。gate 模式據此判斷下游是否落後。
 - `list_managed_repos(org) -> list[str]`：`gh repo list <org>` 列舉，逐個探 `.paul-project.yml` 是否存在（report 模式用）。
 - `fetch_policy_version(org, repo) -> str | None`：`gh api repos/<org>/<repo>/contents/.paul-project.yml` 取 raw → `parse_policy_version`。
 
@@ -77,7 +77,7 @@ python3 -m policy_check.drift check [--against <canonical_ver>]
 - `behind` → **exit 非 0（擋 merge）**；`current` / `ahead` / `unmanaged` → exit 0。
 - 由 org-level required workflow 在每個下游 repo 的 CI 內呼叫；因 workflow 集中控制、引用 canonical 最新，落後 repo 無法靠釘舊版規避。
 
-- 權限：report 用 `gh repo list` + `gh api .../contents`（讀）；check 用 `gh api .../releases/latest` 或 tags（讀）。`repo` / `read:org` 即可。
+- 權限：report 用 `gh repo list` + `gh api .../contents`（讀）；check 用 `gh api .../tags`（讀，取最高版本 tag）。`repo` / `read:org` 即可。
 
 ### 報表輸出範例（示意）
 
