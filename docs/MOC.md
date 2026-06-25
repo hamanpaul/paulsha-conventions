@@ -4,10 +4,10 @@
 本 repo 以 `moc.map: docs/MOC.md` 宣告，由 R-24（moc-alignment）盯其與本次變更同步。
 
 ## Active openspec changes
-- [cross-repo-drift-governance](../openspec/changes/cross-repo-drift-governance/proposal.md) — 實作中（#23；engine 強制＋偵測＋SOP，不改下游）。Runbook：[`docs/org-ruleset-runbook.md`](org-ruleset-runbook.md)
+（目前無 active openspec change；已落地者見 `openspec/changes/archive/`。#23 cross-repo-drift-governance 已於本批落地並 archive，canonical spec 見 `openspec/specs/cross-repo-drift-governance/`。Runbook：[`docs/org-ruleset-runbook.md`](org-ruleset-runbook.md)。）
 
 ## Plans（docs/superpowers/plans）
-- [cross-repo-drift-governance](superpowers/plans/2026-06-25-cross-repo-drift-governance.md) — 實作中（#23）
+- [cross-repo-drift-governance](superpowers/plans/2026-06-25-cross-repo-drift-governance.md) — 已完成（#23，已 archive）
 - [moc-alignment-rule](superpowers/plans/2026-06-23-moc-alignment-rule.md) — 已完成（v1.0.7）
 - [agent-files single-source + attestation](superpowers/plans/2026-06-23-agent-files-single-source-and-version-attestation.md) — 已完成（v1.0.6）
 - [r22 doc-alignment governance](superpowers/plans/2026-06-18-r22-doc-alignment-governance.md) — 已完成（v1.0.5）
@@ -16,7 +16,7 @@
 - [rollout github defaults + new-project-template](superpowers/plans/2026-04-23-rollout-github-defaults-and-new-project-template.md) — 已完成
 
 ## Specs / designs（docs/superpowers/specs）
-- [cross-repo-drift-governance design](superpowers/specs/2026-06-25-cross-repo-drift-governance-design.md) — 實作中（#23）
+- [cross-repo-drift-governance design](superpowers/specs/2026-06-25-cross-repo-drift-governance-design.md) — 已完成（#23，已 archive）
 - [moc-alignment-rule design](superpowers/specs/2026-06-23-moc-alignment-rule-design.md) — 已完成（v1.0.7）
 - [agent-files single-source + attestation design](superpowers/specs/2026-06-23-agent-files-single-source-and-version-attestation-design.md) — 已完成
 - [r22 doc-alignment governance design](superpowers/specs/2026-06-18-r22-doc-alignment-governance-design.md) — 已完成
