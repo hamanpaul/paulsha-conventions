@@ -43,10 +43,11 @@ gh api -X POST /orgs/hamanpaul/rulesets \
 
 ## Step 2 — org-level required workflow（Policy Freshness）
 
-以 org required workflow / default setup 推下列 `policy-freshness.yml`，不靠各 repo 自行 `include`。
-它 checkout canonical **最新**版（`ref: main`，org 控制、非各 repo 自釘）跑 `drift check`：
+以 org required workflow / default setup 推下列 workflow（org 控制、不靠各 repo 自行 include）。
+它 checkout canonical **最新**版（`ref: main`，非各 repo 自釘）跑 `drift check`：
 
 ```yaml
+# org default-setup 建議路徑：.github/workflows/policy-freshness.yml
 name: Policy Freshness
 on:
   pull_request:
@@ -81,7 +82,7 @@ jobs:
 
 ## 與既有機制並存
 
-org freshness gate 與 `reusable-policy-check.yml` 的 R-15 / R-23 dual-pin 並存、職責不同：
+org freshness gate 與 `.github/workflows/reusable-policy-check.yml` 的 R-15 / R-23 dual-pin 並存、職責不同：
 
 | 檢查 | 由誰控制 | 比對對象 | 答的問題 |
 |---|---|---|---|
