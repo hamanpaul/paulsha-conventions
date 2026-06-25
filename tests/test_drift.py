@@ -49,6 +49,25 @@ def test_classify_unmanaged():
     assert drift.classify(None, "1.0.7") == "unmanaged"
 
 
+# --- highest_version：從 tag 清單挑最高 vX.Y.Z[-fix.N] ---
+def test_highest_version_picks_max():
+    tags = ["v1.0.6", "v1.0.7", "v1.0.5", "v1.0.2"]
+    assert drift.highest_version(tags) == "1.0.7"
+
+
+def test_highest_version_respects_fix_suffix():
+    assert drift.highest_version(["v1.0.7", "v1.0.7-fix.1"]) == "1.0.7-fix.1"
+
+
+def test_highest_version_ignores_non_version_tags():
+    assert drift.highest_version(["nightly", "v1.0.7", "latest"]) == "1.0.7"
+
+
+def test_highest_version_no_tags_raises():
+    with pytest.raises(ValueError):
+        drift.highest_version(["nightly", "latest"])
+
+
 # --- parse_policy_version ---
 def test_parse_policy_version_extracts():
     text = "policy_profile: flat\npolicy_version: 1.0.7\n"
