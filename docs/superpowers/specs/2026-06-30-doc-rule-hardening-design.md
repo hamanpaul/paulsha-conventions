@@ -58,7 +58,7 @@
 - 預設值：`["README.md", "docs/**"]`
 - 作用：
   - `R-18` 以 `doc_paths` 判斷「有沒有 docs change」
-  - `R-22` 以 `doc_paths` 決定哪些文件要掃描 dangling reference
+  - `R-22` 以 `doc_paths` 決定候選文件，再套用既有 spec / fixture 內建排除，避免行為回歸
 
 這一層只回答「哪些檔案算 docs」，不負責 coverage、內容完整性或語意正確性。
 
@@ -77,8 +77,8 @@
 - `env_vars`
 - `cli_tree`
 
-extractor 的共同輸出是 fact name 集合；rule 本身不關心來源是 Python 掃描、RPC 分支掃描或
-CLI 樹，只看「抽出了哪些 fact」以及「哪些 doc 應該覆蓋它們」。
+extractor 的共同輸出是 fact name 集合；rule 本身不關心來源是 Python 掃描、regex 擷取或
+CLI 樹生成，只看「抽出了哪些 fact」以及「哪些 doc 應該覆蓋它們」。
 
 ### 3.3 Generated-fact sync layer：一般化 `R-16` 模式
 
@@ -122,6 +122,7 @@ doc_paths:
 
 ```yaml
 doc_coverage:
+  mode: "changed"
   targets:
     - "README.md"
     - "CLAUDE.md"
@@ -130,20 +131,35 @@ doc_coverage:
       include: ["sw_core/**/*.py"]
       exclude: ["**/__init__.py", "**/tests/**"]
     - kind: "rpc_methods"
-      path: "sw_core/service.py"
+      include: ["sw_core/service.py"]
+      pattern: 'method\\s*==\\s*"([^"]+)"'
     - kind: "env_vars"
       include: ["sw_core/**/*.py"]
       prefix: "SERIALWRAP_"
     - kind: "cli_tree"
-      command: "serialwrap"
+      command: "python3 scripts/list-cli-paths.py"
 ```
 
 設計原則：
 
+- `mode` v1 支援 `changed` 與 `all`；**預設為 `changed`**。
+- `changed` 模式以 `base...HEAD` 比較 fact 集合，只要求**本次新增**的 facts 被 mention。
+- 若 `changed` 模式下無法解析 base（例如本地 `--repo .`、無 PR 脈絡），rule 降為 `WARN` 並不做 FAIL 判定。
 - `targets` 必須解析到 `doc_paths` 內的 in-scope docs；若 target 超出 canonical docs 範圍，視為 config 錯誤。
 - `targets` 定義哪些 docs 要參與 mention coverage。
 - `sources` 是 extractor 宣告；每個 extractor 產出 fact name 集合。
 - 一條 coverage rule 的核心邏輯保持固定，repo 差異只落在 extractor config。
+
+#### 4.2.1 v1 extractor contract
+
+| kind | 必填欄位 | 抽取方式 | fact identity |
+|---|---|---|---|
+| `modules` | `include`, optional `exclude` | 列舉 git-tracked 檔案，套 include/exclude glob | repo-relative POSIX 路徑，例如 `sw_core/multi_open.py` |
+| `rpc_methods` | `include`, `pattern` | 對匹配檔案做 regex 掃描；`pattern` 必須恰有一個 capture group | capture group 文字，例如 `session.renumber` |
+| `env_vars` | `include`, `prefix` | 掃描匹配檔案中符合 `PREFIX[A-Z0-9_]+` 的 token | 精確 env 變數名，例如 `SERIALWRAP_SOCKET_PATH` |
+| `cli_tree` | `command` | 執行指令，將 stdout 視為一行一個 fact | 完整命令路徑，例如 `serialwrap session renumber` |
+
+這裡的重點是：v1 的 built-in extractors 都是**明確、可重現、可測**的資料擷取契約，而不是隱含「引擎要自己猜 repo 的 RPC/CLI 結構」。
 
 ### 4.3 `generated_facts`
 
@@ -163,7 +179,16 @@ generated_facts:
 設計原則：
 
 - `generated_facts` 是通用 marker-sync 宣告。
+- marker 語法統一為：
+  ```md
+  <!-- BEGIN: generated-fact marker="rpc-methods" -->
+  ...
+  <!-- END: generated-fact marker="rpc-methods" -->
+  ```
+- 執行模型固定為：`shlex.split`、**不經 shell**、`cwd=repo_root`、`LC_ALL=C`、固定 timeout 30 秒。
+- generic generated facts 只比較**正規化 UTF-8 stdout**；stderr 非空不參與比對，command non-zero exit 直接 `FAIL`。
 - 既有 `cli` 區塊在第一版保留相容；`R-16` 可先沿用既有入口，底層 helper 再抽共用。
+- 既有 `cli-help` marker 與 `R-16` 維持 backward-compatible；generic marker-sync 不強迫舊 repo 立即改 marker。
 - 第二步才考慮是否讓 `cli` 成為 `generated_facts` 的語法糖。
 
 ### 4.4 為何不把設定塞進 `doc_reference`
@@ -187,22 +212,26 @@ generated_facts:
 ### 5.2 `R-22`
 
 - 保持現有 diff-aware dangling reference 機制。
-- 唯一核心變更：掃描範圍改讀 `doc_paths`。
+- 唯一核心變更：掃描範圍改讀 `doc_paths`，但仍保留既有 `openspec/**`、`docs/superpowers/**`、fixture tree 的內建排除。
 - 它仍然只負責**引用完整性**，不負責 coverage 或 semantic correctness。
 
 ### 5.3 Coverage rule
 
 coverage rule 為新 rule，不併入 `R-18` 或 `R-22`。
 
-對每個 extractor 產出的 fact：
+若 repo **未宣告** `doc_coverage`，rule 視為 not-applicable，直接 `PASS`。
 
+若 repo 宣告了 `doc_coverage`，則：
+
+- `mode: changed`：只檢查 `base...HEAD` 新增的 facts
+- `mode: all`：檢查 extractor 產出的全部 facts
 - fact 至少在某個 target doc 被 mention → `PASS`
 - fact 完全未被 target docs mention → `FAIL`
 - config 缺失、extractor 參數無效、target doc 不存在 → `FAIL`
 
 為了避免實作歧義，v1 明確固定 mention 判定：
 
-- `modules`：fact 名稱為檔名（含副檔名），例如 `multi_open.py`
+- `modules`：fact 名稱為 repo-relative 路徑，例如 `sw_core/multi_open.py`
 - `rpc_methods`：fact 名稱為 method 字串本身，例如 `session.renumber`
 - `env_vars`：fact 名稱為環境變數名，例如 `SERIALWRAP_SOCKET_PATH`
 - `cli_tree`：fact 名稱為完整命令路徑，例如 `serialwrap session renumber`
@@ -214,6 +243,8 @@ coverage rule 為新 rule，不併入 `R-18` 或 `R-22`。
 
 generated-fact sync 採 FAIL-fast：
 
+- repo **未宣告** `generated_facts` → rule 視為 not-applicable，直接 `PASS`
+- repo 宣告了 `generated_facts` 但 config 不完整或格式錯誤 → `FAIL`
 - marker block 與 generator 輸出一致 → `PASS`
 - marker 缺失、指令無法執行、輸出不一致 → `FAIL`
 
@@ -236,7 +267,7 @@ generated-fact sync 採 FAIL-fast：
 | `doc_paths` | 宣告 canonical docs 範圍 | glob 清單 | `R-18` / `R-22` 使用的 in-scope doc 集合 |
 | `R-18` | 檢查 code change 是否有 docs touch | `changed_files`, `doc_paths` | `PASS/WARN/SKIP` |
 | `R-22` | 檢查 in-scope docs 的 dangling reference | `doc_paths`, repo snapshot, diff context | `PASS/WARN/FAIL/SKIP` |
-| coverage rule | 檢查 fact omission | `doc_coverage.sources`, `targets` | `PASS/FAIL` |
+| coverage rule | 檢查 fact omission | `doc_coverage.mode`, `sources`, `targets`, diff context | `PASS/WARN/FAIL` |
 | generated-fact sync | 檢查 marker block 是否同步 | `generated_facts` | `PASS/FAIL` |
 | advisory semantic audit | 額外語意稽核 | docs + code + reviewer/LLM | advisory result |
 
@@ -250,6 +281,7 @@ generated-fact sync 採 FAIL-fast：
 - `doc_paths` 預設值與型別驗證
 - `doc_coverage` mapping 結構驗證
 - `generated_facts` list/object 結構驗證
+- `mode` 僅允許 `changed` / `all`
 
 ### 7.2 `R-18` / `R-22` regression
 
@@ -261,6 +293,8 @@ generated-fact sync 採 FAIL-fast：
 
 - fact 被 mention → `PASS`
 - fact 漏記 → `FAIL`
+- `mode: changed` 只對新增 facts 生效
+- `mode: changed` 且 base 不可解析 → `WARN`
 - extractor config 壞掉 → `FAIL`
 - target doc 不存在 → `FAIL`
 - token / phrase boundary 案例固定：完整命中才算，子字串誤中不算
@@ -278,7 +312,7 @@ generated-fact sync 採 FAIL-fast：
 
 - **未宣告新 config 的 repo**：維持既有行為，不因 #26 突然被新 gate 打爆。
 - **`doc_paths`**：屬低風險預設擴充，應自動有 sane default。
-- **`doc_coverage` / `generated_facts`**：採 opt-in，不強制所有下游 repo 同步補大量設定。
+- **`doc_coverage` / `generated_facts`**：採 opt-in；未宣告時 rule not-applicable 直接 `PASS`，只有宣告後才受其 gate 約束。
 
 ### 8.2 rollout 順序
 
