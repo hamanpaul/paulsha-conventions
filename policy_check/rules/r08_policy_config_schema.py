@@ -156,6 +156,49 @@ class R08PolicyConfigSchema:
                     message="conventions_engine.repo must be 'owner/repo' form (no trailing slash or extra path segment)",
                 )
 
+        # 驗證 doc_paths：若存在，須為 list[str]
+        doc_paths = data.get("doc_paths")
+        if doc_paths is not None and (
+            not isinstance(doc_paths, list) or not all(isinstance(x, str) for x in doc_paths)
+        ):
+            return RuleResult(
+                rule_id=self.rule_id,
+                status=Status.FAIL,
+                message="doc_paths must be a list of strings",
+            )
+
+        # 驗證 doc_coverage 區塊：mapping；mode ∈ {changed, all}；targets list[str]；sources list[mapping]
+        doc_coverage = data.get("doc_coverage")
+        if doc_coverage is not None:
+            if not isinstance(doc_coverage, dict):
+                return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                                  message="doc_coverage must be a mapping")
+            mode = doc_coverage.get("mode")
+            if mode is not None and mode not in ("changed", "all"):
+                return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                                  message="doc_coverage.mode must be one of ['all', 'changed']")
+            targets = doc_coverage.get("targets")
+            if targets is not None and (
+                not isinstance(targets, list) or not all(isinstance(x, str) for x in targets)
+            ):
+                return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                                  message="doc_coverage.targets must be a list of strings")
+            sources = doc_coverage.get("sources")
+            if sources is not None and (
+                not isinstance(sources, list) or not all(isinstance(x, dict) for x in sources)
+            ):
+                return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                                  message="doc_coverage.sources must be a list of mappings")
+
+        # 驗證 generated_facts 區塊：list[mapping]
+        generated_facts = data.get("generated_facts")
+        if generated_facts is not None and (
+            not isinstance(generated_facts, list)
+            or not all(isinstance(x, dict) for x in generated_facts)
+        ):
+            return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                              message="generated_facts must be a list of mappings")
+
         # 驗證 moc 區塊：mapping；static/map 為 str；triggers 為 list[str]
         moc = data.get("moc")
         if moc is not None:

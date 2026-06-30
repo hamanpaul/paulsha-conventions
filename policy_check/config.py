@@ -11,6 +11,7 @@ DEFAULT_CODE_PATHS = {
     "stage-driven": ["**/*.py", "**/*.sh", "scripts/**"],
     "flat":         ["**/*.py", "**/*.sh", "scripts/**"],
 }
+DEFAULT_DOC_PATHS = ["README.md", "docs/**"]
 
 
 class ConfigError(Exception):
@@ -40,6 +41,7 @@ def load(repo_root: Path) -> dict:
             f"policy_profile must be one of {VALID_PROFILES}, got {data['policy_profile']}"
         )
     data.setdefault("code_paths", DEFAULT_CODE_PATHS[data["policy_profile"]])
+    data.setdefault("doc_paths", list(DEFAULT_DOC_PATHS))
     data.setdefault("cli", [])
     agent_files = data.get("agent_files")
     if not isinstance(agent_files, dict):

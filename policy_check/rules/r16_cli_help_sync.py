@@ -1,28 +1,10 @@
 from __future__ import annotations
 
-import os
-import re
-import shlex
 import subprocess
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.rules.registry import register
-
-
-def _extract_marker_block(text: str, marker: str) -> tuple[bool, str]:
-    pattern = (
-        rf"<!--\s*BEGIN:\s*cli-help\s+marker=\"{re.escape(marker)}\"\s*-->"
-        rf"(.*?)"
-        rf"<!--\s*END:\s*cli-help\s+marker=\"{re.escape(marker)}\"\s*-->"
-    )
-    match = re.search(pattern, text, flags=re.DOTALL)
-    if not match:
-        return False, ""
-    return True, match.group(1)
-
-
-def _normalize(text: str) -> str:
-    return text.strip()
+from policy_check.rules._marker_sync import marker_block, normalize, run_command
 
 
 @register
@@ -47,7 +29,6 @@ class R16CliHelpSync:
                 message="No CLI entries declared in .paul-project.yml.",
             )
 
-        env = {**os.environ, "LC_ALL": "C"}
         failures: list[str] = []
 
         for index, entry in enumerate(entries, start=1):
@@ -74,26 +55,20 @@ class R16CliHelpSync:
                 failures.append(f"entry[{index}] help_args must be a string or list")
                 continue
 
-            cmd = [*shlex.split(str(command)), *help_args]
             try:
-                proc = subprocess.run(
-                    cmd,
-                    cwd=ctx.repo_root,
-                    env=env,
-                    capture_output=True,
-                    check=False,
-                )
-            except OSError as exc:
+                result = run_command(str(command), ctx.repo_root, extra_args=help_args)
+            except (OSError, subprocess.SubprocessError) as exc:
                 failures.append(f"entry[{index}] command failed to run: {exc}")
                 continue
 
-            if proc.returncode != 0:
+            if result.returncode != 0:
                 failures.append(
-                    f"entry[{index}] command exit={proc.returncode} for {cmd!r}"
+                    f"entry[{index}] command exit={result.returncode} for {command!r}"
                 )
                 continue
 
-            actual = _normalize((proc.stdout + proc.stderr).decode("utf-8", "replace"))
+            # R-16 historically compares combined stdout+stderr.
+            actual = normalize(result.stdout + result.stderr)
 
             target_path = ctx.repo_root / str(reflected_in)
             if not target_path.is_file():
@@ -103,14 +78,14 @@ class R16CliHelpSync:
                 continue
 
             text = target_path.read_text(encoding="utf-8", errors="replace")
-            found, block = _extract_marker_block(text, str(marker))
+            found, block = marker_block(text, str(marker), tag="cli-help")
             if not found:
                 failures.append(
                     f"entry[{index}] marker missing/invalid: marker={marker!r} in {reflected_in}"
                 )
                 continue
 
-            documented = _normalize(block)
+            documented = normalize(block)
             if documented != actual:
                 failures.append(
                     f"entry[{index}] output mismatch for marker={marker!r}: "

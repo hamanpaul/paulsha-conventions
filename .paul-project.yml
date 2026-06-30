@@ -4,6 +4,11 @@ code_paths:
   - "**/*.py"
   - "**/*.sh"
   - "scripts/**"
+# canonical doc scope（#26）：R-18 / R-22 共用範圍。此處 dogfood 顯式宣告預設值；
+# 下游 repo 可加入 CLAUDE.md、skill SKILL.md 等 root 外 canonical docs（見 README 範例）。
+doc_paths:
+  - "README.md"
+  - "docs/**"
 cli:
   - command: "python3 -m policy_check"
     help_args: ["--help"]
