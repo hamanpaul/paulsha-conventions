@@ -41,11 +41,18 @@ def parse_ctags_json(lines: Iterable[str]) -> set[Identity]:
 
 def _run_ctags(target_dir: Path) -> list[str]:
     langs_arg = ",".join(sorted(langs.supported_languages()))
-    proc = subprocess.run(
-        ["ctags", "--output-format=json", "--fields=+lnsSK",
-         f"--languages={langs_arg}", "-R", "-f", "-", str(target_dir)],
-        capture_output=True, text=True, check=False,
-    )
+    try:
+        proc = subprocess.run(
+            ["ctags", "--output-format=json", "--fields=+lnsSK",
+             f"--languages={langs_arg}", "-R", "-f", "-", str(target_dir)],
+            capture_output=True, text=True, check=False,
+        )
+    except FileNotFoundError as exc:
+        # 缺 universal-ctags：給可行動訊息，取代難解的 traceback
+        raise RuntimeError(
+            "universal-ctags 未安裝或不在 PATH；doc-drift 的 symbol 分析需要它"
+            "（CI 安裝：apt-get install -y universal-ctags）。"
+        ) from exc
     return proc.stdout.splitlines()
 
 
