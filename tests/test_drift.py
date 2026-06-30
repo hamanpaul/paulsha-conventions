@@ -159,3 +159,72 @@ def test_report_survives_malformed_repo(monkeypatch, capsys):
     assert "good" in out and "current" in out
     assert "bad" in out and "invalid" in out  # 壞 repo 標 invalid，不炸
     assert "old" in out and "behind" in out
+
+
+# --- codex adversarial review hardening (#23) ---
+import subprocess as _sp
+
+
+def test_parse_policy_version_present_null_is_invalid_marker():
+    # present-but-null policy_version must NOT be treated as unmanaged (gate-evasion);
+    # it classifies as 'invalid' so check mode fails closed.
+    v = drift.parse_policy_version("policy_profile: flat\npolicy_version:\n")
+    assert drift.safe_classify(v, "1.0.7") == "invalid"
+
+
+def test_parse_policy_version_non_dict_does_not_crash():
+    # a truthy non-dict YAML root must not raise AttributeError
+    v = drift.parse_policy_version("true\n")
+    assert drift.safe_classify(v, "1.0.7") == "invalid"
+
+
+def test_parse_policy_version_absent_key_still_unmanaged():
+    assert drift.parse_policy_version("policy_profile: flat\n") is None
+
+
+def test_check_null_local_version_fails_closed(tmp_path):
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version:\n", encoding="utf-8"
+    )
+    assert drift.main(["check", "--repo", str(tmp_path), "--against", "1.0.7"]) == 1
+
+
+def test_report_exits_zero_when_canonical_fetch_fails(monkeypatch, capsys):
+    def boom(*a, **k):
+        raise _sp.CalledProcessError(1, ["gh", "api", "tags"])
+    monkeypatch.setattr(drift, "canonical_version_live", boom)
+    rc = drift.main(["report", "--org", "hamanpaul"])
+    assert rc == 0  # report MUST always exit 0
+
+
+def test_report_marks_fetch_error_distinct_from_unmanaged(monkeypatch, capsys):
+    monkeypatch.setattr(drift, "canonical_version_live", lambda *a, **k: "1.0.7")
+    monkeypatch.setattr(drift, "list_managed_repos", lambda *a, **k: ["err", "none"])
+
+    def fake_fetch(org, repo):
+        if repo == "err":
+            raise drift.DriftFetchError("gh failed")
+        return None  # genuinely absent → unmanaged
+    monkeypatch.setattr(drift, "fetch_policy_version", fake_fetch)
+
+    rc = drift.main(["report", "--org", "hamanpaul"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "err" in out and "error" in out
+    assert "none" in out and "unmanaged" in out
+
+
+def test_gh_passes_timeout(monkeypatch):
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured.update(kwargs)
+
+        class R:
+            returncode = 0
+            stdout = "v1.0.7\n"
+            stderr = ""
+        return R()
+    monkeypatch.setattr(drift.subprocess, "run", fake_run)
+    drift._gh(["api", "x"])
+    assert captured.get("timeout")

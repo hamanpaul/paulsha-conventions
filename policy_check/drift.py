@@ -34,13 +34,28 @@ def parse_version(ver: str) -> tuple[int, int, int, int]:
 
 
 def parse_policy_version(yaml_text: str) -> str | None:
-    """Extract policy_version from .paul-project.yml content; None if absent."""
+    """Extract policy_version from a policy config's content.
+
+    Returns None only when there is genuinely no declaration (empty config or a
+    mapping without the key) → classified ``unmanaged``. Returns the empty
+    string for a present-but-unusable declaration (broken YAML, non-mapping
+    root, or a null value) so it classifies as ``invalid`` and the freshness
+    gate fails closed instead of being silently waved through as unmanaged.
+    """
     try:
-        data = yaml.safe_load(yaml_text) or {}
+        data = yaml.safe_load(yaml_text)
     except yaml.YAMLError:
-        return None
-    ver = data.get("policy_version")
-    return str(ver) if ver is not None else None
+        return ""  # broken YAML → present-but-invalid (not unmanaged)
+    if data is None:
+        return None  # empty config → no declaration
+    if not isinstance(data, dict):
+        return ""  # non-mapping root (scalar/list) → invalid, not unmanaged
+    if "policy_version" not in data:
+        return None  # mapping without the key → unmanaged
+    ver = data["policy_version"]
+    if ver is None:
+        return ""  # present-but-null → invalid (fail closed in check mode)
+    return str(ver)
 
 
 def classify(repo_ver: str | None, canonical_ver: str) -> str:
@@ -98,9 +113,27 @@ def format_report(rows: list[tuple[str, str | None, str]], canonical: str) -> st
 
 # --- I/O edges (gh CLI); not unit-tested, exercised via manual smoke ---
 
+GH_TIMEOUT = 30  # bound every gh call so report/check can't hang indefinitely
 
-def _gh(args: list[str]) -> str:
-    return subprocess.check_output(["gh", *args], text=True, stderr=subprocess.DEVNULL)
+
+class DriftFetchError(Exception):
+    """A gh/network failure (not a clean 404) while fetching repo data.
+
+    Lets the report distinguish "couldn't fetch" from genuinely ``unmanaged``.
+    """
+
+
+def _gh(args: list[str], timeout: int = GH_TIMEOUT) -> str:
+    proc = subprocess.run(["gh", *args], text=True, capture_output=True, timeout=timeout)
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(
+            proc.returncode, ["gh", *args], output=proc.stdout, stderr=proc.stderr)
+    return proc.stdout
+
+
+def _is_not_found(exc: subprocess.CalledProcessError) -> bool:
+    blob = f"{exc.stderr or ''}{exc.output or ''}"
+    return "404" in blob or "Not Found" in blob
 
 
 def local_policy_version(path: str = ".") -> str | None:
@@ -138,32 +171,59 @@ def list_managed_repos(org: str = CANONICAL_ORG, limit: int = 200) -> list[str]:
 
 
 def fetch_policy_version(org: str, repo: str) -> str | None:
-    """Fetch a repo's policy_version; None if no policy config file exists.
+    """Fetch a repo's policy_version; None if no policy config file exists (404).
 
     Tries both CONFIG_NAMES (preferring .project-policy.yml) so a downstream
-    repo using the legacy name is not silently treated as unmanaged.
+    repo using the legacy name is not silently treated as unmanaged. Raises
+    DriftFetchError on a gh/network failure that is NOT a clean 404, so a
+    transient error is not misreported as ``unmanaged``.
     """
+    errored: Exception | None = None
     for name in CONFIG_NAMES:
         try:
             out = _gh([
                 "api", f"repos/{org}/{repo}/contents/{name}",
                 "--header", "Accept: application/vnd.github.raw",
             ])
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as exc:
+            if _is_not_found(exc):
+                continue  # this filename absent; try the next
+            errored = exc
+            continue
+        except subprocess.SubprocessError as exc:  # timeout etc.
+            errored = exc
             continue
         return parse_policy_version(out)
-    return None
+    if errored is not None:
+        raise DriftFetchError(str(errored)) from errored
+    return None  # all names cleanly 404 → genuinely absent
 
 
 # --- CLI ---
 
 
 def cmd_report(args: argparse.Namespace) -> int:
-    canonical = canonical_version_live()
+    # report is an operator dashboard: it MUST always exit 0 and never crash,
+    # so canonical/listing failures degrade to a message rather than an error.
+    try:
+        canonical = canonical_version_live()
+    except (subprocess.SubprocessError, ValueError, OSError) as exc:
+        print(f"policy-drift report: 無法取得 canonical 版本，跳過：{exc}", file=sys.stderr)
+        return 0
+    try:
+        names = list_managed_repos(args.org)
+    except (subprocess.SubprocessError, ValueError, OSError) as exc:
+        print(f"policy-drift report: 無法列出 {args.org} 的 repo，跳過：{exc}", file=sys.stderr)
+        return 0
     rows: list[tuple[str, str | None, str]] = []
-    for name in list_managed_repos(args.org):
-        ver = fetch_policy_version(args.org, name)
-        rows.append((name, ver, safe_classify(ver, canonical)))
+    for name in names:
+        try:
+            ver = fetch_policy_version(args.org, name)
+            status = safe_classify(ver, canonical)
+        except DriftFetchError as exc:
+            ver, status = None, "error"  # couldn't fetch ≠ unmanaged
+            print(f"policy-drift report: {name} 取版失敗（標為 error）：{exc}", file=sys.stderr)
+        rows.append((name, ver, status))
     if args.json:
         print(json.dumps(
             {"canonical": canonical,
@@ -176,7 +236,15 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    canonical = args.against or canonical_version_live()
+    if args.against:
+        canonical = args.against
+    else:
+        try:
+            canonical = canonical_version_live()
+        except (subprocess.SubprocessError, ValueError, OSError) as exc:
+            # gate can't verify canonical → fail closed rather than wave merge through
+            print(f"policy-drift: 無法取得 canonical 版本，fail-closed：{exc}", file=sys.stderr)
+            return 1
     repo_ver = local_policy_version(args.repo)
     status = safe_classify(repo_ver, canonical)
     print(f"policy-drift: {status} (repo={repo_ver or '—'} canonical={canonical})")
