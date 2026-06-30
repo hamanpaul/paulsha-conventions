@@ -10,7 +10,9 @@
   不判斷語意（描述是否過時交給 reviewer/Copilot），不檢外部 URL 活性（交給 lychee）。
 - **本次新破壞 FAIL、陳年懸空 WARN**：以 PR base→head 差集判定。FAIL 以非零 exit code 擋 merge，WARN 為 advisory（不擋）。
 - **語言無關 scoped identity**：symbol 抽取用 universal-ctags JSON 輸出，比對 `(language, kind, scope, name)`
-  四元組差集求 removed。限定式 token（如 `Foo.bar`）精準命中；裸名（`bar`）在多 scope 同名時只 WARN（不誤擋）。
+  四元組差集求 removed。只承認**結構化識別字**為 symbol token：限定式（`Foo.bar`，精準命中）、snake_case（`do_close`）、
+  CamelCase（`MyClass`）。結構化裸名在多 scope 同名時只 WARN（不誤擋）；**純單字**（`close`/`run` 等，
+  無底線/大寫/限定）刻意不視為 symbol，避免常見英文字誤報——要治理請用限定式 `Class.method`。
 
 ## 輸入
 
@@ -18,6 +20,8 @@
 |-------|------|------|
 | `mode` | `doc-drift` | `doc-drift`（refs + paths + symbols）或 `moc`（refs + paths + coverage/orphan）。 |
 | `base-sha` | （取自 event） | PR base 的精確 SHA。未提供時用 `github.event.pull_request.base.sha`。 |
+| `map` | `docs/MOC.md` | **僅 `moc` mode**：MOC 地圖檔路徑（相對 repo 根）。 |
+| `governed-prefix` | （核心預設） | **僅 `moc` mode**：受治理產物路徑前綴，空白或逗號分隔可多個（如 `docs/ specs/`）。 |
 
 ## 輸出與 exit code
 
@@ -74,19 +78,22 @@ symbol 抽取的 public kind 白名單（`policy_check/doc_drift/langs.py`）：
 
 ## 已知侷限
 
-- **裸名歧義只 WARN**：doc 用裸名（無 scope 限定）引用一個在多個 scope 同名的 symbol 時，
-  為避免誤擋只回 WARN，不 FAIL。要精準命中請在 doc 用限定式（`Class.method`）。
+- **純單字不偵測**：為避免 `close`/`open`/`run` 等常見英文字誤報，無底線/大寫/限定的純單字不視為
+  symbol token；要治理單字符號請在 doc 用限定式（`Class.method`）。結構化裸名（snake_case/CamelCase）
+  在多 scope 同名時只 WARN、不 FAIL。R-22 規則與本 Action 走同一條核心判定（單一真相，不 drift）。
 - 只覆蓋上表語言；未登錄語言的 symbol 不納入差集（不誤報，但也不偵測）。
 - 不做語意陳舊判斷（引用仍在但描述過時）；該層交由 PR reviewer/Copilot（advisory）。
 
 ## 誤報豁免
 
-- **行內 marker**：在 doc 該行加 `<!-- doc-drift-ignore -->` 略過該行。
-- **allowlist 檔**：repo 根的 `.doc-drift-allow` 列 `<doc路徑> <token>` 對，命中則跳過。
+- **行內 marker**：在 doc 該行加 HTML 註解 `<!-- doc-drift-ignore -->` 略過該行所有引用。
+- **allowlist 檔**：repo 根的 `.doc-drift-allow`，**每行一條**：`symbol:<name>`（豁免該 symbol 名）
+  或一個 doc 路徑 glob（如 `docs/legacy/*`，豁免該檔所有引用）；`#` 開頭為註解。
 
 ## demo 與 self-test
 
 `examples/doc-drift/` 提供 green（引用存在）／known-bad（引用本次被移除）兩組對照；
 CI self-test（`tests/test_doc_drift_demo.py`，`.github/workflows/self-test.yml`）在臨時 git repo
-重建 base→head 兩 commit 實際斷言 green=exit0／red=exit1，並故意用 `fetch-depth: 1` shallow checkout
-驗證 Action 自取 base 物件不前置失敗。
+重建 base→head 兩 commit，端到端斷言 green=exit0／red=exit1。self-test job 以 `fetch-depth: 1`
+執行，確保流程在 shallow checkout 環境下仍可運行；base 物件供給的 `git fetch` fallback 由
+`provision.ensure_object` 的單元測試（`tests/test_doc_drift_provision.py`）覆蓋。

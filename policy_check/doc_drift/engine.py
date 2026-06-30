@@ -89,12 +89,15 @@ def run_moc(repo_root, base_ref, map_rel, prefixes, head_ref="HEAD"):
     except OSError:
         return [f"moc.map '{map_rel}' 不存在"], []
     allow = _load_allowlist(root)
+    # linked 以全文計算：被 inline-ignore 的行仍算「已連結」，否則僅出現在 ignore 行的
+    # 受治理檔會被誤判 orphan。inline-ignore / allowlist 只影響 dangling 的 FAIL/WARN 判定。
     linked = set()
+    for _tok, cands in _map_refs(map_rel, text, prefixes):
+        linked.update(cands)
     for line in text.splitlines():
         if dd_exempt.line_is_ignored(line):
             continue
         for tok, cands in _map_refs(map_rel, line, prefixes):
-            linked.update(cands)
             if dd_exempt.is_allowed(map_rel, tok, allow):
                 continue
             if any(c in head_files for c in cands):

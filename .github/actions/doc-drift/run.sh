@@ -15,9 +15,18 @@ if [[ -z "$BASE_SHA" ]]; then
   exit 2
 fi
 
+MODE="${DOC_DRIFT_MODE:-doc-drift}"
+ARGS=(--mode "$MODE" --repo "${GITHUB_WORKSPACE:-.}" --base "$BASE_SHA" --head "$HEAD_SHA")
+if [[ "$MODE" == "moc" ]]; then
+  ARGS+=(--map "${DOC_DRIFT_MAP:-docs/MOC.md}")
+  if [[ -n "${DOC_DRIFT_GOVERNED_PREFIX:-}" ]]; then
+    # 空白或逗號分隔 → 多個 --governed-prefix
+    IFS=', ' read -r -a _prefs <<< "${DOC_DRIFT_GOVERNED_PREFIX}"
+    for p in "${_prefs[@]}"; do
+      [[ -n "$p" ]] && ARGS+=(--governed-prefix "$p")
+    done
+  fi
+fi
+
 PY=python3; command -v python3 >/dev/null || PY=python
-exec "$PY" -m policy_check.doc_drift \
-  --mode "${DOC_DRIFT_MODE:-doc-drift}" \
-  --repo "${GITHUB_WORKSPACE:-.}" \
-  --base "$BASE_SHA" \
-  --head "$HEAD_SHA"
+exec "$PY" -m policy_check.doc_drift "${ARGS[@]}"

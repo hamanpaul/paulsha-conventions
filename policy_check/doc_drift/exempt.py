@@ -1,14 +1,17 @@
 # policy_check/doc_drift/exempt.py
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 
-_MARKER = "doc-drift-ignore"
+# 僅承認 HTML 註解形式的 marker，避免內文／反引號裡字面提到 doc-drift-ignore
+# 時誤抑制同一行的真實引用。
+_MARKER_RE = re.compile(r"<!--\s*doc-drift-ignore\s*-->")
 
 
 def line_is_ignored(line: str) -> bool:
-    return _MARKER in line
+    return bool(_MARKER_RE.search(line))
 
 
 @dataclass

@@ -24,6 +24,8 @@ def parse_ctags_json(lines: Iterable[str]) -> set[Identity]:
             obj = json.loads(line)
         except json.JSONDecodeError:
             continue  # 跳過 ctags 偶發的非 tag 行
+        if not isinstance(obj, dict):
+            continue  # 合法 JSON 但非物件（如裸數字/字串/陣列）也跳過
         if obj.get("_type") != "tag":
             continue
         language = obj.get("language") or ""
@@ -59,5 +61,8 @@ def symbols_at(repo_root: Path, sha: str) -> set[Identity]:
         extract_dir = Path(tmp) / "tree"
         extract_dir.mkdir()
         with tarfile.open(tar_path) as tf:
-            tf.extractall(extract_dir)
+            try:
+                tf.extractall(extract_dir, filter="data")  # 安全過濾（Py>=3.12 / 回填版）
+            except TypeError:
+                tf.extractall(extract_dir)  # 舊 Python 無 filter 參數
         return parse_ctags_json(_run_ctags(extract_dir))

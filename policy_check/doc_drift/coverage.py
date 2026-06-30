@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-# 預設受治理前綴（沿用 R-24 現值）。openspec change 以「目錄下任一連結即算」處理，
-# 故這裡的 plans/specs 為精確檔案；openspec changes 的孤兒判定由呼叫端傳對應集合。
+# 預設受治理前綴：與 R-24 重構前的 _GOVERNED_PREFIXES 等價（沿用現值，不偷偷收窄）。
+# `docs/superpowers/` 廣義涵蓋其下 plans/specs 等所有 .md；openspec change 的孤兒判定
+# 由呼叫端以「目錄下任一連結即算」另計（見 r24_moc_alignment）。
 DEFAULT_GOVERNED_PREFIXES = (
     "openspec/changes/",
-    "docs/superpowers/plans/",
-    "docs/superpowers/specs/",
+    "docs/superpowers/",
 )
 
 

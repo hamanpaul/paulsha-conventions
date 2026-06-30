@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import re
 from fnmatch import fnmatch
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.rules.registry import register
 from policy_check.rules._doc_scope import configured_doc_paths, matches_doc_path
 from policy_check.rules._doc_links import (
-    LINK_RE as _LINK_RE,
-    looks_like_path as _looks_like_path,
-    path_candidates as _path_candidates,
     git_tracked as _git_tracked,
     resolve_base as _resolve_base,
 )
+from policy_check.doc_drift import refs as dd_refs
 from policy_check.doc_drift import symbols as dd_symbols
 from policy_check.doc_drift import drift as dd_drift
 from policy_check.doc_drift import provision as dd_provision
@@ -24,15 +21,6 @@ _SELF_EXEMPT = (
     "tests/test_rule_r22_doc_reference.py",
     "tests/fixtures/doc-reference/**",
 )
-
-_CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
-_SNAKE_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
-_CAMEL_RE = re.compile(r"^[A-Za-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*$")
-# 限定式：A.b（含點，末段為 snake/Camel/簡單識別字）
-_QUALIFIED_RE = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$")
-# 裸名識別字（含裸 member 名，如 `close`），交由 scoped 核心判定歧義/移除
-_BARE_RE = re.compile(r"^[a-z][a-z0-9]*$")
-
 
 def _in_scope(rel: str, doc_paths: list[str]) -> bool:
     # repo-declared canonical scope (doc_paths) minus rule-level built-in noise.
@@ -49,33 +37,6 @@ def _is_exempt(rel: str, allow: list[str]) -> bool:
         if rel == base or rel.startswith(base.rstrip("/") + "/"):
             return True
     return False
-
-
-def _is_symbol(tok: str) -> bool:
-    if len(tok) < 3:
-        return False
-    return bool(
-        _SNAKE_RE.match(tok)
-        or _CAMEL_RE.match(tok)
-        or _QUALIFIED_RE.match(tok)
-        or _BARE_RE.match(tok)
-    )
-
-
-def _extract_refs(doc_rel: str, text: str):
-    """yield (kind, token, payload)。kind=='path' → payload=list[str] 候選；'symbol' → payload=name。"""
-    for m in _LINK_RE.finditer(text):
-        cands = _path_candidates(doc_rel, m.group(1))
-        if cands:
-            yield ("path", m.group(1), cands)
-    for m in _CODE_SPAN_RE.finditer(text):
-        tok = m.group(1).strip()
-        if _looks_like_path(tok):
-            cands = _path_candidates(doc_rel, tok)
-            if cands:
-                yield ("path", tok, cands)
-        elif _is_symbol(tok):
-            yield ("symbol", tok, tok)
 
 
 @register
@@ -124,7 +85,7 @@ class R22DocReference:
             for line in text.splitlines():
                 if dd_exempt.line_is_ignored(line):
                     continue
-                for kind, token, payload in _extract_refs(rel, line):
+                for kind, token, payload in dd_refs.extract_refs(rel, line):
                     if dd_exempt.is_allowed(rel, token, dd_allow):
                         continue
                     if kind == "path" and not any(c in head_files for c in payload):
