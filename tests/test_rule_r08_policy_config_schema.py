@@ -198,3 +198,23 @@ def test_r08_fail_on_moc_map_not_str(tmp_path):
     result = _r08().check(_ctx(repo))
     assert result.status == Status.FAIL
     assert "moc.map" in result.message
+
+
+def test_r08_fail_when_doc_paths_is_not_list(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.7\ndoc_paths: CLAUDE.md\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "doc_paths" in result.message
+
+
+def test_r08_pass_when_doc_paths_is_string_list(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.7\n"
+        "doc_paths: [\"README.md\", \"docs/**\", \"CLAUDE.md\"]\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS

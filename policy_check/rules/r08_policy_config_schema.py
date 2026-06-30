@@ -156,6 +156,17 @@ class R08PolicyConfigSchema:
                     message="conventions_engine.repo must be 'owner/repo' form (no trailing slash or extra path segment)",
                 )
 
+        # 驗證 doc_paths：若存在，須為 list[str]
+        doc_paths = data.get("doc_paths")
+        if doc_paths is not None and (
+            not isinstance(doc_paths, list) or not all(isinstance(x, str) for x in doc_paths)
+        ):
+            return RuleResult(
+                rule_id=self.rule_id,
+                status=Status.FAIL,
+                message="doc_paths must be a list of strings",
+            )
+
         # 驗證 moc 區塊：mapping；static/map 為 str；triggers 為 list[str]
         moc = data.get("moc")
         if moc is not None:

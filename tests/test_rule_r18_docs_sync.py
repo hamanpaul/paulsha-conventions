@@ -10,12 +10,14 @@ def make_ctx(
     repo_root: Path,
     changed_files: list[str] | None = None,
     labels: list[str] | None = None,
+    *,
+    config: dict | None = None,
 ) -> RuleContext:
     return RuleContext(
         repo_root=repo_root,
         profile="flat",
         policy_version="1.0.1",
-        config={"code_paths": ["**/*.py", "**/*.sh", "scripts/**"]},
+        config=config or {"code_paths": ["**/*.py", "**/*.sh", "scripts/**"]},
         changed_files=changed_files or [],
         pr_labels=labels or [],
     )
@@ -63,3 +65,31 @@ def test_r18_warn_when_code_change_without_docs(tmp_path):
 
     assert result.status == Status.WARN
     assert "docs" in result.message.lower()
+
+
+def test_r18_pass_when_code_change_with_custom_doc_path(tmp_path):
+    result = get_rule("R-18").check(
+        make_ctx(
+            tmp_path,
+            changed_files=["policy_check/foo.py", "CLAUDE.md"],
+            config={
+                "code_paths": ["**/*.py", "**/*.sh", "scripts/**"],
+                "doc_paths": ["README.md", "docs/**", "CLAUDE.md"],
+            },
+        )
+    )
+    assert result.status == Status.PASS
+
+
+def test_r18_warn_when_custom_doc_path_not_touched(tmp_path):
+    result = get_rule("R-18").check(
+        make_ctx(
+            tmp_path,
+            changed_files=["policy_check/foo.py"],
+            config={
+                "code_paths": ["**/*.py", "**/*.sh", "scripts/**"],
+                "doc_paths": ["README.md", "docs/**", "CLAUDE.md"],
+            },
+        )
+    )
+    assert result.status == Status.WARN
