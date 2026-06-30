@@ -13,12 +13,17 @@ def main(argv=None) -> int:
     p.add_argument("--repo", default=".")
     p.add_argument("--base", required=True)
     p.add_argument("--head", default="HEAD")
+    p.add_argument("--map", default="docs/MOC.md")
+    p.add_argument("--governed-prefix", action="append", default=None, dest="prefixes")
     args = p.parse_args(argv)
 
     if args.mode == "doc-drift":
         fails, warns = engine.run_doc_drift(args.repo, args.base, args.head)
     else:
-        fails, warns = [], []  # moc mode 於 Task 後續接 coverage（P2 充實）
+        prefixes = tuple(args.prefixes) if args.prefixes else None
+        from policy_check.doc_drift.coverage import DEFAULT_GOVERNED_PREFIXES
+        fails, warns = engine.run_moc(args.repo, args.base, args.map,
+                                      prefixes or DEFAULT_GOVERNED_PREFIXES, args.head)
     for line in fails:
         print(f"FAIL {line}")
     for line in warns:

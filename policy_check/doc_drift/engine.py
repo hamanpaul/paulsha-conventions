@@ -44,3 +44,43 @@ def run_doc_drift(repo_root: Path, base_ref: str, head_ref: str = "HEAD"):
             elif kind == "path" and not any(c in head_files for c in payload):
                 warns.append(f"{rel} -> {token}")
     return fails, warns
+
+
+from policy_check.doc_drift import coverage as dd_coverage
+from policy_check.doc_drift.paths import LINK_RE, looks_like_path, path_candidates
+import re as _re
+
+_CODE_SPAN = _re.compile(r"`([^`\n]+)`")
+
+
+def _map_refs(map_rel, text, prefixes):
+    tokens = [m.group(1) for m in LINK_RE.finditer(text)]
+    tokens += [t for t in (m.group(1).strip() for m in _CODE_SPAN.finditer(text)) if looks_like_path(t)]
+    for tok in tokens:
+        cands = [c for c in path_candidates(map_rel, tok) if c.startswith(tuple(prefixes))]
+        if cands:
+            yield tok, cands
+
+
+def run_moc(repo_root, base_ref, map_rel, prefixes, head_ref="HEAD"):
+    root = Path(repo_root)
+    base = resolve_base(root, base_ref)
+    head_files = git_tracked(root)
+    base_files = git_tracked(root, base) if base else set()
+    fails, warns = [], []
+    try:
+        text = (root / map_rel).read_text(encoding="utf-8")
+    except OSError:
+        return [f"moc.map '{map_rel}' 不存在"], []
+    linked = set()
+    for tok, cands in _map_refs(map_rel, text, prefixes):
+        linked.update(cands)
+        if any(c in head_files for c in cands):
+            continue
+        if base and any(c in base_files for c in cands):
+            fails.append(f"{map_rel} -> {tok} (removed this change)")
+        else:
+            warns.append(f"{map_rel} -> {tok}")
+    for orphan in dd_coverage.orphans(head_files, linked, prefixes=tuple(prefixes)):
+        warns.append(f"orphan: {orphan} 未被 {map_rel} 連結")
+    return fails, warns
