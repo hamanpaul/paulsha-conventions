@@ -107,6 +107,27 @@ def test_r22_excludes_spec_trees(tmp_path):
     assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
 
 
+def test_r22_custom_doc_paths_are_scanned(tmp_path):
+    # A repo-declared canonical doc outside README.md/docs/ must be scanned.
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text("doc_paths:\n  - GUIDE.md\n  - docs/**\n"))
+    _write(tmp_path, "GUIDE.md", "see [gone](./missing_module.py)\n")
+    _commit(tmp_path)
+    res = get_rule().check(make_ctx(tmp_path))
+    assert res.status == Status.WARN
+    assert "missing_module.py" in res.detail
+
+
+def test_r22_builtin_excludes_survive_wide_doc_paths(tmp_path):
+    # Even if doc_paths matches everything, built-in noise trees stay excluded.
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text("doc_paths:\n  - '**'\n"))
+    _write(tmp_path, "docs/superpowers/specs/x.md", "[future](./not_yet.py)\n")
+    _write(tmp_path, "openspec/changes/y/proposal.md", "[future](./not_yet.py)\n")
+    _commit(tmp_path)
+    assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
+
+
 def test_r22_path_removed_this_pr_is_fail(tmp_path):
     _init_repo(tmp_path)
     _write(tmp_path, ".paul-project.yml", _cfg_text())

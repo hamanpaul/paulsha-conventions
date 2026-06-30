@@ -218,3 +218,89 @@ def test_r08_pass_when_doc_paths_is_string_list(tmp_path):
     )
     result = _r08().check(_ctx(repo))
     assert result.status == Status.PASS
+
+
+# ---- doc_coverage schema (issue #26) ----
+
+def test_r08_fail_when_doc_coverage_not_mapping(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.7\ndoc_coverage: nope\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "doc_coverage" in result.message
+
+
+def test_r08_fail_when_doc_coverage_mode_invalid(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.7\ndoc_coverage:\n  mode: sometimes\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "doc_coverage.mode" in result.message
+
+
+def test_r08_fail_when_doc_coverage_targets_not_list(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.7\ndoc_coverage:\n  targets: README.md\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "doc_coverage.targets" in result.message
+
+
+def test_r08_fail_when_doc_coverage_sources_not_list(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.7\ndoc_coverage:\n  sources:\n    kind: modules\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "doc_coverage.sources" in result.message
+
+
+def test_r08_pass_valid_doc_coverage(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.7\n"
+        "doc_coverage:\n  mode: changed\n  targets: [\"README.md\"]\n"
+        "  sources:\n    - kind: modules\n      include: [\"pkg/**/*.py\"]\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
+
+
+# ---- generated_facts schema (issue #26) ----
+
+def test_r08_fail_when_generated_facts_not_list(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.7\ngenerated_facts:\n  kind: cli_help\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "generated_facts" in result.message
+
+
+def test_r08_fail_when_generated_facts_entry_not_mapping(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.7\ngenerated_facts:\n  - just-a-string\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "generated_facts" in result.message
+
+
+def test_r08_pass_valid_generated_facts(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.7\n"
+        "generated_facts:\n  - kind: fact_list\n    command: echo hi\n"
+        "    reflected_in: README.md\n    marker: rpc\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS

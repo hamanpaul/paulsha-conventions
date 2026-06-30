@@ -7,6 +7,7 @@ from pathlib import Path
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.rules.registry import register
+from policy_check.rules._doc_scope import configured_doc_paths, matches_doc_path
 from policy_check.rules._doc_links import (
     LINK_RE as _LINK_RE,
     looks_like_path as _looks_like_path,
@@ -15,7 +16,6 @@ from policy_check.rules._doc_links import (
     resolve_base as _resolve_base,
 )
 
-_IN_SCOPE_PREFIXES = ("docs/",)           # 加上 README.md（見 _in_scope）
 _EXCLUDE_PREFIXES = ("openspec/", "docs/superpowers/", "tests/fixtures/doc-reference/")
 _SELF_EXEMPT = (
     "policy_check/rules/r22_doc_reference.py",
@@ -29,10 +29,11 @@ _CAMEL_RE = re.compile(r"^[A-Za-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*$")
 _DEFCLASS_RE = re.compile(r"^([+-])\s*(?:async\s+)?(?:def|class)\s+([A-Za-z_]\w*)")
 
 
-def _in_scope(rel: str) -> bool:
+def _in_scope(rel: str, doc_paths: list[str]) -> bool:
+    # repo-declared canonical scope (doc_paths) minus rule-level built-in noise.
     if rel.startswith(_EXCLUDE_PREFIXES):
         return False
-    return rel == "README.md" or rel.startswith(_IN_SCOPE_PREFIXES)
+    return matches_doc_path(rel, doc_paths)
 
 
 def _is_exempt(rel: str, allow: list[str]) -> bool:
@@ -104,6 +105,7 @@ class R22DocReference:
 
         root = ctx.repo_root
         config = ctx.config or {}
+        doc_paths = configured_doc_paths(config)
         allow = (config.get("doc_reference") or {}).get("allow", [])
         head_files = _git_tracked(root)
         base = _resolve_base(root, ctx.pr_base_ref)
@@ -113,7 +115,7 @@ class R22DocReference:
         fails: list[str] = []
         warns: list[str] = []
         for rel in sorted(head_files):
-            if not _in_scope(rel) or _is_exempt(rel, allow):
+            if not _in_scope(rel, doc_paths) or _is_exempt(rel, allow):
                 continue
             try:
                 text = (root / rel).read_text(encoding="utf-8")

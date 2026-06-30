@@ -22,7 +22,7 @@
 
 版本譜系（policy_version ↔ engine tag/SHA 對照）見 [`RELEASES.md`](./RELEASES.md)。
 
-## 規則總覽（R-01 ~ R-24）
+## 規則總覽（R-01 ~ R-26）
 
 | ID | 檢查項 | 失敗條件 | 豁免 label |
 |----|--------|----------|------------|
@@ -47,9 +47,11 @@
 | R-19 | repo 有測試則 CI 必須執行 | 存在 `tests/`（含 `test_*.py` / `*_test.py`）但 `.github/workflows/**` 無任何測試執行指令（pytest / unittest / npm test 等） | `policy-exempt:ci-tests` |
 | R-20 | Workflow policy_version 與 config 同步 | workflow 內宣告的 `policy_version` / `POLICY_VERSION` 字面值與 `.paul-project.yml` 的 `policy_version` 不一致 | — |
 | R-21 | tier=shareable repo 機密掃描 | 宣告 `tier: shareable` 的 repo 含雇主標記（內部代號、裝置型號等）／個人絕對路徑／憑證模式，且不在 `secret_scan.allow` 或自我豁免範圍 | `policy-exempt:secret-scan` |
-| R-22 | docs 對 code 產物引用無懸空 | `README.md` / `docs/**` 引用的路徑／內部連結／反引號 symbol 在 repo 不存在；本次變更新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）降 WARN | `policy-exempt:doc-reference` |
+| R-22 | docs 對 code 產物引用無懸空 | canonical doc scope（`doc_paths`，預設 `README.md` / `docs/**`）引用的路徑／內部連結／反引號 symbol 在 repo 不存在；本次變更新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）降 WARN；`openspec/**`・`docs/superpowers/**`・fixtures 內建排除 | `policy-exempt:doc-reference` |
 | R-23 | 引擎 pin 版本與 policy_version 對齊 | workflow `uses:` 指向 `conventions_engine.repo` 的引擎版本（tag `@vX.Y.Z` 或 SHA `@<sha>` + 尾註 `# vX.Y.Z`）與 `.paul-project.yml` 的 `policy_version` 不一致 **FAIL**；純 SHA 無註解 **WARN**；`./` 在地引用或未設 `conventions_engine.repo` 則 NA | `policy-exempt:engine-pin` |
 | R-24 | MOC 與本次變更對齊 | repo 宣告 `moc` 時：`moc.triggers` 命中但 `moc.static` 未同步（**WARN**）／`moc.map` 連結懸空（本次新破壞 **FAIL**、陳年 **WARN**）／active openspec change・plan・spec 未被連結（**WARN**，永不 FAIL）；未宣告 `moc` 則 NA | `policy-exempt:moc-alignment` |
+| R-25 | 文件覆蓋（omission gate，opt-in） | repo 宣告 `doc_coverage` 時：extractor 抽出的 public fact 未在任一 target doc 被精確 mention 則 **FAIL**（`mode: changed` 只查本次新增 fact、`mode: all` 查全部）；`mode: changed` 缺 base diff context 降 **WARN**；target 超出 `doc_paths`／不存在／extractor 設定無效 **FAIL**；未宣告 `doc_coverage` 則 NA | — |
+| R-26 | 生成事實 marker 同步（opt-in） | repo 宣告 `generated_facts` 時：`generated-fact` marker 區塊內容與 command 正規化 stdout 不一致、marker 缺失、command 非 0 結束、或設定不完整則 **FAIL**；與 R-16 的 `cli-help` marker 並存不互相覆蓋；未宣告 `generated_facts` 則 NA | — |
 
 **Exemption Labels 白名單**：上表所列 `policy-exempt:*` / `skip-changelog` / `wip` 即所有可用豁免 label；gate 只認這些，其他一律視同未豁免。
 
@@ -70,6 +72,47 @@
 - **修復（升）**：落後 repo 由其自身 agent 依 [RELEASES.md](RELEASES.md) 的「升版傳播 SOP」自助升版。
 
 > `policy_check.drift` 是 ops 工具，**非 R-xx gate 規則**，不進 `python3 -m policy_check --repo .` 的 FAIL 集合。
+
+### 文件規則設定面（`doc_paths` / `doc_coverage` / `generated_facts`）
+
+`.paul-project.yml` 提供三個文件治理設定面，皆向後相容（未宣告即維持既有行為）：
+
+```yaml
+# 1) canonical doc scope：R-18 / R-22 共用；未宣告時預設 README.md + docs/**
+doc_paths:
+  - "README.md"
+  - "docs/**"
+  - "CLAUDE.md"
+
+# 2) doc_coverage（opt-in，R-25）：抓「新增了 X 卻沒記」的 omission drift
+doc_coverage:
+  mode: "changed"          # changed（只查本次新增 fact，預設）| all（查全部）
+  targets: ["README.md"]   # 必須落在 doc_paths 內的 canonical docs
+  sources:
+    - kind: "modules"      # fact = repo-relative 路徑
+      include: ["pkg/**/*.py"]
+      exclude: ["**/__init__.py"]
+    - kind: "rpc_methods"  # fact = pattern 的單一 capture group
+      include: ["pkg/service.py"]
+      pattern: 'method == "([^"]+)"'
+    - kind: "env_vars"     # fact = PREFIX[A-Z0-9_]+ token
+      include: ["pkg/**/*.py"]
+      prefix: "APP_"
+    - kind: "cli_tree"     # fact = command stdout 一行一個命令路徑
+      command: "python3 scripts/list-cli-paths.py"
+
+# 3) generated_facts（opt-in，R-26）：通用 marker-sync，把 R-16 的 cli-help 模式一般化
+generated_facts:
+  - kind: "fact_list"
+    command: "python3 scripts/render-rpc-facts.py"
+    reflected_in: "README.md"
+    marker: "rpc-methods"
+```
+
+- **mention 判定**：R-25 採區分大小寫的精確 token/phrase 比對，子字串命中不算覆蓋（例如 `session.closed` 不滿足 `session.close`）。
+- **changed 模式邊界**：缺 base diff context（如本地 `--repo .`）時降 WARN，不在無證據下 FAIL；`cli_tree` 無法快照 base，僅在 `mode: all` 受檢。
+- **generated-fact marker 語法**：`<!-- BEGIN: generated-fact marker="<name>" -->` … `<!-- END: generated-fact marker="<name>" -->`；command 以 `shlex.split` 不經 shell 執行、`cwd=repo_root`、`LC_ALL=C`、固定 30 秒 timeout，只比對正規化 stdout。
+- **安全注意（命令執行型規則）**：`R-16`（`cli`）、`R-25` 的 `cli_tree` extractor 與 `R-26`（`generated_facts`）會執行 `.paul-project.yml` 宣告的命令（無 shell injection，但命令字串本身受 config 控制並繼承完整環境）。因此**不應**在未信任的 PR／fork 分支上執行 `policy_check`；只在可信任的 repo config 上啟用。`cli_tree` 在 `mode: changed` 不會被執行（僅 `mode: all` 才跑）。
 
 ## Install
 
