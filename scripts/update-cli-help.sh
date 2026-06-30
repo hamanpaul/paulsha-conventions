@@ -142,8 +142,8 @@ for idx, entry in enumerate(entries, start=1):
             )
             continue
 
-    cmd = [*shlex.split(str(command)), *[str(a) for a in help_args]]
     try:
+        cmd = [*shlex.split(str(command)), *[str(a) for a in help_args]]  # ValueError on unmatched quotes
         proc = subprocess.run(
             cmd,
             cwd=repo_root,
@@ -151,7 +151,7 @@ for idx, entry in enumerate(entries, start=1):
             shell=False,
             capture_output=True,
         )
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         failures.append(f"entry[{idx}] command failed to run: {exc}")
         continue
 
