@@ -20,8 +20,26 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install universal-ctags
+        run: sudo apt-get update -qq && sudo apt-get install -y universal-ctags
+
       - name: Install test dependencies
         run: python -m pip install -e ".[test]"
 
       - name: Run pytest
         run: pytest -q
+
+  doc-drift-self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1   # shallow checkout：確保 demo 端到端流程在 shallow 環境下仍可運行
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: sudo apt-get update -qq && sudo apt-get install -y universal-ctags
+      - name: Install test dependencies
+        run: python -m pip install -e ".[test]"
+      - run: python -m pytest -q tests/test_doc_drift_demo.py

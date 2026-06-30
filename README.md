@@ -47,9 +47,9 @@
 | R-19 | repo 有測試則 CI 必須執行 | 存在 `tests/`（含 `test_*.py` / `*_test.py`）但 `.github/workflows/**` 無任何測試執行指令（pytest / unittest / npm test 等） | `policy-exempt:ci-tests` |
 | R-20 | Workflow policy_version 與 config 同步 | workflow 內宣告的 `policy_version` / `POLICY_VERSION` 字面值與 `.paul-project.yml` 的 `policy_version` 不一致 | — |
 | R-21 | tier=shareable repo 機密掃描 | 宣告 `tier: shareable` 的 repo 含雇主標記（內部代號、裝置型號等）／個人絕對路徑／憑證模式，且不在 `secret_scan.allow` 或自我豁免範圍 | `policy-exempt:secret-scan` |
-| R-22 | docs 對 code 產物引用無懸空 | canonical doc scope（`doc_paths`，預設 `README.md` / `docs/**`）引用的路徑／內部連結／反引號 symbol 在 repo 不存在；本次變更新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）降 WARN；`openspec/**`・`docs/superpowers/**`・fixtures 內建排除 | `policy-exempt:doc-reference` |
+| R-22 | docs 對 code 產物引用無懸空 | canonical doc scope（`doc_paths`，預設 `README.md` / `docs/**`）引用的路徑／內部連結／反引號 symbol 在 repo 不存在；symbol 改用**語言無關 scoped identity**（ctags `(language, kind, scope, name)` 差集，限定式 token 精準命中、結構化裸名 snake/Camel 多 scope 同名只 WARN、純單字不偵測以避免常見字誤報）；本次變更新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）降 WARN；`openspec/**`・`docs/superpowers/**`・fixtures 內建排除 | `policy-exempt:doc-reference` |
 | R-23 | 引擎 pin 版本與 policy_version 對齊 | workflow `uses:` 指向 `conventions_engine.repo` 的引擎版本（tag `@vX.Y.Z` 或 SHA `@<sha>` + 尾註 `# vX.Y.Z`）與 `.paul-project.yml` 的 `policy_version` 不一致 **FAIL**；純 SHA 無註解 **WARN**；`./` 在地引用或未設 `conventions_engine.repo` 則 NA | `policy-exempt:engine-pin` |
-| R-24 | MOC 與本次變更對齊 | repo 宣告 `moc` 時：`moc.triggers` 命中但 `moc.static` 未同步（**WARN**）／`moc.map` 連結懸空（本次新破壞 **FAIL**、陳年 **WARN**）／active openspec change・plan・spec 未被連結（**WARN**，永不 FAIL）；未宣告 `moc` 則 NA | `policy-exempt:moc-alignment` |
+| R-24 | MOC 與本次變更對齊 | repo 宣告 `moc` 時：`moc.triggers` 命中但 `moc.static` 未同步（**WARN**）／`moc.map` 連結懸空（本次新破壞 **FAIL**、陳年 **WARN**）／active openspec change・plan・spec 未被連結（**WARN**，永不 FAIL）；orphan/freshness 改呼叫共用核心，受治理前綴**參數化**（預設沿用既有前綴）；未宣告 `moc` 則 NA | `policy-exempt:moc-alignment` |
 | R-25 | 文件覆蓋（omission gate，opt-in） | repo 宣告 `doc_coverage` 時：extractor 抽出的 public fact 未在任一 target doc 被精確 mention 則 **FAIL**（`mode: changed` 只查本次新增 fact、`mode: all` 查全部）；`mode: changed` 缺 base diff context 降 **WARN**；target 超出 `doc_paths`／不存在／extractor 設定無效 **FAIL**；未宣告 `doc_coverage` 則 NA | — |
 | R-26 | 生成事實 marker 同步（opt-in） | repo 宣告 `generated_facts` 時：`generated-fact` marker 區塊內容與 command 正規化 stdout 不一致、marker 缺失、command 非 0 結束、或設定不完整則 **FAIL**；與 R-16 的 `cli-help` marker 並存不互相覆蓋；未宣告 `generated_facts` 則 NA | — |
 
@@ -62,6 +62,18 @@
 - **Tier 1（預防）**：agent 改 code 時同步更新引用該產物的 docs（見四份 agent 慣例檔 checklist）。
 - **Tier 2（確定性 gate）**：R-22 在 CI 偵測 `README.md` / `docs/**` 的結構化懸空引用——本次新破壞 FAIL、陳年 WARN。確定性層只看「結構性 rot」（引用死掉），不判斷語意。
 - **Tier 3（語意複審）**：建議將 GitHub Copilot 設為 PR reviewer，複審「引用仍在但描述已過時」的語意陳舊（advisory，不擋 merge）。
+
+### 獨立 doc-drift Action（OSS-ready，#25）
+
+R-22/R-24 的 doc↔code 漂移核心抽成語言無關、零設定的共用核心（`policy_check/doc_drift/`，按
+refs/paths/symbols/coverage/langs/provision primitive 組織），並包成可被**任意 repo** `uses:` 的
+獨立 composite action（`.github/actions/doc-drift/`，詳見其 [README](.github/actions/doc-drift/README.md)）。
+不要求目標 repo 採用 `.paul-project.yml`；symbol 抽取改用 universal-ctags 的 scoped identity
+`(language, kind, scope, name)` 差集，支援 **Python / bash / C / C++**，消除原本 Python-only 與同名 fail-open 兩個限制。
+Action 提供 `doc-drift` 與 `moc` 兩 mode，自理 base/head SHA 供給（shallow checkout 下不前置失敗），
+FAIL 以非零 exit 擋 merge、WARN advisory。
+
+> **與 lychee 的互補**：本 Action 只管 in-repo code 產物引用不懸空；外部 URL 活性／HTTP／anchor 交由 [lychee](https://github.com/lycheeverse/lychee-action)。
 
 ### 跨 repo 升版傳播（機制層，#23）
 

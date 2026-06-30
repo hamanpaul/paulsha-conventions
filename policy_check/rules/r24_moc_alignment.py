@@ -8,8 +8,8 @@ from policy_check.rules.registry import register
 from policy_check.rules._doc_links import (
     LINK_RE, looks_like_path, path_candidates, git_tracked, resolve_base,
 )
+from policy_check.doc_drift import coverage
 
-_GOVERNED_PREFIXES = ("openspec/changes/", "docs/superpowers/")
 _CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
 
 
@@ -41,6 +41,12 @@ class R24MocAlignment:
                     f"static MOC '{static}' 未隨 trigger 變更同步；命中：{', '.join(hit[:5])}"
                 )
 
+        governed = moc.get("governed_prefixes")
+        if isinstance(governed, (list, tuple)) and governed:
+            prefixes = tuple(str(p) for p in governed)
+        else:
+            prefixes = coverage.DEFAULT_GOVERNED_PREFIXES
+
         map_rel = moc.get("map")
         root = ctx.repo_root
         head_files = git_tracked(root)
@@ -54,7 +60,7 @@ class R24MocAlignment:
                     text = ""
                 base = resolve_base(root, ctx.pr_base_ref)
                 base_files = git_tracked(root, base) if base else set()
-                for token, cands in self._map_refs(map_rel, text):
+                for token, cands in self._map_refs(map_rel, text, prefixes):
                     if any(c in head_files for c in cands):
                         continue
                     if base and any(c in base_files for c in cands):
@@ -62,29 +68,20 @@ class R24MocAlignment:
                     else:
                         warns.append(f"{map_rel} -> {token}")
 
-                linked = {c for _t, cs in self._map_refs(map_rel, text) for c in cs}
-                # plans / specs：精確檔路徑須被 link
-                for rel in sorted(head_files):
-                    if rel.endswith(".md") and rel.startswith(
-                        ("docs/superpowers/plans/", "docs/superpowers/specs/")
-                    ) and rel not in linked:
-                        warns.append(f"孤兒：{rel} 未被 {map_rel} 連結")
-                # active openspec changes：change dir 下任一連結即算
-                change_names = sorted({
-                    rel.split("/")[2] for rel in head_files
-                    if rel.startswith("openspec/changes/")
-                    and not rel.startswith("openspec/changes/archive/")
-                    and len(rel.split("/")) >= 3
-                })
-                for name in change_names:
-                    prefix = f"openspec/changes/{name}/"
-                    if not any(t.startswith(prefix) for t in linked):
-                        warns.append(f"孤兒：openspec change '{name}' 未被 {map_rel} 連結")
+                linked = {c for _t, cs in self._map_refs(map_rel, text, prefixes) for c in cs}
+                # plans / specs：精確檔路徑須被 link（openspec change 的目錄級判定下面另算）
+                file_prefixes = tuple(p for p in prefixes if not p.startswith("openspec/changes/"))
+                for orphan in coverage.orphans(head_files, linked, prefixes=file_prefixes):
+                    warns.append(f"孤兒：{orphan} 未被 {map_rel} 連結")
+                # active openspec changes：change dir 下任一連結即算（共用核心，避免與
+                # standalone moc mode drift）
+                for name in coverage.openspec_change_orphans(head_files, linked):
+                    warns.append(f"孤兒：openspec change '{name}' 未被 {map_rel} 連結")
 
         return self._verdict(fails, warns)
 
     @staticmethod
-    def _map_refs(map_rel: str, text: str):
+    def _map_refs(map_rel: str, text: str, prefixes: tuple[str, ...]):
         """yield (token, candidates)：markdown link 與 backtick path token，僅取指向受治理產物者。"""
         seen: set[str] = set()
         tokens = [m.group(1) for m in LINK_RE.finditer(text)]
@@ -94,7 +91,7 @@ class R24MocAlignment:
             if tok in seen:
                 continue
             cands = [c for c in path_candidates(map_rel, tok)
-                     if c.startswith(_GOVERNED_PREFIXES)]
+                     if c.startswith(tuple(prefixes))]
             if cands:
                 seen.add(tok)
                 yield tok, cands

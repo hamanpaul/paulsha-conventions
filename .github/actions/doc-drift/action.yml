@@ -1,0 +1,32 @@
+# .github/actions/doc-drift/action.yml
+name: doc-drift
+description: Deterministic, language-aware doc↔code drift checker (symbol + path).
+inputs:
+  mode:
+    description: doc-drift | moc
+    default: doc-drift
+  base-sha:
+    description: PR base commit SHA (precise). Defaults to event base.
+    required: false
+  map:
+    description: "moc mode：MOC 地圖檔路徑（相對 repo 根）。"
+    default: docs/MOC.md
+  governed-prefix:
+    description: "moc mode：受治理產物路徑前綴，空白或逗號分隔可多個（如 'docs/ specs/'）；未設則用核心預設。"
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Install universal-ctags
+      shell: bash
+      run: sudo apt-get update -qq && sudo apt-get install -y universal-ctags
+    - name: Run doc-drift
+      shell: bash
+      run: "${{ github.action_path }}/run.sh"
+      env:
+        DOC_DRIFT_MODE: ${{ inputs.mode }}
+        DOC_DRIFT_BASE_SHA: ${{ inputs.base-sha }}
+        DOC_DRIFT_MAP: ${{ inputs.map }}
+        DOC_DRIFT_GOVERNED_PREFIX: ${{ inputs.governed-prefix }}
+        GH_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        GH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}

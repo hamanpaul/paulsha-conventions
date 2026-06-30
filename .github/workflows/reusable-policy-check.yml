@@ -70,6 +70,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install universal-ctags
+        # R-22（doc-reference）的 symbol-drift 以 universal-ctags 抽取 scoped identity；
+        # 缺二進位會在 symbols_at 直接 FileNotFoundError。所有 PR 皆需安裝。
+        run: sudo apt-get update -qq && sudo apt-get install -y universal-ctags
+
       - name: Install policy engine
         run: python -m pip install --disable-pip-version-check ".policy-engine"
 
