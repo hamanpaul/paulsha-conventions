@@ -8,12 +8,6 @@
 ## [Unreleased]
 
 ### Added
-- **#23 跨 repo policy 漂移治理**：新增 `policy_check/drift.py`（ops 工具，非 R-xx 規則）——`report`（唯讀列出 `hamanpaul/*` 各 repo `policy_version` 對 live canonical 的 `current`/`behind`/`ahead`/`unmanaged`，永遠 exit 0）與 `check`（比當前 repo vs canonical 最高 tag，`behind` → exit≠0，供 org `Policy Freshness` required workflow 當 gate）；版本比較含 `-fix.N` 完整排序。新增 `docs/org-ruleset-runbook.md`（org admin 套用 ruleset + required workflow 步驟），README 新增「跨 repo 升版傳播（機制層）」子段、`RELEASES.md` 新增升版傳播 SOP。engine 不主動改下游。
-- **#26 文件規則補強（doc_paths / R-25 doc_coverage / R-26 generated_facts）**：
-  - 新增 top-level `doc_paths`（預設 `README.md` + `docs/**`）作為 `R-18` / `R-22` 共用的 canonical doc scope；R-08 驗證其為 `list[str]`。`R-18` 改以 `doc_paths` 判斷 code change 是否伴隨 docs touch；`R-22` 改由 `doc_paths` 取候選文件，仍保留 `openspec/**`・`docs/superpowers/**`・fixtures 內建排除。
-  - **新增 R-25（doc coverage / omission gate，opt-in）**：宣告 `doc_coverage` 後，以四種 deterministic extractor（`modules`／`rpc_methods`／`env_vars`／`cli_tree`）抽出 public fact，要求其在 target docs 被精確 mention；`mode: changed`（預設）只查 `base...HEAD` 新增 fact、`mode: all` 查全部；缺 base diff context 降 WARN；target 超出 `doc_paths`／不存在／extractor 設定無效則 FAIL。mention 採區分大小寫的精確 token/phrase 比對（子字串不算）。
-  - **新增 R-26（generated-fact marker sync，opt-in）**：宣告 `generated_facts` 後，以通用 `generated-fact` marker 協議比對 command 正規化 stdout 與 doc marker 區塊；marker 缺失／command 非 0／輸出不一致／設定不完整則 FAIL。與 `R-16` 的 `cli-help` marker 並存不互相覆蓋。
-  - R-08 新增 `doc_coverage`（mapping／`mode ∈ {changed, all}`／`targets list[str]`／`sources list[mapping]`）與 `generated_facts`（`list[mapping]`）結構驗證；新增共用 helper `_doc_scope`／`_fact_extract`／`_marker_sync`（後者由 R-16 抽出，R-16 行為不變）。
 - **R-08 接受 optional `tier` 欄位**：`.paul-project.yml` 新增可選欄位 `tier`，允許值為 `shareable` / `work` / `personal`；提供非法值（如 `public`）時 FAIL，並回報允許值清單。
 - **新增 R-21（機密掃描）**：宣告 `tier: shareable` 的 repo 若含雇主標記（內部代號、裝置型號、build 主機等）、個人絕對路徑或憑證模式則 FAIL；`tier: work`/`personal` 視為 not-applicable；自身規則檔/fixtures 與 `.paul-project.yml` 的 `secret_scan.allow` 路徑豁免；豁免 label `policy-exempt:secret-scan`。同時 `.paul-project.yml` 新增 `secret_scan.allow` 設定。
 - **新增 R-19（repo 有測試則 CI 必須執行）**：repo 根目錄存在 `tests/`（含 `test_*.py` / `*_test.py`）時，`.github/workflows/**` 必須有至少一個 workflow 實際執行測試（pytest / unittest / npm test / go test / cargo test 等），否則 FAIL；豁免 label `policy-exempt:ci-tests`。無測試套件的 repo 空轉通過。動機：多個 repo 擁有大量測試但 CI 僅跑 policy check，測試從未在 PR gate 上執行。
@@ -88,6 +82,16 @@
 - **reusable workflow policy engine 版本漂移**：`Checkout policy engine` 步驟加入 `ref: ${{ github.workflow_sha }}`，確保 policy engine 版本與呼叫者所鎖定的 workflow 版本一致，消除未鎖定時永遠抓 main branch 的風險；同步新增回歸測試 `test_reusable_workflow_policy_engine_checkout_is_pinned`
 - **跨 repo reusable workflow 中 `github.workflow_sha` 指向錯誤 repo**：根據 GitHub 官方文件，reusable workflow 中 `github` context 始終屬於 caller workflow，因此 `github.workflow_sha` 是 caller repo 的 SHA，而非 `paulsha-conventions` 的 SHA；改為在 `workflow_call.inputs` 新增必填 `policy_engine_ref` 參數，由呼叫者明確傳入指向 `hamanpaul/paulsha-conventions` 的完整 40 字元 commit SHA；同步更新 `policy-check.yml`（self-dogfood 以 `${{ github.sha }}` 傳入）、README CI 範例、及測試 `test_reusable_workflow_interface_contract` 與 `test_reusable_workflow_policy_engine_checkout_is_pinned`
 - **reusable workflow metadata 解析錯誤**：`workflow_call.inputs.policy_engine_ref.description` 不再包含 GitHub expression syntax；避免跨 repo 呼叫時在 job 啟動前就被 GitHub 判定為 invalid workflow
+
+## [1.0.8] - 2026-06-30
+
+### Added
+- **#23 跨 repo policy 漂移治理**：新增 `policy_check/drift.py`（ops 工具，非 R-xx 規則）——`report`（唯讀列出 `hamanpaul/*` 各 repo `policy_version` 對 live canonical 的 `current`/`behind`/`ahead`/`unmanaged`，永遠 exit 0）與 `check`（比當前 repo vs canonical 最高 tag，`behind` → exit≠0，供 org `Policy Freshness` required workflow 當 gate）；版本比較含 `-fix.N` 完整排序。新增 `docs/org-ruleset-runbook.md`（org admin 套用 ruleset + required workflow 步驟），README 新增「跨 repo 升版傳播（機制層）」子段、`RELEASES.md` 新增升版傳播 SOP。engine 不主動改下游。
+- **#26 文件規則補強（doc_paths / R-25 doc_coverage / R-26 generated_facts）**：
+  - 新增 top-level `doc_paths`（預設 `README.md` + `docs/**`）作為 `R-18` / `R-22` 共用的 canonical doc scope；R-08 驗證其為 `list[str]`。`R-18` 改以 `doc_paths` 判斷 code change 是否伴隨 docs touch；`R-22` 改由 `doc_paths` 取候選文件，仍保留 `openspec/**`・`docs/superpowers/**`・fixtures 內建排除。
+  - **新增 R-25（doc coverage / omission gate，opt-in）**：宣告 `doc_coverage` 後，以四種 deterministic extractor（`modules`／`rpc_methods`／`env_vars`／`cli_tree`）抽出 public fact，要求其在 target docs 被精確 mention；`mode: changed`（預設）只查 `base...HEAD` 新增 fact、`mode: all` 查全部；缺 base diff context 降 WARN；target 超出 `doc_paths`／不存在／extractor 設定無效則 FAIL。mention 採區分大小寫的精確 token/phrase 比對（子字串不算）。
+  - **新增 R-26（generated-fact marker sync，opt-in）**：宣告 `generated_facts` 後，以通用 `generated-fact` marker 協議比對 command 正規化 stdout 與 doc marker 區塊；marker 缺失／command 非 0／輸出不一致／設定不完整則 FAIL。與 `R-16` 的 `cli-help` marker 並存不互相覆蓋。
+  - R-08 新增 `doc_coverage`（mapping／`mode ∈ {changed, all}`／`targets list[str]`／`sources list[mapping]`）與 `generated_facts`（`list[mapping]`）結構驗證；新增共用 helper `_doc_scope`／`_fact_extract`／`_marker_sync`（後者由 R-16 抽出，R-16 行為不變）。
 
 ## [1.0.7] - 2026-06-23
 
