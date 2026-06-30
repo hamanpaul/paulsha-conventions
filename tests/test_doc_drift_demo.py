@@ -1,4 +1,4 @@
-import subprocess, sys
+import os, subprocess, sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -20,6 +20,7 @@ def test_demo_bad_fails_and_good_passes(tmp_path):
     def run():
         return subprocess.run([sys.executable, "-m", "policy_check.doc_drift",
                                "--repo", str(tmp_path), "--base", base, "--head", "HEAD"],
-                              capture_output=True, text=True, env={"PYTHONPATH": str(REPO)})
+                              capture_output=True, text=True,
+                              env={**os.environ, "PYTHONPATH": str(REPO)})
     proc = run()
     assert proc.returncode != 0 and "do_shutdown" in proc.stdout

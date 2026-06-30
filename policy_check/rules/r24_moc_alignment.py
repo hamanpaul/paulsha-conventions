@@ -73,17 +73,10 @@ class R24MocAlignment:
                 file_prefixes = tuple(p for p in prefixes if not p.startswith("openspec/changes/"))
                 for orphan in coverage.orphans(head_files, linked, prefixes=file_prefixes):
                     warns.append(f"孤兒：{orphan} 未被 {map_rel} 連結")
-                # active openspec changes：change dir 下任一連結即算
-                change_names = sorted({
-                    rel.split("/")[2] for rel in head_files
-                    if rel.startswith("openspec/changes/")
-                    and not rel.startswith("openspec/changes/archive/")
-                    and len(rel.split("/")) >= 3
-                })
-                for name in change_names:
-                    prefix = f"openspec/changes/{name}/"
-                    if not any(t.startswith(prefix) for t in linked):
-                        warns.append(f"孤兒：openspec change '{name}' 未被 {map_rel} 連結")
+                # active openspec changes：change dir 下任一連結即算（共用核心，避免與
+                # standalone moc mode drift）
+                for name in coverage.openspec_change_orphans(head_files, linked):
+                    warns.append(f"孤兒：openspec change '{name}' 未被 {map_rel} 連結")
 
         return self._verdict(fails, warns)
 

@@ -1,5 +1,5 @@
 # tests/test_doc_drift_moc_cli.py
-import subprocess, sys
+import os, subprocess, sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -21,6 +21,6 @@ def test_moc_mode_flags_dangling_map_ref_with_custom_prefix(tmp_path):
         [sys.executable, "-m", "policy_check.doc_drift", "--mode", "moc",
          "--repo", str(tmp_path), "--base", base, "--head", "HEAD",
          "--map", "MAP.md", "--governed-prefix", "specs/"],
-        capture_output=True, text=True, env={"PYTHONPATH": str(REPO)})
+        capture_output=True, text=True, env={**os.environ, "PYTHONPATH": str(REPO)})
     assert proc.returncode != 0
     assert "specs/a.md" in proc.stdout

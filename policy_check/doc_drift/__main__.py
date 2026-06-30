@@ -17,13 +17,18 @@ def main(argv=None) -> int:
     p.add_argument("--governed-prefix", action="append", default=None, dest="prefixes")
     args = p.parse_args(argv)
 
-    if args.mode == "doc-drift":
-        fails, warns = engine.run_doc_drift(args.repo, args.base, args.head)
-    else:
-        prefixes = tuple(args.prefixes) if args.prefixes else None
-        from policy_check.doc_drift.coverage import DEFAULT_GOVERNED_PREFIXES
-        fails, warns = engine.run_moc(args.repo, args.base, args.map,
-                                      prefixes or DEFAULT_GOVERNED_PREFIXES, args.head)
+    try:
+        if args.mode == "doc-drift":
+            fails, warns = engine.run_doc_drift(args.repo, args.base, args.head)
+        else:
+            prefixes = tuple(args.prefixes) if args.prefixes else None
+            from policy_check.doc_drift.coverage import DEFAULT_GOVERNED_PREFIXES
+            fails, warns = engine.run_moc(args.repo, args.base, args.map,
+                                          prefixes or DEFAULT_GOVERNED_PREFIXES, args.head)
+    except engine.DriftProvisionError as exc:
+        # base/head 物件無法供給 → fail-fast，不靜默放行（doc-drift-core spec）
+        print(f"ERROR {exc}", file=sys.stderr)
+        return 2
     for line in fails:
         print(f"FAIL {line}")
     for line in warns:

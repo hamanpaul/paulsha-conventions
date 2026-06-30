@@ -26,20 +26,35 @@ def _load_allowlist(root: Path) -> dd_exempt.Allowlist:
     return dd_exempt.parse_allowlist(lines)
 
 
-def run_doc_drift(repo_root: Path, base_ref: str, head_ref: str = "HEAD"):
-    """回 (fails: list[str], warns: list[str])。"""
-    root = Path(repo_root)
+class DriftProvisionError(Exception):
+    """base/head git 物件無法供給時拋出；CLI 應 fail-fast（非零 exit），不得 fail-open。"""
+
+
+def _require_base(root: Path, base_ref: str, head_ref: str) -> str:
+    """解析並確保 base/head 物件存在；任一缺失即 raise（符合 doc-drift-core spec 的 fail-fast）。"""
     base = resolve_base(root, base_ref)
+    if not base:
+        raise DriftProvisionError(f"無法解析 base ref '{base_ref}'")
+    if not (dd_provision.ensure_object(root, base) and dd_provision.ensure_object(root, head_ref)):
+        raise DriftProvisionError(
+            f"base/head 物件無法取得（shallow checkout？git fetch fallback 失敗）："
+            f"base={base} head={head_ref}"
+        )
+    return base
+
+
+def run_doc_drift(repo_root: Path, base_ref: str, head_ref: str = "HEAD"):
+    """回 (fails, warns)；base/head 物件無法供給時 raise DriftProvisionError。"""
+    root = Path(repo_root)
+    base = _require_base(root, base_ref, head_ref)
+    base_ids = dd_symbols.symbols_at(root, base)
+    head_ids = dd_symbols.symbols_at(root, head_ref)
+    removed_ids = dd_drift.removed_identities(base_ids, head_ids)
+    head_files = git_tracked(root)
+    base_files = git_tracked(root, base)
+    allow = _load_allowlist(root)
     fails: list[str] = []
     warns: list[str] = []
-    removed_ids: set = set()
-    head_ids: set = set()
-    if base and dd_provision.ensure_object(root, base) and dd_provision.ensure_object(root, head_ref):
-        base_ids = dd_symbols.symbols_at(root, base)
-        head_ids = dd_symbols.symbols_at(root, head_ref)
-        removed_ids = dd_drift.removed_identities(base_ids, head_ids)
-    head_files = git_tracked(root)
-    allow = _load_allowlist(root)
     for rel in sorted(f for f in head_files if _in_scope(f)):
         try:
             text = (root / rel).read_text(encoding="utf-8")
@@ -58,7 +73,11 @@ def run_doc_drift(repo_root: Path, base_ref: str, head_ref: str = "HEAD"):
                     elif v == "WARN":
                         warns.append(f"{rel} -> `{token}` (ambiguous)")
                 elif kind == "path" and not any(c in head_files for c in payload):
-                    warns.append(f"{rel} -> {token}")
+                    # 本次移除（base 有、head 無）→ FAIL；陳年懸空 → WARN（對齊 R-22）
+                    if any(c in base_files for c in payload):
+                        fails.append(f"{rel} -> {token} (path removed this change)")
+                    else:
+                        warns.append(f"{rel} -> {token}")
     return fails, warns
 
 
@@ -80,9 +99,9 @@ def _map_refs(map_rel, text, prefixes):
 
 def run_moc(repo_root, base_ref, map_rel, prefixes, head_ref="HEAD"):
     root = Path(repo_root)
-    base = resolve_base(root, base_ref)
+    base = _require_base(root, base_ref, head_ref)
     head_files = git_tracked(root)
-    base_files = git_tracked(root, base) if base else set()
+    base_files = git_tracked(root, base)
     fails, warns = [], []
     try:
         text = (root / map_rel).read_text(encoding="utf-8")
@@ -106,6 +125,11 @@ def run_moc(repo_root, base_ref, map_rel, prefixes, head_ref="HEAD"):
                 fails.append(f"{map_rel} -> {tok} (removed this change)")
             else:
                 warns.append(f"{map_rel} -> {tok}")
-    for orphan in dd_coverage.orphans(head_files, linked, prefixes=tuple(prefixes)):
+    file_prefixes = tuple(p for p in prefixes if not p.startswith("openspec/changes/"))
+    for orphan in dd_coverage.orphans(head_files, linked, prefixes=file_prefixes):
         warns.append(f"orphan: {orphan} 未被 {map_rel} 連結")
+    # openspec change：change dir 下任一連結即算（與 R-24 同一判定，避免標 tasks.md 偽 orphan）
+    if any(p.startswith("openspec/changes/") for p in prefixes):
+        for name in dd_coverage.openspec_change_orphans(head_files, linked):
+            warns.append(f"orphan: openspec change '{name}' 未被 {map_rel} 連結")
     return fails, warns

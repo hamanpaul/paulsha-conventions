@@ -25,6 +25,11 @@ def classify_symbol_token(
     if "." in token:
         ref_scope, _, name = token.rpartition(".")
         ref_scope = ref_scope.split(".")[-1]
+        # head 仍有相符 identity → 該限定式引用未懸空。先查 head 可避免同名異 scope
+        # 的 false FAIL（doc 引用 X.B.close、僅移除 A.B.close 時，末段同為 B 不該誤判）。
+        for (_l, _k, scope, nm) in head:
+            if nm == name and _scope_matches(scope, ref_scope):
+                return None
         for (_l, _k, scope, nm) in removed:
             if nm == name and _scope_matches(scope, ref_scope):
                 return "FAIL"
