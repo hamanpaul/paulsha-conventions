@@ -39,12 +39,12 @@ def test_r04_changelog_format_fail_when_missing_changelog_heading(fixture_repo):
     assert "# Changelog" in result.message
 
 
-def test_r04_changelog_format_fail_when_missing_unreleased_section(fixture_repo):
+def test_r04_changelog_format_pass_when_no_unreleased_section(fixture_repo):
+    # 改 fragment 模型後 CHANGELOG 不再需要 [Unreleased]；有 # Changelog + dated 段即合法。
     repo = fixture_repo("bad-changelog-format/missing-unreleased-section")
     result = get_rule("R-04").check(make_ctx(repo))
 
-    assert result.status == Status.FAIL
-    assert "## [Unreleased]" in result.message
+    assert result.status == Status.PASS
 
 
 def test_r04_changelog_format_skip_when_exempt_label_present(fixture_repo):

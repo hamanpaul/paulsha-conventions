@@ -7,6 +7,7 @@
 （目前無 active openspec change；已落地者見 `openspec/changes/archive/`。#23 cross-repo-drift-governance 已於本批落地並 archive，canonical spec 見 `openspec/specs/cross-repo-drift-governance/`。Runbook：[`docs/org-ruleset-runbook.md`](org-ruleset-runbook.md)。）
 
 ## Plans（docs/superpowers/plans）
+- [changelog-fragments（#24）](superpowers/plans/2026-06-30-changelog-fragments.md) — 已完成（#24，已 archive）
 - [doc-rule-hardening（#26）](superpowers/plans/2026-06-30-doc-rule-hardening.md) — 已完成（#26，已 archive）
 - [cross-repo-drift-governance](superpowers/plans/2026-06-25-cross-repo-drift-governance.md) — 已完成（#23，已 archive）
 - [moc-alignment-rule](superpowers/plans/2026-06-23-moc-alignment-rule.md) — 已完成（v1.0.7）
@@ -17,6 +18,7 @@
 - [rollout github defaults + new-project-template](superpowers/plans/2026-04-23-rollout-github-defaults-and-new-project-template.md) — 已完成
 
 ## Specs / designs（docs/superpowers/specs）
+- [changelog-fragments design（#24）](superpowers/specs/2026-06-30-changelog-fragments-design.md) — 已完成（#24，已 archive）
 - [doc-rule-hardening design（#26）](superpowers/specs/2026-06-30-doc-rule-hardening-design.md) — 已完成（#26，已 archive）
 - [cross-repo-drift-governance design](superpowers/specs/2026-06-25-cross-repo-drift-governance-design.md) — 已完成（#23，已 archive）
 - [moc-alignment-rule design](superpowers/specs/2026-06-23-moc-alignment-rule-design.md) — 已完成（v1.0.7）

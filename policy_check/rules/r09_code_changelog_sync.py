@@ -1,23 +1,32 @@
 from __future__ import annotations
 
-import re
 from fnmatch import fnmatch
+from pathlib import Path
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.rules.registry import register
 
 
-def _unreleased_has_bullet_entry(changelog_text: str) -> bool:
-    match = re.search(
-        r"^##\s+\[Unreleased\]\s*(.*?)(?=^##\s+\[|\Z)",
-        changelog_text,
-        flags=re.MULTILINE | re.DOTALL,
-    )
-    if not match:
-        return False
+_PREFIX = "changelog.d/"
 
-    section_body = match.group(1)
-    return bool(re.search(r"^\s*-\s+\S", section_body, flags=re.MULTILINE))
+
+def _pr_added_fragment(changed_files: list[str], repo_root: Path) -> bool:
+    """True if this PR added/modified a direct ``changelog.d/<name>.md`` fragment.
+
+    Nested paths (``changelog.d/sub/x.md``) are rejected because the release
+    collator only collects direct children. The file MUST also still exist at
+    HEAD, so a PR that merely *deletes* or *renames* a fragment cannot satisfy
+    the gate without actually documenting its change.
+    """
+    for changed_file in changed_files:
+        if not changed_file or not changed_file.startswith(_PREFIX):
+            continue
+        name = changed_file[len(_PREFIX):]
+        if "/" in name or not name.endswith(".md"):
+            continue
+        if (repo_root / changed_file).is_file():
+            return True
+    return False
 
 
 @register
@@ -36,7 +45,7 @@ class R09CodeChangelogSync:
 
         code_paths = ctx.config.get("code_paths") or []
         has_code_change = any(
-            any(fnmatch(changed_file, pattern) for pattern in code_paths)
+            any(changed_file and fnmatch(changed_file, pattern) for pattern in code_paths)
             for changed_file in ctx.changed_files
         )
 
@@ -47,24 +56,18 @@ class R09CodeChangelogSync:
                 message="No code path files changed.",
             )
 
-        changelog_path = ctx.repo_root / "CHANGELOG.md"
-        if not changelog_path.is_file():
+        if _pr_added_fragment(ctx.changed_files, ctx.repo_root):
             return RuleResult(
                 rule_id=self.rule_id,
-                status=Status.FAIL,
-                message="Code files changed but CHANGELOG.md is missing.",
-            )
-
-        changelog_text = changelog_path.read_text(encoding="utf-8", errors="replace")
-        if not _unreleased_has_bullet_entry(changelog_text):
-            return RuleResult(
-                rule_id=self.rule_id,
-                status=Status.FAIL,
-                message="Code files changed but [Unreleased] has no bullet entry.",
+                status=Status.PASS,
+                message="Code change detected and a changelog.d fragment was added.",
             )
 
         return RuleResult(
             rule_id=self.rule_id,
-            status=Status.PASS,
-            message="Code change detected and [Unreleased] includes an entry.",
+            status=Status.FAIL,
+            message=(
+                "Code files changed but no changelog.d/*.md fragment was added "
+                "(add a fragment, or apply the skip-changelog label)."
+            ),
         )
