@@ -5,6 +5,20 @@
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
 本專案遵循 hamanpaul project policy v1.0.4。
 
+## [1.0.10] - 2026-06-30
+
+### Added
+- 新增可被任意 repo `uses:` 的獨立 doc-drift composite action（`doc-drift`/`moc` 兩 mode、自理 base/head SHA、shallow checkout 不前置失敗、FAIL 非零 exit 擋 merge），附 demo fixtures 與 self-test CI。
+- 新增語言無關、零設定的 doc↔code 漂移共用核心 `policy_check/doc_drift/`（refs/paths/symbols/coverage/langs/provision primitive），symbol 以 universal-ctags scoped identity `(language, kind, scope, name)` 差集判定 removed。
+- 新增誤報雙軌豁免：行內 `<!-- doc-drift-ignore -->` marker 與 repo 根 `.doc-drift-allow` allowlist 檔。
+- doc-drift symbol 抽取支援多語言：除 Python 外新增 bash（Sh function）與 C/C++（function/class/struct/member/typedef/macro/enum）。
+
+### Changed
+- R-22 symbol-drift 與 R-24 orphan/freshness 改呼叫共用核心：R-22 改語言無關 scoped 判定、R-24 受治理前綴參數化（行為向後相容）。
+
+### Fixed
+- 依 code review 硬化：R-22 改真正委派共用核心 `refs.extract_refs`（移除自家 `_BARE_RE` 副本，純單字不再誤報、與 standalone Action 判定一致）；CI 主 pytest job 安裝 universal-ctags；Action 補 `map`/`governed-prefix` 輸入；`parse_ctags_json` 容忍非物件 JSON 行；inline-ignore 僅認 HTML 註解形式；R-24 治理前綴沿用廣義 `docs/superpowers/`。
+
 ## [1.0.9] - 2026-06-30
 
 ### Added
