@@ -11,9 +11,9 @@ class R04ChangelogFormat:
     rule_id = "R-04"
     exempt_label = "policy-exempt:changelog-format"
 
+    # fragment 模型（#24）：CHANGELOG 不再需要 [Unreleased]；待發布記錄在 changelog.d/。
     _required_patterns = {
         "# Changelog": re.compile(r"(?m)^#\s+Changelog\s*$"),
-        "## [Unreleased]": re.compile(r"(?m)^##\s+\[Unreleased\]\s*$"),
     }
 
     def check(self, ctx: RuleContext) -> RuleResult:
@@ -50,5 +50,5 @@ class R04ChangelogFormat:
         return RuleResult(
             rule_id=self.rule_id,
             status=Status.PASS,
-            message=f"{changelog.name} includes # Changelog and ## [Unreleased].",
+            message=f"{changelog.name} includes the # Changelog header.",
         )
