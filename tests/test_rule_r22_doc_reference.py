@@ -226,3 +226,33 @@ def test_r22_github_org_repo_slug_not_flagged(tmp_path):
     _write(tmp_path, "README.md", "uses `hamanpaul/paulsha-conventions` engine\n")
     _commit(tmp_path)
     assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
+
+
+def test_r22_qualified_ref_to_removed_member_fails(tmp_path):
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "pkg/m.py", "class Foo:\n    def close(self):\n        pass\n"
+                                  "class Bar:\n    def close(self):\n        pass\n")
+    _write(tmp_path, "docs/g.md", "use `Bar.close`\n")
+    base = _commit(tmp_path)
+    # 移除 Foo.close（保留 Bar.close），doc 改引用 Foo.close
+    _write(tmp_path, "pkg/m.py", "class Foo:\n    pass\n"
+                                  "class Bar:\n    def close(self):\n        pass\n")
+    _write(tmp_path, "docs/g.md", "use `Foo.close`\n")
+    _commit(tmp_path)
+    res = get_rule().check(make_ctx(tmp_path, base=base))
+    assert res.status == Status.FAIL
+
+
+def test_r22_bare_ref_partial_removal_warns(tmp_path):
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text())
+    _write(tmp_path, "pkg/m.py", "class Foo:\n    def close(self):\n        pass\n"
+                                  "class Bar:\n    def close(self):\n        pass\n")
+    _write(tmp_path, "docs/g.md", "use `close`\n")
+    base = _commit(tmp_path)
+    _write(tmp_path, "pkg/m.py", "class Foo:\n    pass\n"
+                                  "class Bar:\n    def close(self):\n        pass\n")
+    _commit(tmp_path)
+    res = get_rule().check(make_ctx(tmp_path, base=base))
+    assert res.status == Status.WARN

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import re
-import subprocess
 from fnmatch import fnmatch
-from pathlib import Path
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.rules.registry import register
@@ -15,6 +13,9 @@ from policy_check.rules._doc_links import (
     git_tracked as _git_tracked,
     resolve_base as _resolve_base,
 )
+from policy_check.doc_drift import symbols as dd_symbols
+from policy_check.doc_drift import drift as dd_drift
+from policy_check.doc_drift import provision as dd_provision
 
 _EXCLUDE_PREFIXES = ("openspec/", "docs/superpowers/", "tests/fixtures/doc-reference/")
 _SELF_EXEMPT = (
@@ -26,7 +27,10 @@ _SELF_EXEMPT = (
 _CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 _CAMEL_RE = re.compile(r"^[A-Za-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*$")
-_DEFCLASS_RE = re.compile(r"^([+-])\s*(?:async\s+)?(?:def|class)\s+([A-Za-z_]\w*)")
+# 限定式：A.b（含點，末段為 snake/Camel/簡單識別字）
+_QUALIFIED_RE = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$")
+# 裸名識別字（含裸 member 名，如 `close`），交由 scoped 核心判定歧義/移除
+_BARE_RE = re.compile(r"^[a-z][a-z0-9]*$")
 
 
 def _in_scope(rel: str, doc_paths: list[str]) -> bool:
@@ -47,33 +51,14 @@ def _is_exempt(rel: str, allow: list[str]) -> bool:
 
 
 def _is_symbol(tok: str) -> bool:
-    return len(tok) >= 3 and bool(_SNAKE_RE.match(tok) or _CAMEL_RE.match(tok))
-
-
-def _defined_in_head(root: Path, name: str) -> bool:
-    try:
-        subprocess.check_output(
-            ["git", "-C", str(root), "grep", "-qE",
-             rf"(def|class)[[:space:]]+{re.escape(name)}\b", "HEAD", "--", "*.py"],
-            stderr=subprocess.DEVNULL)
-        return True
-    except subprocess.CalledProcessError:
+    if len(tok) < 3:
         return False
-
-
-def _removed_symbols(root: Path, base: str) -> set[str]:
-    try:
-        diff = subprocess.check_output(
-            ["git", "-C", str(root), "diff", f"{base}...HEAD", "--", "*.py"],
-            text=True, stderr=subprocess.DEVNULL)
-    except subprocess.CalledProcessError:
-        return set()
-    candidates: set[str] = set()
-    for line in diff.splitlines():
-        m = _DEFCLASS_RE.match(line)
-        if m and m.group(1) == "-":
-            candidates.add(m.group(2))
-    return {name for name in candidates if not _defined_in_head(root, name)}
+    return bool(
+        _SNAKE_RE.match(tok)
+        or _CAMEL_RE.match(tok)
+        or _QUALIFIED_RE.match(tok)
+        or _BARE_RE.match(tok)
+    )
 
 
 def _extract_refs(doc_rel: str, text: str):
@@ -110,7 +95,15 @@ class R22DocReference:
         head_files = _git_tracked(root)
         base = _resolve_base(root, ctx.pr_base_ref)
         base_files = _git_tracked(root, base) if base else set()
-        removed_syms = _removed_symbols(root, base) if base else set()
+
+        removed_ids: set = set()
+        head_ids: set = set()
+        if base:
+            head_sha = "HEAD"
+            if dd_provision.ensure_object(root, base) and dd_provision.ensure_object(root, head_sha):
+                base_ids = dd_symbols.symbols_at(root, base)
+                head_ids = dd_symbols.symbols_at(root, head_sha)
+                removed_ids = dd_drift.removed_identities(base_ids, head_ids)
 
         fails: list[str] = []
         warns: list[str] = []
@@ -127,8 +120,12 @@ class R22DocReference:
                         fails.append(f"{rel} -> {token} (removed this change)")
                     else:
                         warns.append(f"{rel} -> {token}")
-                elif kind == "symbol" and payload in removed_syms:
-                    fails.append(f"{rel} -> `{payload}` (def/class removed this change)")
+                elif kind == "symbol":
+                    verdict = dd_drift.classify_symbol_token(token, removed_ids, head_ids)
+                    if verdict == "FAIL":
+                        fails.append(f"{rel} -> `{token}` (symbol removed this change)")
+                    elif verdict == "WARN":
+                        warns.append(f"{rel} -> `{token}` (ambiguous: same-named symbol remains)")
 
         if fails:
             return RuleResult(self.rule_id, Status.FAIL,
