@@ -16,6 +16,7 @@ from policy_check.rules._doc_links import (
 from policy_check.doc_drift import symbols as dd_symbols
 from policy_check.doc_drift import drift as dd_drift
 from policy_check.doc_drift import provision as dd_provision
+from policy_check.doc_drift import exempt as dd_exempt
 
 _EXCLUDE_PREFIXES = ("openspec/", "docs/superpowers/", "tests/fixtures/doc-reference/")
 _SELF_EXEMPT = (
@@ -105,6 +106,12 @@ class R22DocReference:
                 head_ids = dd_symbols.symbols_at(root, head_sha)
                 removed_ids = dd_drift.removed_identities(base_ids, head_ids)
 
+        try:
+            allow_lines = (root / ".doc-drift-allow").read_text(encoding="utf-8").splitlines()
+        except OSError:
+            allow_lines = []
+        dd_allow = dd_exempt.parse_allowlist(allow_lines)
+
         fails: list[str] = []
         warns: list[str] = []
         for rel in sorted(head_files):
@@ -114,18 +121,23 @@ class R22DocReference:
                 text = (root / rel).read_text(encoding="utf-8")
             except (UnicodeDecodeError, OSError):
                 continue
-            for kind, token, payload in _extract_refs(rel, text):
-                if kind == "path" and not any(c in head_files for c in payload):
-                    if base and any(c in base_files for c in payload):
-                        fails.append(f"{rel} -> {token} (removed this change)")
-                    else:
-                        warns.append(f"{rel} -> {token}")
-                elif kind == "symbol":
-                    verdict = dd_drift.classify_symbol_token(token, removed_ids, head_ids)
-                    if verdict == "FAIL":
-                        fails.append(f"{rel} -> `{token}` (symbol removed this change)")
-                    elif verdict == "WARN":
-                        warns.append(f"{rel} -> `{token}` (ambiguous: same-named symbol remains)")
+            for line in text.splitlines():
+                if dd_exempt.line_is_ignored(line):
+                    continue
+                for kind, token, payload in _extract_refs(rel, line):
+                    if dd_exempt.is_allowed(rel, token, dd_allow):
+                        continue
+                    if kind == "path" and not any(c in head_files for c in payload):
+                        if base and any(c in base_files for c in payload):
+                            fails.append(f"{rel} -> {token} (removed this change)")
+                        else:
+                            warns.append(f"{rel} -> {token}")
+                    elif kind == "symbol":
+                        verdict = dd_drift.classify_symbol_token(token, removed_ids, head_ids)
+                        if verdict == "FAIL":
+                            fails.append(f"{rel} -> `{token}` (symbol removed this change)")
+                        elif verdict == "WARN":
+                            warns.append(f"{rel} -> `{token}` (ambiguous: same-named symbol remains)")
 
         if fails:
             return RuleResult(self.rule_id, Status.FAIL,
