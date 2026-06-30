@@ -5,6 +5,11 @@
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
 本專案遵循 hamanpaul project policy v1.0.4。
 
+## [1.0.9] - 2026-06-30
+
+### Added
+- CHANGELOG 改 per-PR fragment（`changelog.d/<issue>-<slug>.md`）消除並行 agent 的 `[Unreleased]` 衝突：R-09 改驗本 PR 有無 fragment、R-04 不再要求 `[Unreleased]`、新增 `python3 -m policy_check.changelog collate --version X.Y.Z --date YYYY-MM-DD` 於 release 時把碎片依 type 收斂成 Keep-a-Changelog dated 段並清空目錄。Hard cutover（行為綁版本，不向下相容）。
+
 ## [1.0.8] - 2026-06-30
 
 ### Added

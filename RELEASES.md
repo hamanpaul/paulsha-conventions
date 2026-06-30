@@ -5,6 +5,7 @@
 
 | policy_version | engine tag | engine SHA | 摘要 |
 |----------------|-----------|------------|------|
+| 1.0.9 | `v1.0.9` | `0dc2c5810c8c138e4aba8c10eaa88b560adddde5` | #24 CHANGELOG per-PR fragment（`changelog.d/<issue>-<slug>.md` 消除並行 agent 的 `[Unreleased]` 衝突；R-09 改驗 fragment、R-04 不再要求 `[Unreleased]`；新增 `policy_check.changelog collate` 於 release 收斂碎片成 Keep-a-Changelog dated 段；hard cutover、行為綁版本）。本版為 fragment 模型首次發版（CHANGELOG `## [1.0.9]` 段由 `collate` 自 fragment 產生） |
 | 1.0.8 | `v1.0.8` | `d4b03b6d5b75c150b568034f7e7d52416318a7b8` | #23 跨 repo policy 漂移治理（`policy_check/drift.py` ops 工具：`report` 唯讀儀表板 / `check` org freshness gate，含 `-fix.N` 完整排序；`docs/org-ruleset-runbook.md` + 升版傳播 SOP；engine 不改下游）＋ #26 文件規則補強（`doc_paths` 共用 canonical doc scope 補強 R-18/R-22；R-25 `doc_coverage` omission gate；R-26 `generated_facts` 通用 marker-sync；R-08 擴充驗證；R-16 抽 `_marker_sync` 共用 helper） |
 | 1.0.7 | `v1.0.7` | `e24fbd679d35d04a79ea21aff7733fadebd5e77e` | R-24（moc-alignment）：repo 宣告 `moc` 後盯靜態脈絡／動態連結地圖與本次變更同步（靜態鮮度 WARN／連結懸空 diff-aware FAIL-WARN／連結孤兒 WARN，永不 FAIL）；platform-agnostic（純 git-level）；R-08 擴充驗 `moc`；r22/r24 共用 link helper 抽至 `_doc_links`；新增豁免 label `policy-exempt:moc-alignment` |
 | 1.0.6 | `v1.0.6` | `261f3f64bfe33a9762355c65cdc702b00110fea3` | agent 慣例檔 symlink 單一真檔（canonical `CLAUDE.md`，R-14 config-gated `agent_files.mode`）＋ R-23 engine pin ⟷ `policy_version` attestation（`conventions_engine.repo`，tag 或 SHA+`# vX.Y.Z`）＋ R-08 擴充驗證；新增豁免 label `policy-exempt:engine-pin` |
