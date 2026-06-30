@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from policy_check.rules import registry
 from policy_check.rules.base import RuleContext, Status
 
@@ -29,27 +27,31 @@ def get_rule(rule_id: str):
     return loaded[rule_id]
 
 
-@pytest.mark.parametrize(
-    "fixture_name, changed_files, labels, expected",
-    [
-        ("code-changelog-synced", ["src/foo.py"], [], Status.PASS),
-        ("code-no-changelog", ["src/foo.py"], [], Status.FAIL),
-        ("code-no-changelog", ["src/foo.py"], ["skip-changelog"], Status.SKIP),
-        ("code-no-changelog", ["docs/x.md"], [], Status.PASS),
-    ],
-)
-def test_r09_code_changelog_sync(
-    fixture_repo,
-    fixture_name: str,
-    changed_files: list[str],
-    labels: list[str],
-    expected: Status,
-):
-    repo = fixture_repo(fixture_name)
-    result = get_rule("R-09").check(make_ctx(repo, changed_files=changed_files, labels=labels))
+def test_r09_code_change_with_fragment_passes(tmp_path):
+    res = get_rule("R-09").check(
+        make_ctx(tmp_path, changed_files=["policy_check/x.py", "changelog.d/24-foo.md"]))
+    assert res.status == Status.PASS
 
-    assert result.status == expected, result.message
-    if expected == Status.FAIL:
-        assert "[Unreleased]" in result.message
-    if expected == Status.SKIP:
-        assert result.exempt_label == "skip-changelog"
+
+def test_r09_code_change_without_fragment_fails(tmp_path):
+    res = get_rule("R-09").check(make_ctx(tmp_path, changed_files=["policy_check/x.py"]))
+    assert res.status == Status.FAIL
+    assert "changelog.d" in res.message
+
+
+def test_r09_gitkeep_does_not_count_as_fragment(tmp_path):
+    res = get_rule("R-09").check(
+        make_ctx(tmp_path, changed_files=["policy_check/x.py", "changelog.d/.gitkeep"]))
+    assert res.status == Status.FAIL
+
+
+def test_r09_skip_changelog_label_skips(tmp_path):
+    res = get_rule("R-09").check(
+        make_ctx(tmp_path, changed_files=["policy_check/x.py"], labels=["skip-changelog"]))
+    assert res.status == Status.SKIP
+    assert res.exempt_label == "skip-changelog"
+
+
+def test_r09_no_code_change_passes(tmp_path):
+    res = get_rule("R-09").check(make_ctx(tmp_path, changed_files=["docs/x.md"]))
+    assert res.status == Status.PASS
