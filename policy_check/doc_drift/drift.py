@@ -33,9 +33,12 @@ def classify_symbol_token(
         for (_l, _k, scope, nm) in removed:
             if nm == name and _scope_matches(scope, ref_scope):
                 return "FAIL"
-        return None
+        # 無任何 scoped 命中：可能是 top-level symbol（ctags scope 為空，_scope_matches
+        # 永不命中），如 `mod.func`。退化為裸名語義（以末段 name 判定），避免限定式引用
+        # top-level 被移除時被靜默放過。
+    else:
+        name = token
 
-    name = token
     if name not in removed_names:
         return None
     if name in head_names:

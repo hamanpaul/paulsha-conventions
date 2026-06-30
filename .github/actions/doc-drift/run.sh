@@ -1,5 +1,5 @@
-# .github/actions/doc-drift/run.sh
 #!/usr/bin/env bash
+# .github/actions/doc-drift/run.sh
 set -euo pipefail
 
 ACTION_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

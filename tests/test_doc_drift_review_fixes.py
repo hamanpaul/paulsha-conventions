@@ -133,3 +133,18 @@ def test_openspec_change_orphans_dir_level():
     head = {"openspec/changes/foo/proposal.md", "openspec/changes/foo/tasks.md"}
     assert coverage.openspec_change_orphans(head, {"openspec/changes/foo/proposal.md"}) == []
     assert coverage.openspec_change_orphans(head, set()) == ["foo"]
+
+
+# Copilot #1：限定式引用指向 top-level symbol（ctags scope 為空）被移除時不得靜默放過
+def test_qualified_ref_to_removed_top_level_fails():
+    removed = {("Python", "function", "", "func")}
+    # mod.func 指向 top-level function，完整移除 → FAIL（退化裸名語義）
+    assert drift.classify_symbol_token("mod.func", removed, set()) == "FAIL"
+    # head 仍有他處同名 → WARN（歧義）
+    assert drift.classify_symbol_token(
+        "mod.func", removed, {("Python", "function", "Cls", "func")}
+    ) == "WARN"
+    # head 仍有同一 top-level func（未移除）→ None
+    assert drift.classify_symbol_token(
+        "mod.func", set(), {("Python", "function", "", "func")}
+    ) is None
