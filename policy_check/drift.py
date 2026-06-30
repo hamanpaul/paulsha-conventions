@@ -132,8 +132,12 @@ def _gh(args: list[str], timeout: int = GH_TIMEOUT) -> str:
 
 
 def _is_not_found(exc: subprocess.CalledProcessError) -> bool:
+    # Match gh's actual 404 signal ("... (HTTP 404)") specifically, so an
+    # unrelated error that merely contains "404"/"Not Found" (e.g. a URL or a
+    # 500 body) is NOT mistaken for clean absence — err toward 'error', not
+    # 'unmanaged'.
     blob = f"{exc.stderr or ''}{exc.output or ''}"
-    return "404" in blob or "Not Found" in blob
+    return "HTTP 404" in blob
 
 
 def local_policy_version(path: str = ".") -> str | None:
@@ -178,7 +182,6 @@ def fetch_policy_version(org: str, repo: str) -> str | None:
     DriftFetchError on a gh/network failure that is NOT a clean 404, so a
     transient error is not misreported as ``unmanaged``.
     """
-    errored: Exception | None = None
     for name in CONFIG_NAMES:
         try:
             out = _gh([
@@ -187,16 +190,15 @@ def fetch_policy_version(org: str, repo: str) -> str | None:
             ])
         except subprocess.CalledProcessError as exc:
             if _is_not_found(exc):
-                continue  # this filename absent; try the next
-            errored = exc
-            continue
-        except subprocess.SubprocessError as exc:  # timeout etc.
-            errored = exc
-            continue
+                continue  # this filename cleanly absent (404); try the next
+            # A non-404 error on a (possibly higher-priority) name means we
+            # cannot reliably determine the version — do NOT silently fall
+            # through to a lower-priority file; surface it as a fetch error.
+            raise DriftFetchError(str(exc)) from exc
+        except (OSError, subprocess.SubprocessError) as exc:  # gh missing, timeout, etc.
+            raise DriftFetchError(str(exc)) from exc
         return parse_policy_version(out)
-    if errored is not None:
-        raise DriftFetchError(str(errored)) from errored
-    return None  # all names cleanly 404 → genuinely absent
+    return None  # all names cleanly 404 → genuinely absent (unmanaged)
 
 
 # --- CLI ---

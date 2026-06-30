@@ -228,3 +228,52 @@ def test_gh_passes_timeout(monkeypatch):
     monkeypatch.setattr(drift.subprocess, "run", fake_run)
     drift._gh(["api", "x"])
     assert captured.get("timeout")
+
+
+# --- codex re-review round 2: fetch error handling (#23) ---
+def test_fetch_non404_on_preferred_name_raises_not_silent_fallthrough(monkeypatch):
+    # a non-404 error on the higher-priority config name must NOT be silently
+    # masked by a successful lower-priority name → raise DriftFetchError.
+    def fake_gh(args, timeout=30):
+        if any(".project-policy.yml" in a for a in args):
+            raise _sp.CalledProcessError(1, args, output="", stderr="HTTP 500 Internal Server Error")
+        return "policy_version: 1.0.7\n"
+    monkeypatch.setattr(drift, "_gh", fake_gh)
+    with pytest.raises(drift.DriftFetchError):
+        drift.fetch_policy_version("hamanpaul", "repo")
+
+
+def test_fetch_oserror_becomes_drift_fetch_error(monkeypatch):
+    def fake_gh(args, timeout=30):
+        raise OSError("gh: command not found")
+    monkeypatch.setattr(drift, "_gh", fake_gh)
+    with pytest.raises(drift.DriftFetchError):
+        drift.fetch_policy_version("hamanpaul", "repo")
+
+
+def test_fetch_clean_404_on_preferred_falls_through(monkeypatch):
+    # a CLEAN 404 on the preferred name is genuine absence → try the next name.
+    def fake_gh(args, timeout=30):
+        if any(".project-policy.yml" in a for a in args):
+            raise _sp.CalledProcessError(1, args, output="", stderr="gh: Not Found (HTTP 404)")
+        return "policy_version: 1.0.5\n"
+    monkeypatch.setattr(drift, "_gh", fake_gh)
+    assert drift.fetch_policy_version("hamanpaul", "repo") == "1.0.5"
+
+
+def test_fetch_both_404_is_unmanaged_none(monkeypatch):
+    def fake_gh(args, timeout=30):
+        raise _sp.CalledProcessError(1, args, output="", stderr="gh: Not Found (HTTP 404)")
+    monkeypatch.setattr(drift, "_gh", fake_gh)
+    assert drift.fetch_policy_version("hamanpaul", "repo") is None
+
+
+def test_report_exit0_when_gh_binary_missing(monkeypatch, capsys):
+    monkeypatch.setattr(drift, "canonical_version_live", lambda *a, **k: "1.0.7")
+    monkeypatch.setattr(drift, "list_managed_repos", lambda *a, **k: ["x"])
+    def fake_gh(args, timeout=30):
+        raise OSError("gh: command not found")
+    monkeypatch.setattr(drift, "_gh", fake_gh)
+    rc = drift.main(["report", "--org", "hamanpaul"])
+    out = capsys.readouterr().out
+    assert rc == 0 and "x" in out and "error" in out
