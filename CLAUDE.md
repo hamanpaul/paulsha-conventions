@@ -20,8 +20,8 @@ policy_version: 1.0.8
   - 查無對應 issue：照常往下做，不需另開 issue、不需停下
 
 ## 改 code 時
-- [ ] 同一 PR 必須同步更新 `CHANGELOG.md [Unreleased]`
-- [ ] 除非可明確標示為 docs-only / test-only / chore，否則不得省略 CHANGELOG
+- [ ] 同一 PR 必須新增一個 changelog fragment `changelog.d/<issue>-<slug>.md`（frontmatter `type` 必填、`scope`/`issue` 選填；body = 一條描述）
+- [ ] 除非可明確標示為 docs-only / test-only / chore，否則不得省略 fragment
 - [ ] code_paths 涵蓋的檔案變動皆視為 code change
 - [ ] 評估 `README.md` / `docs/**` 是否需隨本 PR 同步（R-18；行為或介面有變動務必更新，純內部變動可上 `policy-exempt:docs-sync`）
 - [ ] R-22：搬移／改名／刪除 code 產物（檔案、`def`/`class`）時，同步更新 `README.md` / `docs/**` 中引用它的段落；無法即時處理上 `policy-exempt:doc-reference` 並附理由
@@ -36,7 +36,7 @@ policy_version: 1.0.8
 - [ ] 若本 PR 將版本 bump 延後（feature 先進 `[Unreleased]`），merge 當下必須**立即**補做對應 release bump（`VERSION` / `policy_version` / canonical `CLAUDE.md`（其餘三檔 symlink 自動跟隨）/ `managed-by` 標記 / tag / `RELEASES.md`），不得留置
 
 ## 完成任務（claim done）前
-- [ ] `CHANGELOG.md [Unreleased]` 有對應 entry（或 PR 標 `skip-changelog` + 理由）
+- [ ] 本 PR 有新增對應的 changelog fragment `changelog.d/<issue>-<slug>.md`（或 PR 標 `skip-changelog` + 理由）
 - [ ] `VERSION` 內容與意圖一致（release label PR 才可偏離 latest tag）
 - [ ] `.github/pull_request_template.md` checklist 全勾
 - [ ] 測試全綠（本 repo: `python3 -m pytest -q`）

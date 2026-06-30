@@ -29,12 +29,12 @@
 | R-01 | `README.md` 存在 | 缺檔或 <100 byte | — |
 | R-02 | `README.md` 必備段落 | 缺 `## Install` / `## Usage` / `## Version` | `policy-exempt:readme-sections` |
 | R-03 | `CHANGELOG.md` 存在 | 缺檔 | — |
-| R-04 | `CHANGELOG.md` 格式合規 | 非 Keep-a-Changelog 1.1.0 / 缺 `[Unreleased]` | `policy-exempt:changelog-format` |
+| R-04 | `CHANGELOG.md` 格式合規 | 缺 `# Changelog` 標頭（fragment 模型下不再要求 `[Unreleased]`） | `policy-exempt:changelog-format` |
 | R-05 | `VERSION` 存在 | 缺檔 | — |
 | R-06 | `VERSION` 符合語意 | 不匹配 `<MAJOR>.<MINOR>.<PATCH>(-fix\.\d+)?` | — |
 | R-07 | `VERSION` 與最新 tag 一致 | 不一致且無 `release:*` label | — |
 | R-08 | `.paul-project.yml` 存在且完整 | 缺檔或缺 `policy_profile` / `policy_version` | — |
-| R-09 | Code 變動必有 CHANGELOG entry | code path 有變動但 `[Unreleased]` 未動 | `skip-changelog` |
+| R-09 | Code 變動必有 changelog fragment | code path 有變動但本 PR 未新增 `changelog.d/*.md` fragment | `skip-changelog` |
 | R-10 | PR title 符合 conventional-commit | regex 不匹配 | `policy-exempt:pr-title` |
 | R-11 | PR body checkbox 全勾 | 必勾項未勾滿 | `wip` 時自動通過 |
 | R-12 | 分支來源正確 | 目標=main 時來源非 `feature/*`；目標=`feature/*` 時來源非 `wt/<feature>/*` | `policy-exempt:branch-name` |
@@ -113,6 +113,32 @@ generated_facts:
 - **changed 模式邊界**：缺 base diff context（如本地 `--repo .`）時降 WARN，不在無證據下 FAIL；`cli_tree` 無法快照 base，僅在 `mode: all` 受檢。
 - **generated-fact marker 語法**：`<!-- BEGIN: generated-fact marker="<name>" -->` … `<!-- END: generated-fact marker="<name>" -->`；command 以 `shlex.split` 不經 shell 執行、`cwd=repo_root`、`LC_ALL=C`、固定 30 秒 timeout，只比對正規化 stdout。
 - **安全注意（命令執行型規則）**：`R-16`（`cli`）、`R-25` 的 `cli_tree` extractor 與 `R-26`（`generated_facts`）會執行 `.paul-project.yml` 宣告的命令（無 shell injection，但命令字串本身受 config 控制並繼承完整環境）。因此**不應**在未信任的 PR／fork 分支上執行 `policy_check`；只在可信任的 repo config 上啟用。`cli_tree` 在 `mode: changed` 不會被執行（僅 `mode: all` 才跑）。
+
+## CHANGELOG fragment 模型（並行安全）
+
+為消除並行 agent 改共用 `CHANGELOG.md [Unreleased]` 的 merge conflict，待發布記錄改採
+**每 PR 一個 fragment 檔**（changesets / towncrier 模式，但 agent 寫碎片、gate 驗碎片）：
+
+- **每個 PR** 新增 `changelog.d/<issue>-<slug>.md`（不碰 `CHANGELOG.md`）：
+  ```markdown
+  ---
+  type: feat        # 必填，conventional-commit type
+  scope: changelog  # 選填
+  issue: 24         # 選填
+  ---
+  一句話描述（成為 CHANGELOG 的一條 bullet）。
+  ```
+  不同 issue 天然不同檔、零共用行 → **並行 PR 永不衝突**。
+- **type → Keep-a-Changelog 段** 固定映射：`feat`→Added、`fix`→Fixed、
+  `refactor`/`perf`/`change`→Changed、`remove`→Removed、`deprecate`→Deprecated、`security`→Security。
+  未知 type → collate 失敗。`docs`/`test`/`chore` 走 `skip-changelog`。
+- **release 收斂**：升版時跑
+  ```bash
+  python3 -m policy_check.changelog collate --version X.Y.Z --date YYYY-MM-DD
+  ```
+  把 `changelog.d/*.md` 依 type 分組產出 `## [X.Y.Z] - <date>` 段（KaC 格式，R-04 仍過）並清空目錄。
+- `R-09` 改驗「本 PR 有無 fragment」、`R-04` 不再要求 `[Unreleased]`。屬行為綁版本的 hard cutover
+  （下游靠 pin 版本主動升級，未升級者用舊 `[Unreleased]` 行為）。
 
 ## Install
 

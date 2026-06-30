@@ -5,7 +5,11 @@
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
 本專案遵循 hamanpaul project policy v1.0.4。
 
-## [Unreleased]
+## [pre-fragment backlog]
+
+> 以下為導入 per-PR fragment 模型（#24）前累積於 `[Unreleased]` 的歷史條目，保留原文。
+> 自此版起，待發布記錄改放 `changelog.d/<issue>-<slug>.md`，release 時以
+> `python3 -m policy_check.changelog collate` 收斂；版本對照見 [`RELEASES.md`](./RELEASES.md)。
 
 ### Added
 - **R-08 接受 optional `tier` 欄位**：`.paul-project.yml` 新增可選欄位 `tier`，允許值為 `shareable` / `work` / `personal`；提供非法值（如 `public`）時 FAIL，並回報允許值清單。
