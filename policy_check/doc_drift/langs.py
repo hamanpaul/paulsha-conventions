@@ -4,6 +4,7 @@ from __future__ import annotations
 # 新增語言只動這張表，差集/比對演算法不變。
 _LANG_KINDS: dict[str, set[str]] = {
     "Python": {"function", "class", "member"},
+    "Sh": {"function"},
 }
 
 
