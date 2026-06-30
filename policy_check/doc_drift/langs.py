@@ -5,6 +5,8 @@ from __future__ import annotations
 _LANG_KINDS: dict[str, set[str]] = {
     "Python": {"function", "class", "member"},
     "Sh": {"function"},
+    "C": {"function", "struct", "typedef", "macro", "enum"},
+    "C++": {"function", "class", "struct", "member", "typedef", "macro", "enum"},
 }
 
 
