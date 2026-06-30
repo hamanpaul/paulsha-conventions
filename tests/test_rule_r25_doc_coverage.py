@@ -236,3 +236,16 @@ def test_r25_changed_mode_with_base_ignores_cli_tree(tmp_path):
     _commit(tmp_path, "head")
     res = get_rule().check(make_ctx(tmp_path, base=base))
     assert res.status == Status.PASS
+
+
+def test_r25_malformed_cli_command_fails_not_crash(tmp_path):
+    extra = (
+        "doc_coverage:\n  mode: all\n  targets: [\"README.md\"]\n"
+        "  sources:\n    - kind: cli_tree\n      command: '\"'\n"  # unmatched quote
+    )
+    _init_repo(tmp_path)
+    _write(tmp_path, ".paul-project.yml", _cfg_text(extra))
+    _write(tmp_path, "README.md", "# d\n")
+    _commit(tmp_path)
+    res = get_rule().check(make_ctx(tmp_path))
+    assert res.status == Status.FAIL

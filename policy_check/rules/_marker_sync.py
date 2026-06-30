@@ -48,7 +48,11 @@ def run_command(command: str, repo_root, extra_args=None, timeout: int = DEFAULT
     Raises ``OSError`` / ``subprocess.SubprocessError`` (incl. ``TimeoutExpired``)
     on failure to launch or complete; callers translate those into a rule FAIL.
     """
-    cmd = [*shlex.split(str(command)), *(extra_args or [])]
+    try:
+        cmd = [*shlex.split(str(command)), *(extra_args or [])]
+    except ValueError as exc:
+        # unmatched quotes etc. — surface as a subprocess failure callers already catch
+        raise subprocess.SubprocessError(f"invalid command string: {exc}") from exc
     env = {**os.environ, "LC_ALL": "C"}
     proc = subprocess.run(
         cmd,

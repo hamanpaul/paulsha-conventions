@@ -28,8 +28,9 @@ COMMAND_KINDS = ("cli_tree",)
 _COMMAND_TIMEOUT = 30
 
 # Characters that can be part of a fact-like token; used to enforce exact
-# token/phrase boundaries so a substring never counts as a mention.
-_BOUNDARY = r"A-Za-z0-9_./-"
+# token/phrase boundaries so a substring never counts as a mention. ``\w`` is
+# Unicode-aware so adjacent non-ASCII (e.g. CJK) letters also block a match.
+_BOUNDARY = r"\w./-"
 
 
 class ExtractorError(Exception):
@@ -133,9 +134,9 @@ def extract_file_facts(
 
 def extract_cli_facts(source: dict, repo_root) -> set[str]:
     """Run a ``cli_tree`` command and return one fact per non-empty stdout line."""
-    cmd = shlex.split(str(source["command"]))
     env = {**os.environ, "LC_ALL": "C"}
     try:
+        cmd = shlex.split(str(source["command"]))  # ValueError on unmatched quotes
         proc = subprocess.run(
             cmd,
             cwd=str(repo_root),
@@ -144,7 +145,7 @@ def extract_cli_facts(source: dict, repo_root) -> set[str]:
             timeout=_COMMAND_TIMEOUT,
             check=False,
         )
-    except (OSError, subprocess.SubprocessError) as exc:
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
         raise ExtractorError(f"cli_tree command failed to run: {exc}") from exc
     if proc.returncode != 0:
         raise ExtractorError(f"cli_tree command exit={proc.returncode} for {cmd!r}")

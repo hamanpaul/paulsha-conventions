@@ -112,3 +112,15 @@ def test_r26_coexists_with_cli_help_marker(tmp_path):
     )
     _write(tmp_path, "README.md", "# docs\n\n" + cli_block + "\n" + _marker_block("alpha\nbeta"))
     assert get_rule().check(make_ctx(tmp_path)).status == Status.PASS
+
+
+def test_r26_malformed_command_fails_not_crash(tmp_path):
+    extra = (
+        "generated_facts:\n"
+        "  - kind: fact_list\n    command: '\"'\n"  # unmatched quote
+        "    reflected_in: README.md\n    marker: rpc\n"
+    )
+    _write(tmp_path, ".paul-project.yml", _cfg_text(extra))
+    _write(tmp_path, "README.md", "# d\n")
+    res = get_rule().check(make_ctx(tmp_path))
+    assert res.status == Status.FAIL

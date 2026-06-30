@@ -112,3 +112,15 @@ def test_env_vars_prefix_requires_left_boundary():
     src = {"kind": "env_vars", "include": ["c.py"], "prefix": "SWAP_"}
     facts = fe.extract_file_facts(src, files, lambda rel: texts.get(rel))
     assert facts == {"SWAP_TOTAL"}
+
+
+# ---- adversarial review hardening (shlex crash / unicode boundary) ----
+
+def test_extract_cli_facts_malformed_command_raises_extractor_error():
+    with pytest.raises(fe.ExtractorError):
+        fe.extract_cli_facts({"kind": "cli_tree", "command": '"'}, ".")
+
+
+def test_is_mentioned_unicode_boundary_rejects_cjk_substring():
+    assert not fe.is_mentioned("測試", "這是測試案例")   # embedded in longer CJK phrase
+    assert fe.is_mentioned("測試", "支援 測試 指令")      # space-delimited → real mention
