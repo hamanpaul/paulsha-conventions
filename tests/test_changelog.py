@@ -100,3 +100,31 @@ def test_collate_cli_main(tmp_path):
     rc = cl.main(["collate", "--repo", str(tmp_path), "--version", "1.0.9", "--date", "2026-07-01"])
     assert rc == 0
     assert "CLI 路徑。" in (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+
+
+# --- code review hardening (I2 / M2 / M4) ---
+
+def test_collate_inserts_above_dated_not_above_nondated_bucket(tmp_path):
+    # I2: 新段必須插在第一個 *dated* 段之前，不可插在非-dated bucket（如 backlog）之上。
+    _write(tmp_path / "CHANGELOG.md",
+           "# Changelog\n\n## [pre-fragment backlog]\n\n### Added\n- 舊 backlog。\n\n"
+           "## [1.0.8] - 2026-06-30\n\n### Added\n- 1.0.8。\n")
+    _write(tmp_path / "changelog.d" / "24-frag.md", "---\ntype: feat\n---\n新。\n")
+    cl.collate(tmp_path, "1.0.9", "2026-07-01")
+    text = (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert text.index("## [pre-fragment backlog]") < text.index("## [1.0.9] - 2026-07-01")
+    assert text.index("## [1.0.9] - 2026-07-01") < text.index("## [1.0.8]")
+
+
+def test_parse_fragment_non_numeric_issue_raises_fragment_error():
+    # M2: 非數字 issue 應拋 FragmentError，而非裸 ValueError。
+    with pytest.raises(cl.FragmentError):
+        cl.parse_fragment("---\ntype: feat\nissue: not-a-number\n---\nbody。\n")
+
+
+def test_collate_missing_changelog_raises_fragment_error(tmp_path):
+    # M4: 有 fragment 但缺 CHANGELOG.md 應拋 FragmentError（不裸 FileNotFoundError、不破壞檔案）。
+    _write(tmp_path / "changelog.d" / "24-frag.md", "---\ntype: feat\n---\nbody。\n")
+    with pytest.raises(cl.FragmentError):
+        cl.collate(tmp_path, "1.0.9", "2026-07-01")
+    assert (tmp_path / "changelog.d" / "24-frag.md").exists()  # 未刪

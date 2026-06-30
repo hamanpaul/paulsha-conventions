@@ -6,14 +6,20 @@ from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.rules.registry import register
 
 
+_PREFIX = "changelog.d/"
+
+
 def _pr_added_fragment(changed_files: list[str]) -> bool:
-    """True if this PR touched a changelog.d/*.md fragment (excluding .gitkeep)."""
+    """True if this PR touched a direct ``changelog.d/<name>.md`` fragment.
+
+    Nested paths (``changelog.d/sub/x.md``) are rejected because the release
+    collator only collects direct children, so they would silently never ship.
+    """
     for changed_file in changed_files:
-        if (
-            changed_file
-            and fnmatch(changed_file, "changelog.d/*.md")
-            and not changed_file.endswith("/.gitkeep")
-        ):
+        if not changed_file or not changed_file.startswith(_PREFIX):
+            continue
+        name = changed_file[len(_PREFIX):]
+        if "/" not in name and name.endswith(".md"):
             return True
     return False
 

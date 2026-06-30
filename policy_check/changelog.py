@@ -28,7 +28,10 @@ TYPE_TO_SECTION = {
 }
 SECTION_ORDER = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"]
 
-_DATED_SECTION_RE = re.compile(r"(?m)^##\s+\[")
+# A dated Keep-a-Changelog heading: "## [<version>] - <date>". Non-dated buckets
+# (e.g. "## [Unreleased]" or a legacy backlog label) are intentionally NOT matched,
+# so a new release section is always inserted above the newest *dated* section.
+_DATED_SECTION_RE = re.compile(r"(?m)^##\s+\[[^\]]+\]\s+-\s+\d")
 
 
 class FragmentError(Exception):
@@ -63,12 +66,12 @@ def parse_fragment(text: str) -> Fragment:
     if not body:
         raise FragmentError("fragment body must not be empty")
     issue = meta.get("issue")
-    return Fragment(
-        type=ftype,
-        body=body,
-        scope=meta.get("scope"),
-        issue=int(issue) if issue is not None else None,
-    )
+    if issue is not None:
+        try:
+            issue = int(issue)
+        except (TypeError, ValueError) as exc:
+            raise FragmentError(f"fragment 'issue' must be an integer, got {issue!r}") from exc
+    return Fragment(type=ftype, body=body, scope=meta.get("scope"), issue=issue)
 
 
 def render_section(version: str, date: str, fragments: list[Fragment]) -> str:
@@ -126,7 +129,10 @@ def collate(repo_root: Path, version: str, date: str) -> int:
     fragments = [frag for _name, frag in loaded]
     section = render_section(version, date, fragments)  # raises before any write
     changelog_path = repo_root / "CHANGELOG.md"
-    text = changelog_path.read_text(encoding="utf-8")
+    try:
+        text = changelog_path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise FragmentError(f"CHANGELOG.md not found at {changelog_path}") from exc
     changelog_path.write_text(_insert_section(text, section), encoding="utf-8")
     for name, _frag in loaded:
         (repo_root / "changelog.d" / name).unlink()

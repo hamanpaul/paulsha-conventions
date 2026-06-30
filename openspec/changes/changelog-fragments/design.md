@@ -43,7 +43,7 @@ towncrier 風格目錄；issue 編號開頭 + 短 slug（例 `changelog.d/24-cha
 
 ### Decision 6 — 規則行為邊界
 - `R-09`：核心改為「`changed_files` 含 `changelog.d/*.md`」；仍受 `code_paths` 觸發、仍可 `skip-changelog`。
-- `R-04`：移除 `## [Unreleased]` 必備；保留 `# Changelog` 與 dated 段格式。豁免仍 `policy-exempt:changelog-format`。
+- `R-04`：移除 `## [Unreleased]` 必備；保留 `# Changelog` 標頭存在性檢查（不驗 dated 段內部格式）。豁免仍 `policy-exempt:changelog-format`。
 - 無新增豁免 label。
 
 ## Risks / Trade-offs

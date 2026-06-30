@@ -85,8 +85,8 @@ frontmatter 結構好機器讀，body 自由書寫。
 ### Decision 6 — 規則行為邊界
 - **R-09**（code↔changelog sync）：核心改為「本 PR 的 `changed_files` 是否含 `changelog.d/*.md`」。
   仍受 `code_paths` 觸發、仍可 `skip-changelog` 豁免、仍 advisory 之外的 FAIL 性質不變。
-- **R-04**（changelog format）：移除 `## [Unreleased]` 必備要求；保留 `# Changelog` 標頭與
-  Keep-a-Changelog dated 段格式驗證。豁免仍 `policy-exempt:changelog-format`。
+- **R-04**（changelog format）：移除 `## [Unreleased]` 必備要求；保留既有的 `# Changelog`
+  標頭存在性檢查（R-04 一向只驗 header 存在，不驗 dated 段內部格式）。豁免仍 `policy-exempt:changelog-format`。
 - **無新增豁免 label**（白名單不變）。
 
 ## 3. 元件與資料流
@@ -116,9 +116,9 @@ frontmatter 結構好機器讀，body 自由書寫。
 - 無 code 變動 → PASS（not applicable）。
 
 ### 4.3 `R-04` 改寫
-- 無 `## [Unreleased]` 但有 `# Changelog` + 合法 dated 段 → PASS。
+- 無 `## [Unreleased]` 但有 `# Changelog` → PASS。
 - 缺 `# Changelog` → FAIL。
-- 既有 dated 段格式驗證不退化。
+- `# Changelog` header-presence 檢查層級不退化。
 
 ### 4.4 並行驗收
 - 兩個不同 issue 的 fragment（不同檔）可各自獨立存在、互不影響。

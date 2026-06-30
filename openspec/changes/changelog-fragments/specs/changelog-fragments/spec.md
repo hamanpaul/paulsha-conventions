@@ -36,7 +36,8 @@ conventional-commit 詞彙），選填 `scope` / `issue`；frontmatter 後的 bo
 ### Requirement: R-04 不再要求 [Unreleased] 區段
 
 `R-04` MUST NOT 再要求 `CHANGELOG.md` 含 `## [Unreleased]` 區段。`R-04` MUST 仍要求
-`# Changelog` 標頭並驗證 Keep-a-Changelog 的 dated 版本段格式。豁免仍為 `policy-exempt:changelog-format`。
+`# Changelog` 標頭存在（沿用本規則既有的 header-presence 檢查層級；不額外驗證 dated 段內部格式）。
+豁免仍為 `policy-exempt:changelog-format`。
 
 #### Scenario: 無 [Unreleased] 但格式合法
 - **WHEN** `CHANGELOG.md` 含 `# Changelog` 與合法的 `## [X.Y.Z] - <date>` dated 段、但無 `## [Unreleased]`

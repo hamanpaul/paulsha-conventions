@@ -55,3 +55,10 @@ def test_r09_skip_changelog_label_skips(tmp_path):
 def test_r09_no_code_change_passes(tmp_path):
     res = get_rule("R-09").check(make_ctx(tmp_path, changed_files=["docs/x.md"]))
     assert res.status == Status.PASS
+
+
+def test_r09_nested_fragment_path_does_not_count(tmp_path):
+    # M3: 巢狀路徑 collate 不會收集 → 不可讓它過 gate。
+    res = get_rule("R-09").check(
+        make_ctx(tmp_path, changed_files=["policy_check/x.py", "changelog.d/sub/foo.md"]))
+    assert res.status == Status.FAIL

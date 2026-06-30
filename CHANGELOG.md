@@ -5,6 +5,50 @@
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
 本專案遵循 hamanpaul project policy v1.0.4。
 
+## [1.0.8] - 2026-06-30
+
+### Added
+- **#23 跨 repo policy 漂移治理**：新增 `policy_check/drift.py`（ops 工具，非 R-xx 規則）——`report`（唯讀列出 `hamanpaul/*` 各 repo `policy_version` 對 live canonical 的 `current`/`behind`/`ahead`/`unmanaged`，永遠 exit 0）與 `check`（比當前 repo vs canonical 最高 tag，`behind` → exit≠0，供 org `Policy Freshness` required workflow 當 gate）；版本比較含 `-fix.N` 完整排序。新增 `docs/org-ruleset-runbook.md`（org admin 套用 ruleset + required workflow 步驟），README 新增「跨 repo 升版傳播（機制層）」子段、`RELEASES.md` 新增升版傳播 SOP。engine 不主動改下游。
+- **#26 文件規則補強（doc_paths / R-25 doc_coverage / R-26 generated_facts）**：
+  - 新增 top-level `doc_paths`（預設 `README.md` + `docs/**`）作為 `R-18` / `R-22` 共用的 canonical doc scope；R-08 驗證其為 `list[str]`。`R-18` 改以 `doc_paths` 判斷 code change 是否伴隨 docs touch；`R-22` 改由 `doc_paths` 取候選文件，仍保留 `openspec/**`・`docs/superpowers/**`・fixtures 內建排除。
+  - **新增 R-25（doc coverage / omission gate，opt-in）**：宣告 `doc_coverage` 後，以四種 deterministic extractor（`modules`／`rpc_methods`／`env_vars`／`cli_tree`）抽出 public fact，要求其在 target docs 被精確 mention；`mode: changed`（預設）只查 `base...HEAD` 新增 fact、`mode: all` 查全部；缺 base diff context 降 WARN；target 超出 `doc_paths`／不存在／extractor 設定無效則 FAIL。mention 採區分大小寫的精確 token/phrase 比對（子字串不算）。
+  - **新增 R-26（generated-fact marker sync，opt-in）**：宣告 `generated_facts` 後，以通用 `generated-fact` marker 協議比對 command 正規化 stdout 與 doc marker 區塊；marker 缺失／command 非 0／輸出不一致／設定不完整則 FAIL。與 `R-16` 的 `cli-help` marker 並存不互相覆蓋。
+  - R-08 新增 `doc_coverage`（mapping／`mode ∈ {changed, all}`／`targets list[str]`／`sources list[mapping]`）與 `generated_facts`（`list[mapping]`）結構驗證；新增共用 helper `_doc_scope`／`_fact_extract`／`_marker_sync`（後者由 R-16 抽出，R-16 行為不變）。
+
+## [1.0.7] - 2026-06-23
+
+### Added
+- **新增 R-24（moc-alignment）**：repo 於 `.paul-project.yml` 宣告 `moc`（`static` / `map` / `triggers`）後生效（未宣告 → NA）。三瓣：靜態鮮度（`moc.triggers` 命中但 `moc.static` 未同步 → WARN）／動態連結懸空（`moc.map` 連到不存在產物，本次新破壞 FAIL、陳年 WARN）／動態連結孤兒（active openspec change・`docs/superpowers/{plans,specs}` 未被連結 → WARN，永不 FAIL）。platform-agnostic（純 git-level，不依賴 GitHub/GitLab）。豁免 `policy-exempt:moc-alignment`。R-08 擴充驗 `moc`；r22/r24 共用 link helper 抽至 `policy_check/rules/_doc_links.py`。
+
+## [1.0.6] - 2026-06-23
+
+### Added
+- **新增 R-23（引擎 pin 版本 attestation）**：workflow `uses:` 指向 `conventions_engine.repo` 的引擎版本（tag `@vX.Y.Z`，或 SHA `@<sha>` + 尾註 `# vX.Y.Z`）必須與 `.paul-project.yml` 的 `policy_version` 一致，否則 FAIL；純 SHA 無版本註解時降為 WARN（離線無法驗證）；`./` 在地引用或未設 `conventions_engine.repo` 時 not-applicable。豁免 label `policy-exempt:engine-pin`。動機：閉合「repo 實際 pin 的引擎版本 ⟷ 宣告 policy_version」這條既有引擎只驗 intra-repo 自洽、看不到的缺口。
+- **`.paul-project.yml` 新增 `agent_files.mode` 與 `conventions_engine.repo`**：`agent_files.mode` 列舉 `copy`（預設）/ `symlink`；`conventions_engine.repo` 為 `owner/repo` 字串（空字串為 NA sentinel）。R-08 擴充驗證兩區塊型別、列舉與格式。
+
+### Changed
+- **R-14 升級為 config-gated 單一真檔完整性**：`agent_files.mode: copy`（預設）維持四檔版本相等比對；`symlink` 模式下 canonical `CLAUDE.md` 須為一般檔、`AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md` 須為 resolve 到 `CLAUDE.md` 的 symlink，divergent 複本／錯誤目標／canonical 為 symlink 皆 FAIL。維持無豁免 label（比照原 R-14）。
+- **本 repo agent 慣例檔改為 canonical `CLAUDE.md` + symlink**：消除四份 byte-identical 複本，今後只維護 `CLAUDE.md`；`.paul-project.yml` 設 `agent_files.mode: symlink`。
+
+## [1.0.5] - 2026-06-18
+
+### Added
+- **新增 R-22（doc-reference 懸空引用）**：偵測 `README.md` / `docs/**` 對 code 產物（檔案路徑、markdown 內部連結、反引號 symbol）的結構化懸空引用。**Prong P**（路徑/連結）走快照存在性、**Prong S**（symbol）走 `base..head` diff（本次刪/改名的 Python `def`/`class`）。diff-aware 分級：本次新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）Prong P 降 WARN 且 Prong S 關閉。掃描排除 `openspec/**`、`docs/superpowers/**` 與自身 fixtures；`.paul-project.yml` 新增 `doc_reference.allow`（R-08 驗其為 `list[str]`）；豁免 label `policy-exempt:doc-reference`。同步三層治理：Tier 1 checklist（搬/改/刪 code 產物時同步 docs）、Tier 3「PR review 留意語意陳舊」導引（四份 agent 檔），並新增「defer 的版本 bump 須於 merge 當下立即補做」convention。對應 issue #11。
+
+## [1.0.4] - 2026-06-18
+
+> **主題**：R-21 機密標記 config 化（baseline 資料檔 + per-repo extend-only 疊加、結構偵測器 always-on、vendor/OS 名減敏）＋ R-08 驗證 `secret_scan` 標記欄位 schema。`policy_version` 1.0.3 → 1.0.4（`VERSION` / `pyproject.toml` / `.paul-project.yml` / 四份 agent 慣例檔 / caller workflow 同步升版）。對應 engine tag `v1.0.4`、SHA `77a3e8381eeced9dbba623e450ed6a5c1fcc7b18`（見 `RELEASES.md`）。
+
+### Added
+- **新增 `RELEASES.md` 版本譜系**：`policy_version` ↔ engine tag/SHA 的權威對照表；1.0.0 / 1.0.1 的 SHA 由下游釘選值事後考據回填，自 1.0.2 起發版流程為「merge → 打 `vX.Y.Z` tag → 回填本表」。
+
+### Changed
+- **R-21 偵測改 config-driven markers + always-on 結構偵測器**：偵測拆為兩類——結構偵測器（個人絕對路徑 `/home/<user>/`、私鑰 PEM）恆開且寫死於 code；marker tokens（內部代號／裝置型號等）改由 `resolve_markers(ctx.config)` 從 baseline 資料檔疊加 repo config 動態解析（extend-only、扣除 `public_names`）。一行命中任一結構偵測器或任一 marker token 即 FAIL。行為相較先前一致，唯廠商／OS 名（brcm/broadcom/airoha/prplos/prplog/marvell/mtk 等）已列入 baseline `public_names`、不再觸發。`_SELF_EXEMPT` 新增 `_secret_scan_config.py`、`secret_scan_defaults.yml` 與 `tests/test_secret_scan_config.py`，避免引擎掃描自身的 baseline token 清單時誤報。R-08 schema 同步擴充：`secret_scan` 的 `allow` / `markers` / `public_names` 若存在須為 `list[str]`，型別不符時 FAIL。
+
+### Fixed
+- **打包 `policy_check/data/*.yml`**：`pyproject.toml` 新增 `[tool.setuptools.package-data]`，將 `policy_check.data` 下的 `*.yml` 納入 wheel/sdist，確保 R-21 baseline 資料檔（`secret_scan_defaults.yml`）在 pip-install 後可由 `importlib.resources` 載入；否則下游 repo 釘選安裝引擎時 `load_baseline()` 會在 runtime 找不到資料檔。
+- **R-21 改掃 git-tracked 檔案**：`_iter_text_files()` 從 `rglob("*")` 改為優先以 `git ls-files` 列舉已追蹤檔案，自動尊重 `.gitignore`，避免 `build/`、`dist/`、`*.egg-info/` 等本地產物含雇主標記時誤報 FAIL；非 git 目錄（如測試 fixture 的暫存目錄）自動 fallback 至原有 rglob 行為，現有測試無需修改。
+
 ## [pre-fragment backlog]
 
 > 以下為導入 per-PR fragment 模型（#24）前累積於 `[Unreleased]` 的歷史條目，保留原文。
@@ -86,47 +130,3 @@
 - **reusable workflow policy engine 版本漂移**：`Checkout policy engine` 步驟加入 `ref: ${{ github.workflow_sha }}`，確保 policy engine 版本與呼叫者所鎖定的 workflow 版本一致，消除未鎖定時永遠抓 main branch 的風險；同步新增回歸測試 `test_reusable_workflow_policy_engine_checkout_is_pinned`
 - **跨 repo reusable workflow 中 `github.workflow_sha` 指向錯誤 repo**：根據 GitHub 官方文件，reusable workflow 中 `github` context 始終屬於 caller workflow，因此 `github.workflow_sha` 是 caller repo 的 SHA，而非 `paulsha-conventions` 的 SHA；改為在 `workflow_call.inputs` 新增必填 `policy_engine_ref` 參數，由呼叫者明確傳入指向 `hamanpaul/paulsha-conventions` 的完整 40 字元 commit SHA；同步更新 `policy-check.yml`（self-dogfood 以 `${{ github.sha }}` 傳入）、README CI 範例、及測試 `test_reusable_workflow_interface_contract` 與 `test_reusable_workflow_policy_engine_checkout_is_pinned`
 - **reusable workflow metadata 解析錯誤**：`workflow_call.inputs.policy_engine_ref.description` 不再包含 GitHub expression syntax；避免跨 repo 呼叫時在 job 啟動前就被 GitHub 判定為 invalid workflow
-
-## [1.0.8] - 2026-06-30
-
-### Added
-- **#23 跨 repo policy 漂移治理**：新增 `policy_check/drift.py`（ops 工具，非 R-xx 規則）——`report`（唯讀列出 `hamanpaul/*` 各 repo `policy_version` 對 live canonical 的 `current`/`behind`/`ahead`/`unmanaged`，永遠 exit 0）與 `check`（比當前 repo vs canonical 最高 tag，`behind` → exit≠0，供 org `Policy Freshness` required workflow 當 gate）；版本比較含 `-fix.N` 完整排序。新增 `docs/org-ruleset-runbook.md`（org admin 套用 ruleset + required workflow 步驟），README 新增「跨 repo 升版傳播（機制層）」子段、`RELEASES.md` 新增升版傳播 SOP。engine 不主動改下游。
-- **#26 文件規則補強（doc_paths / R-25 doc_coverage / R-26 generated_facts）**：
-  - 新增 top-level `doc_paths`（預設 `README.md` + `docs/**`）作為 `R-18` / `R-22` 共用的 canonical doc scope；R-08 驗證其為 `list[str]`。`R-18` 改以 `doc_paths` 判斷 code change 是否伴隨 docs touch；`R-22` 改由 `doc_paths` 取候選文件，仍保留 `openspec/**`・`docs/superpowers/**`・fixtures 內建排除。
-  - **新增 R-25（doc coverage / omission gate，opt-in）**：宣告 `doc_coverage` 後，以四種 deterministic extractor（`modules`／`rpc_methods`／`env_vars`／`cli_tree`）抽出 public fact，要求其在 target docs 被精確 mention；`mode: changed`（預設）只查 `base...HEAD` 新增 fact、`mode: all` 查全部；缺 base diff context 降 WARN；target 超出 `doc_paths`／不存在／extractor 設定無效則 FAIL。mention 採區分大小寫的精確 token/phrase 比對（子字串不算）。
-  - **新增 R-26（generated-fact marker sync，opt-in）**：宣告 `generated_facts` 後，以通用 `generated-fact` marker 協議比對 command 正規化 stdout 與 doc marker 區塊；marker 缺失／command 非 0／輸出不一致／設定不完整則 FAIL。與 `R-16` 的 `cli-help` marker 並存不互相覆蓋。
-  - R-08 新增 `doc_coverage`（mapping／`mode ∈ {changed, all}`／`targets list[str]`／`sources list[mapping]`）與 `generated_facts`（`list[mapping]`）結構驗證；新增共用 helper `_doc_scope`／`_fact_extract`／`_marker_sync`（後者由 R-16 抽出，R-16 行為不變）。
-
-## [1.0.7] - 2026-06-23
-
-### Added
-- **新增 R-24（moc-alignment）**：repo 於 `.paul-project.yml` 宣告 `moc`（`static` / `map` / `triggers`）後生效（未宣告 → NA）。三瓣：靜態鮮度（`moc.triggers` 命中但 `moc.static` 未同步 → WARN）／動態連結懸空（`moc.map` 連到不存在產物，本次新破壞 FAIL、陳年 WARN）／動態連結孤兒（active openspec change・`docs/superpowers/{plans,specs}` 未被連結 → WARN，永不 FAIL）。platform-agnostic（純 git-level，不依賴 GitHub/GitLab）。豁免 `policy-exempt:moc-alignment`。R-08 擴充驗 `moc`；r22/r24 共用 link helper 抽至 `policy_check/rules/_doc_links.py`。
-
-## [1.0.6] - 2026-06-23
-
-### Added
-- **新增 R-23（引擎 pin 版本 attestation）**：workflow `uses:` 指向 `conventions_engine.repo` 的引擎版本（tag `@vX.Y.Z`，或 SHA `@<sha>` + 尾註 `# vX.Y.Z`）必須與 `.paul-project.yml` 的 `policy_version` 一致，否則 FAIL；純 SHA 無版本註解時降為 WARN（離線無法驗證）；`./` 在地引用或未設 `conventions_engine.repo` 時 not-applicable。豁免 label `policy-exempt:engine-pin`。動機：閉合「repo 實際 pin 的引擎版本 ⟷ 宣告 policy_version」這條既有引擎只驗 intra-repo 自洽、看不到的缺口。
-- **`.paul-project.yml` 新增 `agent_files.mode` 與 `conventions_engine.repo`**：`agent_files.mode` 列舉 `copy`（預設）/ `symlink`；`conventions_engine.repo` 為 `owner/repo` 字串（空字串為 NA sentinel）。R-08 擴充驗證兩區塊型別、列舉與格式。
-
-### Changed
-- **R-14 升級為 config-gated 單一真檔完整性**：`agent_files.mode: copy`（預設）維持四檔版本相等比對；`symlink` 模式下 canonical `CLAUDE.md` 須為一般檔、`AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md` 須為 resolve 到 `CLAUDE.md` 的 symlink，divergent 複本／錯誤目標／canonical 為 symlink 皆 FAIL。維持無豁免 label（比照原 R-14）。
-- **本 repo agent 慣例檔改為 canonical `CLAUDE.md` + symlink**：消除四份 byte-identical 複本，今後只維護 `CLAUDE.md`；`.paul-project.yml` 設 `agent_files.mode: symlink`。
-
-## [1.0.5] - 2026-06-18
-
-### Added
-- **新增 R-22（doc-reference 懸空引用）**：偵測 `README.md` / `docs/**` 對 code 產物（檔案路徑、markdown 內部連結、反引號 symbol）的結構化懸空引用。**Prong P**（路徑/連結）走快照存在性、**Prong S**（symbol）走 `base..head` diff（本次刪/改名的 Python `def`/`class`）。diff-aware 分級：本次新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）Prong P 降 WARN 且 Prong S 關閉。掃描排除 `openspec/**`、`docs/superpowers/**` 與自身 fixtures；`.paul-project.yml` 新增 `doc_reference.allow`（R-08 驗其為 `list[str]`）；豁免 label `policy-exempt:doc-reference`。同步三層治理：Tier 1 checklist（搬/改/刪 code 產物時同步 docs）、Tier 3「PR review 留意語意陳舊」導引（四份 agent 檔），並新增「defer 的版本 bump 須於 merge 當下立即補做」convention。對應 issue #11。
-
-## [1.0.4] - 2026-06-18
-
-> **主題**：R-21 機密標記 config 化（baseline 資料檔 + per-repo extend-only 疊加、結構偵測器 always-on、vendor/OS 名減敏）＋ R-08 驗證 `secret_scan` 標記欄位 schema。`policy_version` 1.0.3 → 1.0.4（`VERSION` / `pyproject.toml` / `.paul-project.yml` / 四份 agent 慣例檔 / caller workflow 同步升版）。對應 engine tag `v1.0.4`、SHA `77a3e8381eeced9dbba623e450ed6a5c1fcc7b18`（見 `RELEASES.md`）。
-
-### Added
-- **新增 `RELEASES.md` 版本譜系**：`policy_version` ↔ engine tag/SHA 的權威對照表；1.0.0 / 1.0.1 的 SHA 由下游釘選值事後考據回填，自 1.0.2 起發版流程為「merge → 打 `vX.Y.Z` tag → 回填本表」。
-
-### Changed
-- **R-21 偵測改 config-driven markers + always-on 結構偵測器**：偵測拆為兩類——結構偵測器（個人絕對路徑 `/home/<user>/`、私鑰 PEM）恆開且寫死於 code；marker tokens（內部代號／裝置型號等）改由 `resolve_markers(ctx.config)` 從 baseline 資料檔疊加 repo config 動態解析（extend-only、扣除 `public_names`）。一行命中任一結構偵測器或任一 marker token 即 FAIL。行為相較先前一致，唯廠商／OS 名（brcm/broadcom/airoha/prplos/prplog/marvell/mtk 等）已列入 baseline `public_names`、不再觸發。`_SELF_EXEMPT` 新增 `_secret_scan_config.py`、`secret_scan_defaults.yml` 與 `tests/test_secret_scan_config.py`，避免引擎掃描自身的 baseline token 清單時誤報。R-08 schema 同步擴充：`secret_scan` 的 `allow` / `markers` / `public_names` 若存在須為 `list[str]`，型別不符時 FAIL。
-
-### Fixed
-- **打包 `policy_check/data/*.yml`**：`pyproject.toml` 新增 `[tool.setuptools.package-data]`，將 `policy_check.data` 下的 `*.yml` 納入 wheel/sdist，確保 R-21 baseline 資料檔（`secret_scan_defaults.yml`）在 pip-install 後可由 `importlib.resources` 載入；否則下游 repo 釘選安裝引擎時 `load_baseline()` 會在 runtime 找不到資料檔。
-- **R-21 改掃 git-tracked 檔案**：`_iter_text_files()` 從 `rglob("*")` 改為優先以 `git ls-files` 列舉已追蹤檔案，自動尊重 `.gitignore`，避免 `build/`、`dist/`、`*.egg-info/` 等本地產物含雇主標記時誤報 FAIL；非 git 目錄（如測試 fixture 的暫存目錄）自動 fallback 至原有 rglob 行為，現有測試無需修改。
