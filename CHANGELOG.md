@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Added
+- **#23 跨 repo policy 漂移治理**：新增 `policy_check/drift.py`（ops 工具，非 R-xx 規則）——`report`（唯讀列出 `hamanpaul/*` 各 repo `policy_version` 對 live canonical 的 `current`/`behind`/`ahead`/`unmanaged`，永遠 exit 0）與 `check`（比當前 repo vs canonical 最高 tag，`behind` → exit≠0，供 org `Policy Freshness` required workflow 當 gate）；版本比較含 `-fix.N` 完整排序。新增 `docs/org-ruleset-runbook.md`（org admin 套用 ruleset + required workflow 步驟），README 新增「跨 repo 升版傳播（機制層）」子段、`RELEASES.md` 新增升版傳播 SOP。engine 不主動改下游。
 - **R-08 接受 optional `tier` 欄位**：`.paul-project.yml` 新增可選欄位 `tier`，允許值為 `shareable` / `work` / `personal`；提供非法值（如 `public`）時 FAIL，並回報允許值清單。
 - **新增 R-21（機密掃描）**：宣告 `tier: shareable` 的 repo 若含雇主標記（內部代號、裝置型號、build 主機等）、個人絕對路徑或憑證模式則 FAIL；`tier: work`/`personal` 視為 not-applicable；自身規則檔/fixtures 與 `.paul-project.yml` 的 `secret_scan.allow` 路徑豁免；豁免 label `policy-exempt:secret-scan`。同時 `.paul-project.yml` 新增 `secret_scan.allow` 設定。
 - **新增 R-19（repo 有測試則 CI 必須執行）**：repo 根目錄存在 `tests/`（含 `test_*.py` / `*_test.py`）時，`.github/workflows/**` 必須有至少一個 workflow 實際執行測試（pytest / unittest / npm test / go test / cargo test 等），否則 FAIL；豁免 label `policy-exempt:ci-tests`。無測試套件的 repo 空轉通過。動機：多個 repo 擁有大量測試但 CI 僅跑 policy check，測試從未在 PR gate 上執行。

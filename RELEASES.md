@@ -15,3 +15,16 @@
 | 1.0.0 | —（未打 tag） | `8454aa1967b752ea38c82edd79a8439b5bde915b` | R-01 ~ R-16 初版 |
 
 > 註：1.0.0 / 1.0.1 的 SHA 取自下游 repo 當時的 `POLICY_ENGINE_REF` 釘選值（ocr-from2xlsx、paulshaclaw 等），屬事後考據；自 1.0.2 起，發版流程改為「merge → 打 `vX.Y.Z` tag → 回填本表 SHA」。
+
+## 升版傳播 SOP（下游 repo 自助）
+
+canonical bump 後，落後的下游 repo 由**其自身 agent** 依序升版（engine 不主動改下游；`python3 -m policy_check.drift report --org hamanpaul` 會點名哪些 repo `behind`）：
+
+1. 查上表取目標 `policy_version` 與對應 engine SHA。
+2. 改 `.paul-project.yml` 的 `policy_version`。
+3. re-pin workflow 的 `policy_engine_ref` 為新 SHA，並補 `# vX.Y.Z` 尾註（R-23）。
+4. canonical `CLAUDE.md` 有變則更新（`AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md` 在 `agent_files.mode: symlink` 下自動跟隨）。
+5. `python3 -m pytest -q` 與 `python3 -m policy_check --repo .` 全綠。
+6. 開 PR（`hamanpaul` → zh-tw），body 寫 `Closes #N`（若有對應 issue）。
+
+> org `Policy Freshness` gate 會擋下未做此 SOP 的 merge（見 [`docs/org-ruleset-runbook.md`](docs/org-ruleset-runbook.md)）。
