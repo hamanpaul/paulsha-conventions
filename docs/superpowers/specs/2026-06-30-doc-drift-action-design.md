@@ -3,6 +3,8 @@
 > 日期：2026-06-30 ｜ 對應 issue：#25（子項 1：doc-drift 抽成獨立 Action）｜ 分支：`feature/25-doc-drift-action`
 >
 > 範疇定案：完整 OSS-ready；允許拆多 spec / 多 phase，但**一次規劃到底**（propose + writing-plans 全做完）、**逐 spec 驗收、全部落在同一個 PR**。語言優先序 Python（主）→ bash（次）→ C/C++（再次）。R-24（MOC alignment）**納入**本單元。
+>
+> 修訂：2026-06-30 依 Codex adversarial review 修正兩個 [high]：(1) Action 自理 base/head git 物件供給（不依賴 caller checkout 深度）；(2) symbol-drift 改 scoped identity，消除同名裸名 fail-open。
 
 ## 背景與問題
 
@@ -17,7 +19,7 @@ paulsha-conventions 的對外差異化，評估後集中在 **deterministic doc�
 
 - **是什麼**：偵測「docs/散文引用了**本次變更刪掉的 code symbol 或 in-repo 路徑／受治理產物**」的 deterministic 檢查器。對外敘事聚焦 **symbol-drift**（業界真空白）。
 - **不是什麼**：不檢外部 URL 活性、HTTP、anchor——那是 **lychee** 的領域。README 明示「外部連結請搭 lychee」，**不重造**。我們只做 offline、git-level、deterministic 的 in-repo 引用存在性。
-- **零設定**：不要求 `.paul-project.yml`／policy 機制；輸入來自 GitHub event（PR base ref）＋少量 action input ＋ git。
+- **零設定**：指**不需 policy 設定檔**（`.paul-project.yml`／profile/version 機制）；輸入來自 GitHub event（PR base/head SHA）＋少量 action input ＋ git。但「零設定」**不代表** Action 不管 git 供給——base/head 物件由 Action 自理（見下節），正是為了讓使用者那端維持零設定。
 
 ## 設計原則
 
@@ -47,14 +49,31 @@ policy_check/doc_drift/                共用、語言無關的核心（按 prim
 
 ## symbol-drift 演算法（取代 Python-only regex）
 
-1. 對 `base` 與 `HEAD` 兩個 git ref，各以 `git archive <ref>` 拉到 temp 目錄後跑 ctags（deterministic、不污染 worktree）。
-2. 依 `langs.py` 的 kind 白名單，把 ctags 輸出收斂成 symbol **名稱集合**。
-3. `removed = base_symbols − head_symbols`。
-4. docs 的 code-span token 命中 `removed` → **FAIL**（本次刪除）；指向不存在但非本次刪的 → **WARN**（陳年，advisory）。
+### Base/HEAD git 物件供給（Action 自有契約，非依賴 caller）
 
-語義與現行 R-22 一致（本次刪 FAIL／陳年 WARN），差別只在語言無關。
+核心需要 base 與 HEAD 兩個 ref 的樹物件才能跑 `git archive`。**這不能假設外部 caller 已備妥**：標準 `actions/checkout@v4` 預設 `fetch-depth: 1`（shallow），PR base commit 常**不在** checkout 內，`git archive <base>` 會在分析前就 fatal。現行 reusable workflow 是靠自己設 `fetch-depth: 0` 才成立——但 standalone Action 落在外部 repo 的 workflow，那個 checkout step 不在我們掌控內。
 
-**已知侷限（誠實寫進 README）**：ctags 以**裸名**比對，同名 symbol 不分 scope（兩個 class 同名 method 會被視為同一名）——與現行 R-22 同等，列為 tuning 點（靠 kind 白名單收斂，必要時未來再加 scope 限定）。
+因此 Action **自行供給並驗證** base/head 物件：
+
+1. 從 GitHub event 取 PR base/head 的**精確 SHA**（非分支名，避免 ref 漂移）。
+2. `git archive` 前**驗證兩個 SHA 的物件都存在**（`git cat-file -e <sha>^{tree}`）。
+3. 缺物件時 Action 自行 `git fetch origin <sha>`（必要時 unshallow），而**非**要求使用者改 checkout。
+4. fetch 仍取不到 → **fail fast 並印可行動訊息**（指出需 `fetch-depth: 0` 或補 token 權限），不靜默 pass。
+5. README 將「base 供給」列為 Action 契約一部分；self-test **涵蓋 shallow-checkout（`fetch-depth: 1`）情境**，斷言 Action 不在分析前 fatal。
+
+### 演算法（scoped identity，避免同名 fail-open）
+
+1. 對 base 與 HEAD 各以 `git archive <sha>` 拉到 temp 後跑 ctags（deterministic、不污染 worktree）。
+2. 依 `langs.py` kind 白名單，把 ctags 輸出收斂成**帶 scope 的 symbol 身分** `(lang, kind, scope, name)`（scope 取 ctags 的 `scope:`/`class:`/檔案路徑等欄位），**而非裸名集合**。
+3. `removed = base_identities − head_identities`。
+4. docs 的 code-span token 比對：
+   - **限定式引用**（如 `` `Foo.close` ``、`` `mod.func` ``）：精確比對 scoped identity → 命中 `removed` 即 **FAIL**。
+   - **裸名引用**（如 `` `close` ``）：**保守**——僅當該名稱在 HEAD **完全消失**才 FAIL（不誤殺仍存在的同名 symbol）；若該名稱只是**部分**被刪（HEAD 仍有同名留存）→ **WARN（ambiguous，advisory）**並標示，不靜默放過。
+   - 本次刪 → FAIL；非本次刪的陳年缺失 → WARN（advisory）。
+
+如此把原本「同名一律裸名比對」的 fail-open，收斂為「限定式精確、裸名保守且歧義會 WARN」——headline 檢查不再對常見方法名靜默失效。對現行 R-22 語義為**單調更嚴或等價**（既有測試應續綠，至多新增 advisory WARN）。
+
+**已知侷限（誠實寫進 README）**：當 doc 用**裸名**指涉一個被刪的多載／同名 symbol、且 HEAD 仍有同名留存時，無法判定意圖，故只 WARN 不 FAIL（避免誤報）；**限定式引用不受此限**。ctags 的 scope 欄位粒度依語言而異（P0 Python／P3 bash／P4 C/C++ 各自驗證並記錄）。
 
 ## path-drift 與 lychee 邊界
 
@@ -96,9 +115,9 @@ issue 點名的成敗點之一。採**雙軌**，實作於核心 → R-22／R-24
 
 | Phase | 內容 | 驗收標準 |
 |---|---|---|
-| **P0 核心 + R-22** | 建 `doc_drift/` primitives（refs/paths/symbols/langs，ctags base/HEAD 差集）；R-22 refactor 為呼叫核心 | R-22 既有測試全綠（Python parity）；核心有單元測試 |
+| **P0 核心 + R-22** | 建 `doc_drift/` primitives（refs/paths/symbols/langs，ctags base/HEAD **scoped-identity** 差集）；R-22 refactor 為呼叫核心 | R-22 既有測試全綠（Python parity）；scoped-identity 單元測試含「限定式→FAIL、同名部分刪→WARN、完全消失→FAIL」 |
 | **P1 R-24 上核心** | R-24 refactor 上核心；新增 `coverage` primitive；治理前綴**參數化** | R-24 既有測試全綠；前綴可由 config 覆寫 |
-| **P2 Action + Python** | `action.yml` + 薄 CLI + zero-config；doc-drift／moc 兩 mode；獨立 README；in-repo demo + self-test CI | 外部 `uses:` 跑得動；demo green/red 各一斷言通過 |
+| **P2 Action + Python** | `action.yml` + 薄 CLI；**Action 自理 base/head SHA fetch + 物件驗證 + fail-fast**；doc-drift／moc 兩 mode；獨立 README；in-repo demo + self-test CI | 外部 `uses:` 跑得動；demo green/red 各一；**self-test 含 shallow-checkout（`fetch-depth: 1`）情境**斷言不 fatal |
 | **P3 bash** | `langs.py` 註冊 bash + fixtures | 刪 bash function 被抓為 FAIL；fixtures 綠 |
 | **P4 C/C++** | `langs.py` 註冊 C/C++ + fixtures（抽象的真正考驗） | 刪 C/C++ symbol 被抓為 FAIL；fixtures 綠 |
 | **P5 誤報 UX** | inline marker + `.doc-drift-allow`，實作於核心 | 兩種豁免皆生效；R-22／R-24／Action 同享；有測試 |
@@ -118,7 +137,7 @@ issue 點名的成敗點之一。採**雙軌**，實作於核心 → R-22／R-24
 - 不在本案決定授權條款 / 品牌定位 / 是否立即公開 OSS（issue Non-goal）。
 - 不重造外部連結／HTTP 活性檢查（交給 lychee）。
 - 不把 Action 拆成獨立 GitHub repo（單一 PR 約束；日後品牌定案再說）。
-- 不改變 R-22／R-24 對外**語義**（FAIL/WARN 判準維持等價），只換實作為共用核心並語言無關化。
+- 不**放寬** R-22／R-24 對外語義；改實作為共用核心並語言無關化。scoped-identity 可能新增 advisory WARN（同名歧義），但**不放過**原本會 FAIL 的情況（單調更嚴或等價）。
 
 ## 待 P-level spec 定稿的開放點
 
