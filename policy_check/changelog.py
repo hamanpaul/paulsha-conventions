@@ -48,6 +48,8 @@ class Fragment:
 
 def parse_fragment(text: str) -> Fragment:
     """Parse a fragment's YAML frontmatter + body into a Fragment."""
+    if text.startswith("﻿"):  # tolerate a UTF-8 BOM
+        text = text[1:]
     if not text.startswith("---"):
         raise FragmentError("fragment must start with a YAML frontmatter block")
     parts = text.split("---", 2)
@@ -67,11 +69,24 @@ def parse_fragment(text: str) -> Fragment:
         raise FragmentError("fragment body must not be empty")
     issue = meta.get("issue")
     if issue is not None:
+        # reject bool (YAML true/false) and float; accept int or a digit string
+        if isinstance(issue, bool) or not isinstance(issue, (int, str)):
+            raise FragmentError(f"fragment 'issue' must be an integer, got {issue!r}")
         try:
             issue = int(issue)
-        except (TypeError, ValueError) as exc:
+        except ValueError as exc:
             raise FragmentError(f"fragment 'issue' must be an integer, got {issue!r}") from exc
     return Fragment(type=ftype, body=body, scope=meta.get("scope"), issue=issue)
+
+
+def _bullet(body: str) -> str:
+    """Render a (possibly multi-line) body as one markdown list item.
+
+    Continuation lines are indented two spaces so they stay within the bullet
+    and the output remains valid Keep-a-Changelog markdown.
+    """
+    body_lines = body.split("\n")
+    return "- " + "\n  ".join(body_lines)
 
 
 def render_section(version: str, date: str, fragments: list[Fragment]) -> str:
@@ -92,7 +107,7 @@ def render_section(version: str, date: str, fragments: list[Fragment]) -> str:
         if section not in grouped:
             continue
         lines.append(f"### {section}")
-        lines.extend(f"- {body}" for body in grouped[section])
+        lines.extend(_bullet(body) for body in grouped[section])
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 

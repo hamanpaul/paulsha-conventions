@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fnmatch import fnmatch
+from pathlib import Path
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
 from policy_check.rules.registry import register
@@ -9,17 +10,21 @@ from policy_check.rules.registry import register
 _PREFIX = "changelog.d/"
 
 
-def _pr_added_fragment(changed_files: list[str]) -> bool:
-    """True if this PR touched a direct ``changelog.d/<name>.md`` fragment.
+def _pr_added_fragment(changed_files: list[str], repo_root: Path) -> bool:
+    """True if this PR added/modified a direct ``changelog.d/<name>.md`` fragment.
 
     Nested paths (``changelog.d/sub/x.md``) are rejected because the release
-    collator only collects direct children, so they would silently never ship.
+    collator only collects direct children. The file MUST also still exist at
+    HEAD, so a PR that merely *deletes* or *renames* a fragment cannot satisfy
+    the gate without actually documenting its change.
     """
     for changed_file in changed_files:
         if not changed_file or not changed_file.startswith(_PREFIX):
             continue
         name = changed_file[len(_PREFIX):]
-        if "/" not in name and name.endswith(".md"):
+        if "/" in name or not name.endswith(".md"):
+            continue
+        if (repo_root / changed_file).is_file():
             return True
     return False
 
@@ -51,7 +56,7 @@ class R09CodeChangelogSync:
                 message="No code path files changed.",
             )
 
-        if _pr_added_fragment(ctx.changed_files):
+        if _pr_added_fragment(ctx.changed_files, ctx.repo_root):
             return RuleResult(
                 rule_id=self.rule_id,
                 status=Status.PASS,

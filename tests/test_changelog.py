@@ -128,3 +128,25 @@ def test_collate_missing_changelog_raises_fragment_error(tmp_path):
     with pytest.raises(cl.FragmentError):
         cl.collate(tmp_path, "1.0.9", "2026-07-01")
     assert (tmp_path / "changelog.d" / "24-frag.md").exists()  # 未刪
+
+
+# --- adversarial review hardening (multi-line / BOM / issue type) ---
+
+def test_render_section_indents_multiline_body():
+    out = cl.render_section("1.0.9", "2026-01-01", [cl.Fragment(type="feat", body="第一行\n第二行")])
+    assert "- 第一行\n  第二行" in out
+
+
+def test_parse_fragment_tolerates_utf8_bom():
+    frag = cl.parse_fragment("﻿---\ntype: feat\n---\nbody。\n")
+    assert frag.type == "feat" and frag.body == "body。"
+
+
+def test_parse_fragment_rejects_bool_issue():
+    with pytest.raises(cl.FragmentError):
+        cl.parse_fragment("---\ntype: feat\nissue: true\n---\nbody。\n")
+
+
+def test_parse_fragment_rejects_float_issue():
+    with pytest.raises(cl.FragmentError):
+        cl.parse_fragment("---\ntype: feat\nissue: 24.7\n---\nbody。\n")

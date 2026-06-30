@@ -27,7 +27,14 @@ def get_rule(rule_id: str):
     return loaded[rule_id]
 
 
-def test_r09_code_change_with_fragment_passes(tmp_path):
+def _make_fragment(repo: Path, rel: str) -> None:
+    p = repo / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("---\ntype: feat\n---\nx。\n", encoding="utf-8")
+
+
+def test_r09_code_change_with_present_fragment_passes(tmp_path):
+    _make_fragment(tmp_path, "changelog.d/24-foo.md")
     res = get_rule("R-09").check(
         make_ctx(tmp_path, changed_files=["policy_check/x.py", "changelog.d/24-foo.md"]))
     assert res.status == Status.PASS
@@ -39,9 +46,25 @@ def test_r09_code_change_without_fragment_fails(tmp_path):
     assert "changelog.d" in res.message
 
 
+def test_r09_deleted_fragment_does_not_count(tmp_path):
+    # fragment is in changed_files but absent at HEAD (deleted/renamed) → must not pass.
+    res = get_rule("R-09").check(
+        make_ctx(tmp_path, changed_files=["policy_check/x.py", "changelog.d/deleted.md"]))
+    assert res.status == Status.FAIL
+
+
 def test_r09_gitkeep_does_not_count_as_fragment(tmp_path):
+    (tmp_path / "changelog.d").mkdir()
+    (tmp_path / "changelog.d" / ".gitkeep").write_text("", encoding="utf-8")
     res = get_rule("R-09").check(
         make_ctx(tmp_path, changed_files=["policy_check/x.py", "changelog.d/.gitkeep"]))
+    assert res.status == Status.FAIL
+
+
+def test_r09_nested_fragment_path_does_not_count(tmp_path):
+    _make_fragment(tmp_path, "changelog.d/sub/foo.md")
+    res = get_rule("R-09").check(
+        make_ctx(tmp_path, changed_files=["policy_check/x.py", "changelog.d/sub/foo.md"]))
     assert res.status == Status.FAIL
 
 
@@ -55,10 +78,3 @@ def test_r09_skip_changelog_label_skips(tmp_path):
 def test_r09_no_code_change_passes(tmp_path):
     res = get_rule("R-09").check(make_ctx(tmp_path, changed_files=["docs/x.md"]))
     assert res.status == Status.PASS
-
-
-def test_r09_nested_fragment_path_does_not_count(tmp_path):
-    # M3: 巢狀路徑 collate 不會收集 → 不可讓它過 gate。
-    res = get_rule("R-09").check(
-        make_ctx(tmp_path, changed_files=["policy_check/x.py", "changelog.d/sub/foo.md"]))
-    assert res.status == Status.FAIL
