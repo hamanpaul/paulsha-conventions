@@ -1,5 +1,5 @@
 policy_profile: flat
-policy_version: 1.0.8
+policy_version: 1.0.9
 code_paths:
   - "**/*.py"
   - "**/*.sh"

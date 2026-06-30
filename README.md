@@ -18,7 +18,7 @@
 - 防止「分支命名混亂、版號語意不一致」
 - 防止「policy 說要遵守但 policy repo 自己不遵守」
 
-本 repo 自身亦 **dog-food** 本套 policy（`profile: flat`, `policy_version: 1.0.8`）。
+本 repo 自身亦 **dog-food** 本套 policy（`profile: flat`, `policy_version: 1.0.9`）。
 
 版本譜系（policy_version ↔ engine tag/SHA 對照）見 [`RELEASES.md`](./RELEASES.md)。
 
