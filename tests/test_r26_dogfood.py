@@ -37,7 +37,7 @@ def _run_r26(root: Path):
 def test_r26_dogfood_green_when_marker_matches_version(tmp_path):
     _setup(tmp_path, marker_version="1.0.10", file_version="1.0.10")
     proc = _run_r26(tmp_path)
-    assert proc.returncode == 0, proc.stdout
+    assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
 def test_r26_dogfood_red_when_marker_drifts_from_version(tmp_path):
@@ -46,3 +46,5 @@ def test_r26_dogfood_red_when_marker_drifts_from_version(tmp_path):
     proc = _run_r26(tmp_path)
     assert proc.returncode == 1
     assert "R-26" in proc.stdout
+    assert "fail" in proc.stdout
+    assert "output mismatch" in proc.stdout
