@@ -33,3 +33,7 @@ conventions_engine:
 moc:
   # 本 repo 無 build/install trigger，故不設 static/triggers；只用動態地圖 dogfood R-24。
   map: docs/MOC.md
+generated_facts:
+  - command: "cat VERSION"
+    reflected_in: "README.md"
+    marker: "repo-version"
