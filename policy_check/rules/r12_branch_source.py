@@ -23,6 +23,13 @@ class R12BranchSource:
                 exempt_label=self.exempt_label,
             )
 
+        if ctx.provider == "gitlab":
+            return RuleResult(
+                rule_id=self.rule_id,
+                status=Status.PASS,
+                message="GitLab provider: branch-source convention (hamanpaul-specific) not applicable.",
+            )
+
         if not ctx.pr_base_ref or not ctx.pr_head_ref:
             return RuleResult(
                 rule_id=self.rule_id,
