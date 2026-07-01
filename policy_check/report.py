@@ -22,7 +22,8 @@ def _render_rule(r: RuleResult) -> list[str]:
     return block
 
 
-def emit(results: Iterable[RuleResult], families: dict | None = None) -> int:
+def emit(results: Iterable[RuleResult], family_map: dict | None = None) -> int:
+    # 參數刻意命名 family_map（非 families）以免遮蔽 policy_check.rules.families 模組。
     results = list(results)
     lines = ["# Policy Check Report\n"]
     fails = [r for r in results if r.status == Status.FAIL]
@@ -35,14 +36,16 @@ def emit(results: Iterable[RuleResult], families: dict | None = None) -> int:
     lines.append(f"- warn: {len(warns)}")
     lines.append(f"- skip (exempt): {len(skips)}\n")
 
-    if families is None:
+    if family_map is None:
         # 向後相容：無 family map 時依 rule_id 平鋪
         for r in sorted(results, key=lambda x: x.rule_id):
             lines += _render_rule(r)
     else:
         by_family: dict[str, list[RuleResult]] = {}
         for r in results:
-            by_family.setdefault(families.get(r.rule_id, OTHER), []).append(r)
+            by_family.setdefault(family_map.get(r.rule_id, OTHER), []).append(r)
+        # 用 id(r) 追蹤已輸出者：RuleResult 是可變 dataclass、不可 hash，且 results=list(...)
+        # 已把所有物件釘活整個 emit()，故 id 唯一且不會被回收重用。
         emitted: set[int] = set()
         for fam in ordered_families():
             group = by_family.get(fam)

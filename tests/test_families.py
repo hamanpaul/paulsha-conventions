@@ -1,3 +1,6 @@
+from pathlib import Path
+
+import policy_check.rules as _rules_pkg
 from policy_check.rules import families, registry
 
 
@@ -27,3 +30,16 @@ def test_every_registered_rule_classified_exactly_once():
     assert not missing, f"未分類規則：{missing}"
     unknown = [rid for rid in classified_set if rid not in set(reg_ids)]
     assert not unknown, f"FAMILIES 含未知 rule_id：{unknown}"
+
+
+def test_every_rNN_module_registers_a_rule():
+    # sanity：每個以 rNN_ 命名的規則檔都應被 registry.load_all() 發現並註冊一條規則。
+    # 若新增 rNN_ 檔卻忘了 @register / import 失敗，載入數會少於檔案數 → 這裡擋下。
+    # （非 rNN_ 命名的規則檔既不會被 load_all 發現、也逃過此檢查——見 families.py docstring 的命名約束。）
+    rules_dir = Path(_rules_pkg.__file__).parent
+    rnn_files = sorted(p.stem for p in rules_dir.glob("r[0-9][0-9]_*.py"))
+    loaded = sorted(r.rule_id for r in registry.load_all())
+    assert len(rnn_files) == len(loaded), (
+        f"rNN_ 規則檔數({len(rnn_files)}) != 已載入規則數({len(loaded)})："
+        f"檔案={rnn_files}；規則={loaded}"
+    )

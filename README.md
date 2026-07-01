@@ -190,7 +190,7 @@ jobs:
     uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@aabbccddeeff0011223344556677889900aabbcc
     with:
       policy_profile: stage-driven  # 或 flat
-      policy_version: 1.0.1
+      policy_version: 1.0.10  # 範例；填你釘選 SHA 對應的實際版本
       # 必須傳入完整 40 字元 hex commit SHA，指向 hamanpaul/paulsha-conventions。
       # 不可使用 tag、short SHA 或 github.workflow_sha（那是 caller 自己 repo 的 SHA）。
       # uses: 與 policy_engine_ref 兩者必須鎖定到同一個 SHA。
