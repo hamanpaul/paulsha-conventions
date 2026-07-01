@@ -82,7 +82,7 @@ class R21SecretScan:
     exempt_label = "policy-exempt:secret-scan"
 
     def check(self, ctx: RuleContext) -> RuleResult:
-        if self.exempt_label in ctx.pr_labels:
+        if ctx.provider != "gitlab" and self.exempt_label in ctx.pr_labels:
             return RuleResult(
                 rule_id=self.rule_id,
                 status=Status.SKIP,
