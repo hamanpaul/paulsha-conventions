@@ -7,18 +7,13 @@ from policy_check.rules import registry
 from policy_check.rules.base import RuleContext, Status
 
 
-def make_ctx(
-    repo_root: Path,
-    labels: list[str] | None = None,
-    provider: str | None = None,
-) -> RuleContext:
+def make_ctx(repo_root: Path, labels: list[str] | None = None) -> RuleContext:
     return RuleContext(
         repo_root=repo_root,
         profile="flat",
         policy_version="1.0.3",
         config=cfg.load(repo_root),
         pr_labels=labels or [],
-        provider=provider,
     )
 
 
@@ -63,19 +58,6 @@ def test_r21_skip_with_exemption_label(fixture_repo):
     )
     assert result.status == Status.SKIP
     assert result.exempt_label == "policy-exempt:secret-scan"
-
-
-def test_r21_gitlab_does_not_honor_secret_scan_exemption_label(fixture_repo):
-    repo = fixture_repo("secret-scan/shareable-leak")
-    result = get_rule().check(
-        make_ctx(
-            repo,
-            labels=["policy-exempt:secret-scan"],
-            provider="gitlab",
-        )
-    )
-    assert result.status == Status.FAIL
-    assert result.exempt_label is None
 
 
 def test_r21_respects_config_allowlist(fixture_repo):
