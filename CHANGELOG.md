@@ -5,6 +5,15 @@
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
 本專案遵循 hamanpaul project policy v1.0.4。
 
+## [1.0.11] - 2026-07-01
+
+### Added
+- 引擎可作為離線 pip 套件在 GitLab merge_request pipeline 當 gate：新增 GitLab MR context provider（R-12 於 GitLab 標 NA）、R-23 pip-mode attestation（顯式 conventions_engine.mode、fail-closed、PEP440 正規化）、wheel 離線安裝（vendored 相依）與版本 lockstep；GitHub 路徑零回歸。發行管道選型另行追蹤。
+- policy_check 報告改依規則 family 分組呈現（中央有序分類 + OTHER catch-all，零 rule_id/label 變動）；README 版號改由 R-26 generated-fact marker 每 PR 強制同步、去除 L21/L269 手抄版號字面。
+
+### Changed
+- PR #35 覆審 nit 收尾：report.emit 參數改名 family_map（消除與 families 模組同名的 footgun）+ 補 id() 用途註解；新增 rNN_ 規則檔命名 sanity 測試（漏 @register 會被擋）；README 下游 caller 範例版號標為範例值。
+
 ## [1.0.10] - 2026-06-30
 
 ### Added
