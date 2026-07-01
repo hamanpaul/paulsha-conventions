@@ -25,9 +25,10 @@ canonical bump 後，落後的下游 repo 由**其自身 agent** 依序升版（
 
 1. 查上表取目標 `policy_version` 與對應 engine SHA。
 2. 改 `.paul-project.yml` 的 `policy_version`。
-3. re-pin workflow 的 `policy_engine_ref` 為新 SHA，並補 `# vX.Y.Z` 尾註（R-23）。
-4. canonical `CLAUDE.md` 有變則更新（`AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md` 在 `agent_files.mode: symlink` 下自動跟隨）。
-5. `python3 -m pytest -q` 與 `python3 -m policy_check --repo .` 全綠。
-6. 開 PR（`hamanpaul` → zh-tw），body 寫 `Closes #N`（若有對應 issue）。
+3. 若 repo 有啟用 README 的 `repo-version` generated-fact marker，更新其值為新 `VERSION`（R-26 為安全網，漏改則 CI 會擋）。
+4. re-pin workflow 的 `policy_engine_ref` 為新 SHA，並補 `# vX.Y.Z` 尾註（R-23）。
+5. canonical `CLAUDE.md` 有變則更新（`AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md` 在 `agent_files.mode: symlink` 下自動跟隨）。
+6. `python3 -m pytest -q` 與 `python3 -m policy_check --repo .` 全綠。
+7. 開 PR（`hamanpaul` → zh-tw），body 寫 `Closes #N`（若有對應 issue）。
 
 > org `Policy Freshness` gate 會擋下未做此 SOP 的 merge（見 [`docs/org-ruleset-runbook.md`](docs/org-ruleset-runbook.md)）。

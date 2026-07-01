@@ -18,7 +18,7 @@
 - 防止「分支命名混亂、版號語意不一致」
 - 防止「policy 說要遵守但 policy repo 自己不遵守」
 
-本 repo 自身亦 **dog-food** 本套 policy（`profile: flat`, `policy_version: 1.0.10`）。
+本 repo 自身亦 **dog-food** 本套 policy（`profile: flat`；`policy_version` 見 `.paul-project.yml` / `VERSION`）。
 
 版本譜系（policy_version ↔ engine tag/SHA 對照）見 [`RELEASES.md`](./RELEASES.md)。
 
@@ -265,10 +265,14 @@ options:
 **本 repo 版號語意**（`profile: flat`）：
 - **MAJOR**: 正式 release（feature 達到對外可用狀態）
 - **MINOR**: 功能穩定（已規劃 feature 全 landed + 7 天無 hotfix）
-- **PATCH**: 累積已完成的 feature batch 計數（本 repo 為 R-01~R-23 完整實作）
+- **PATCH**: 累積已完成的 feature batch 計數（完整規則清單見 `RELEASES.md` / `CHANGELOG.md`）
 - **-fix.N**: 落地後 bug fix（非新 feature、非穩定、非 release）
 
-當前版本：見 `VERSION`（現為 `1.0.7`）。
+當前版本（權威值見 `VERSION`）：
+
+<!-- BEGIN: generated-fact marker="repo-version" -->
+1.0.10
+<!-- END: generated-fact marker="repo-version" -->
 
 ## 相關專案
 

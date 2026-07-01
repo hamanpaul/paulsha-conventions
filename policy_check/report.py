@@ -1,11 +1,28 @@
-# policy_check/report.py
 import os
 from typing import Iterable
 
 from policy_check.rules.base import RuleResult, Status
+from policy_check.rules.families import OTHER, ordered_families
+
+_ICON = {
+    "pass": ":white_check_mark:",
+    "fail": ":x:",
+    "skip": ":warning:",
+    "warn": ":warning:",
+}
 
 
-def emit(results: Iterable[RuleResult]) -> int:
+def _render_rule(r: RuleResult) -> list[str]:
+    block = [f"## {_ICON[r.status.value]} {r.rule_id} — {r.status.value}", r.message]
+    if r.exempt_label:
+        block.append(f"exempt via: `{r.exempt_label}`")
+    if r.detail:
+        block.append(f"\n<details><summary>detail</summary>\n\n```\n{r.detail}\n```\n\n</details>")
+    block.append("")
+    return block
+
+
+def emit(results: Iterable[RuleResult], families: dict | None = None) -> int:
     results = list(results)
     lines = ["# Policy Check Report\n"]
     fails = [r for r in results if r.status == Status.FAIL]
@@ -18,15 +35,31 @@ def emit(results: Iterable[RuleResult]) -> int:
     lines.append(f"- warn: {len(warns)}")
     lines.append(f"- skip (exempt): {len(skips)}\n")
 
-    for r in sorted(results, key=lambda x: x.rule_id):
-        icon = {"pass": ":white_check_mark:", "fail": ":x:", "skip": ":warning:", "warn": ":warning:"}[r.status.value]
-        lines.append(f"## {icon} {r.rule_id} — {r.status.value}")
-        lines.append(r.message)
-        if r.exempt_label:
-            lines.append(f"exempt via: `{r.exempt_label}`")
-        if r.detail:
-            lines.append(f"\n<details><summary>detail</summary>\n\n```\n{r.detail}\n```\n\n</details>")
-        lines.append("")
+    if families is None:
+        # 向後相容：無 family map 時依 rule_id 平鋪
+        for r in sorted(results, key=lambda x: x.rule_id):
+            lines += _render_rule(r)
+    else:
+        by_family: dict[str, list[RuleResult]] = {}
+        for r in results:
+            by_family.setdefault(families.get(r.rule_id, OTHER), []).append(r)
+        emitted: set[int] = set()
+        for fam in ordered_families():
+            group = by_family.get(fam)
+            if not group:
+                continue
+            lines.append(f"### {fam}")
+            lines.append("")
+            for r in sorted(group, key=lambda x: x.rule_id):
+                lines += _render_rule(r)
+                emitted.add(id(r))
+        # OTHER catch-all：family 不在 ordered_families()（含未分類）者，確保不被漏印
+        leftovers = [r for r in results if id(r) not in emitted]
+        if leftovers:
+            lines.append(f"### {OTHER}")
+            lines.append("")
+            for r in sorted(leftovers, key=lambda x: x.rule_id):
+                lines += _render_rule(r)
 
     report = "\n".join(lines)
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
