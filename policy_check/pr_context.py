@@ -21,13 +21,21 @@ def pr_meta_from_event(event: dict) -> dict:
         "pr_labels": [l["name"] for l in pr.get("labels", [])] if has_pr else None,
         "pr_base_ref": (pr.get("base") or {}).get("ref"),
         "pr_head_ref": (pr.get("head") or {}).get("ref"),
+        "provider": "github" if has_pr else None,
+        "pr_base_sha": None,
     }
 
 
-def changed_files(base_ref: str | None, repo_root: Path) -> list[str]:
-    if not base_ref:
+def changed_files(
+    base_ref: str | None, repo_root: Path, base_sha: str | None = None
+) -> list[str]:
+    if base_sha:
+        rng = f"{base_sha}...HEAD"
+    elif base_ref:
+        rng = f"origin/{base_ref}...HEAD"
+    else:
         return []
-    cmd = ["git", "-C", str(repo_root), "diff", "--name-only", f"origin/{base_ref}...HEAD"]
+    cmd = ["git", "-C", str(repo_root), "diff", "--name-only", rng]
     try:
         out = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError:
@@ -43,3 +51,36 @@ def latest_tag(repo_root: Path) -> str | None:
         ).strip() or None
     except subprocess.CalledProcessError:
         return None
+
+
+def gitlab_pr_meta() -> dict:
+    """從 GitLab merge_request pipeline 的 CI_MERGE_REQUEST_* 組與 GitHub 等效的 meta。"""
+
+    def _env(k):
+        v = os.environ.get(k)
+        return v if v not in (None, "") else None
+
+    labels_raw = os.environ.get("CI_MERGE_REQUEST_LABELS")
+    labels = (
+        [t.strip() for t in labels_raw.split(",") if t.strip()]
+        if labels_raw is not None else []
+    )
+    return {
+        "pr_title": _env("CI_MERGE_REQUEST_TITLE"),
+        "pr_body": _env("CI_MERGE_REQUEST_DESCRIPTION"),
+        "pr_labels": labels,
+        "pr_base_ref": _env("CI_MERGE_REQUEST_TARGET_BRANCH_NAME"),
+        "pr_head_ref": _env("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"),
+        "pr_base_sha": _env("CI_MERGE_REQUEST_DIFF_BASE_SHA"),
+        "provider": "gitlab",
+    }
+
+
+def load_pr_meta() -> dict:
+    """provider 分派：GitLab MR > GitHub event > 空 {}（恆為 dict）。"""
+    if os.environ.get("CI_MERGE_REQUEST_IID"):
+        return gitlab_pr_meta()
+    event = load_event_payload()
+    if event:
+        return pr_meta_from_event(event)
+    return {}

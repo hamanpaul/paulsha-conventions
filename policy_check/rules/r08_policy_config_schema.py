@@ -149,6 +149,13 @@ class R08PolicyConfigSchema:
                     status=Status.FAIL,
                     message="conventions_engine.repo must be a string",
                 )
+            mode = conventions_engine.get("mode")
+            if mode is not None and mode not in ("workflow", "pip"):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="conventions_engine.mode must be one of ['workflow', 'pip']",
+                )
             if isinstance(repo, str) and repo != "" and not _ENGINE_REPO_RE.match(repo):
                 return RuleResult(
                     rule_id=self.rule_id,

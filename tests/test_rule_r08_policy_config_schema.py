@@ -304,3 +304,20 @@ def test_r08_pass_valid_generated_facts(tmp_path):
     )
     result = _r08().check(_ctx(repo))
     assert result.status == Status.PASS
+
+
+def test_r08_fail_on_invalid_conventions_engine_mode(tmp_path):
+    repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.0\nconventions_engine:\n  mode: pipp\n")
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "conventions_engine.mode" in result.message
+
+
+@pytest.mark.parametrize("mode", ["pip", "workflow", None])
+def test_r08_pass_on_valid_or_unset_conventions_engine_mode(tmp_path, mode):
+    cfg = "policy_profile: flat\npolicy_version: 1.0.0\n"
+    if mode is not None:
+        cfg += f"conventions_engine:\n  mode: {mode}\n"
+    repo = _write_config(tmp_path, cfg)
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS

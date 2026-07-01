@@ -14,8 +14,8 @@ from policy_check.report import emit
 def build_context(args: argparse.Namespace) -> RuleContext:
     repo_root = Path(args.repo).resolve()
     conf = cfg.load(repo_root)
-    event = prc.load_event_payload()
-    pr_meta = prc.pr_meta_from_event(event)
+    pr_meta = prc.load_pr_meta()
+    base_ref = pr_meta.get("pr_base_ref") or args.pr_base_ref
     return RuleContext(
         repo_root=repo_root,
         profile=conf["policy_profile"],
@@ -28,10 +28,11 @@ def build_context(args: argparse.Namespace) -> RuleContext:
             if pr_meta.get("pr_labels") is not None
             else (args.pr_labels.split(",") if args.pr_labels else [])
         ),
-        pr_base_ref=pr_meta.get("pr_base_ref") or args.pr_base_ref,
+        pr_base_ref=base_ref,
         pr_head_ref=pr_meta.get("pr_head_ref") or args.pr_head_ref,
-        changed_files=prc.changed_files(pr_meta.get("pr_base_ref") or args.pr_base_ref, repo_root),
+        changed_files=prc.changed_files(base_ref, repo_root, pr_meta.get("pr_base_sha")),
         latest_tag=prc.latest_tag(repo_root),
+        provider=pr_meta.get("provider"),
     )
 
 

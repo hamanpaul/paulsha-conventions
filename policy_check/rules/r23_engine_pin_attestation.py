@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import re
 
 from policy_check.rules.base import RuleContext, RuleResult, Status
@@ -14,6 +15,18 @@ _TAG_LOOSE_RE = re.compile(r'^v?(\d+(?:\.\d+){0,2}(?:-fix\.\d+)?)$')
 # 尾註版本須以 vX.Y.Z 起首（錨定），避免誤取註解中任意 version token
 _COMMENT_VER_RE = re.compile(r'^v?(\d+\.\d+\.\d+(?:-fix\.\d+)?)\b')
 _SHA_RE = re.compile(r'^[0-9a-fA-F]{40}$')
+
+
+def _installed_version() -> str:
+    return importlib.metadata.version("policy-check")
+
+
+def _canon_version(v: str) -> str:
+    """policy 語法 X.Y.Z[-fix.N] ↔ PEP 440 X.Y.Z[.postN] 的共同正規化。"""
+    v = v.strip().lower()
+    v = re.sub(r"^v(?=\d)", "", v, count=1)
+    v = re.sub(r"-fix\.(\d+)$", r".post\1", v)
+    return v
 
 
 @register
@@ -31,6 +44,26 @@ class R23EnginePinAttestation:
             )
 
         engine_cfg = ctx.config.get("conventions_engine") or {}
+        mode = (engine_cfg.get("mode") if isinstance(engine_cfg, dict) else None) or "workflow"
+        if mode == "pip":
+            declared = ctx.policy_version
+            try:
+                installed = _installed_version()
+            except importlib.metadata.PackageNotFoundError:
+                return RuleResult(
+                    rule_id=self.rule_id, status=Status.FAIL,
+                    message="conventions_engine.mode=pip but 'policy-check' is not installed; version not attestable.",
+                )
+            if _canon_version(installed) == _canon_version(declared):
+                return RuleResult(
+                    rule_id=self.rule_id, status=Status.PASS,
+                    message=f"installed policy-check {installed} matches policy_version {declared}",
+                )
+            return RuleResult(
+                rule_id=self.rule_id, status=Status.FAIL,
+                message=f"installed policy-check {installed} but policy_version declares {declared}",
+            )
+
         repo = engine_cfg.get("repo") if isinstance(engine_cfg, dict) else None
         if not repo:
             return RuleResult(
