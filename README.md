@@ -158,6 +158,29 @@ generated_facts:
 python3 -m pip install -e ".[test]"
 ```
 
+### 離線 pip 安裝（給 GitLab gate / air-gapped runner）
+
+若下游 CI 不走 GitHub reusable workflow，而是把引擎當成 wheel 發佈到 GitLab merge request pipeline，**必須**一併 vendor 引擎 wheel 與相依閉包；只做 `pip install --no-index <wheel>` 並不足夠，因為離線 runner 仍需要 `PyYAML` 等相依。
+
+build-time（可連網）先做 wheel 與相依閉包：
+
+```bash
+python3 -m pip wheel --no-deps --wheel-dir dist .
+mkdir -p vendor
+python3 -m pip download --dest vendor dist/policy_check-1.0.10-py3-none-any.whl
+```
+
+gate-time 的 **Python 套件安裝** 可離線，只吃已 vendored 的檔案：
+
+```bash
+python3 -m pip install --no-index --find-links vendor policy-check==1.0.10
+```
+
+界線請分清楚：
+
+- **build-time / 發行階段**：需要網路，負責 build wheel 並抓完整相依閉包。
+- **gate-time / MR 檢查階段**：`policy-check` 與其 vendored Python 相依可離線安裝；但 `universal-ctags` 仍需預裝在 runner image，或透過公司內部 package mirror 提供。
+
 ## Usage
 
 ### 1. 本地檢查（開發階段）
@@ -175,6 +198,8 @@ python3 -m policy_check --repo . --only R-01,R-02,R-03
 ```
 
 ### 2. CI 整合（下游 repo）
+
+#### GitHub reusable workflow
 
 在下游專案 `.github/workflows/policy-check.yml` 中呼叫本 repo 提供的 **reusable workflow**：
 
@@ -202,6 +227,38 @@ Workflow 會自動：
 - 從 `hamanpaul/paulsha-conventions` 取得 policy engine（含 PyYAML 依賴）
 - 跑完整規則檢查
 - 在 GitHub Actions Summary 輸出結果
+
+#### GitLab merge_request gate（pip mode）
+
+下游 repo 的 `.paul-project.yml` 需顯式宣告 pip mode，讓 R-23 改驗「已安裝套件版號」與 `policy_version` lockstep；GitLab merge request pipeline 亦會自 `CI_MERGE_REQUEST_*` 載入 MR context，R-12 在 GitLab 路徑標示為 NA。
+
+```yaml
+# .paul-project.yml
+policy_profile: flat
+policy_version: 1.0.10
+conventions_engine:
+  mode: pip
+```
+
+GitLab CI job 可採最小 gate：
+
+```yaml
+policy-check:
+  image: python:3.11
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: "0"
+  before_script:
+    # 若 runner image 未預裝 universal-ctags，這一步仍需網路或公司內部 APT mirror
+    - apt-get update && apt-get install -y universal-ctags
+    # Python 套件安裝可離線，只吃 build-time 已 vendored 的 wheel 與相依
+    - python3 -m pip install --no-index --find-links vendor policy-check==1.0.10
+  script:
+    - policy-check --repo .
+```
+
+此範例假設 runner 在 gate-time 已取得 build-time 產出的 `vendor/` 內容。若要讓 MR gate 不碰外部網路，請把 `universal-ctags` 預裝進 runner image；否則至少需接公司內部 APT / package mirror。換言之，這裡的離線保證只涵蓋 **Python wheel / vendored 相依安裝** 這一段。**Artifactory / 內部 PyPI / GitLab Package Registry** 哪一條作為正式發行管道，仍屬需由公司決定的 follow-up。
 
 ### 3. Helper Scripts
 
