@@ -26,10 +26,16 @@ def pr_meta_from_event(event: dict) -> dict:
     }
 
 
-def changed_files(base_ref: str | None, repo_root: Path) -> list[str]:
-    if not base_ref:
+def changed_files(
+    base_ref: str | None, repo_root: Path, base_sha: str | None = None
+) -> list[str]:
+    if base_sha:
+        rng = f"{base_sha}...HEAD"
+    elif base_ref:
+        rng = f"origin/{base_ref}...HEAD"
+    else:
         return []
-    cmd = ["git", "-C", str(repo_root), "diff", "--name-only", f"origin/{base_ref}...HEAD"]
+    cmd = ["git", "-C", str(repo_root), "diff", "--name-only", rng]
     try:
         out = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError:
