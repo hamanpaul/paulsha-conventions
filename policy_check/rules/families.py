@@ -2,6 +2,9 @@
 
 不觸及 rule_id / exempt_label / 規則行為。新增規則須在此登記其 id；
 tests/test_families.py 的完整性測試保證每個註冊規則恰好被分類一次。
+
+命名約束：規則模組必須以 ``rNN_`` 命名（例 ``r27_foo.py``）才會被 ``registry.load_all()``
+發現並執行；不遵循此命名的規則檔既不會被載入、也逃過完整性把關，故新增規則務必用 rNN_ 命名。
 """
 from __future__ import annotations
 
