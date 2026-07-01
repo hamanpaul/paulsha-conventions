@@ -57,6 +57,7 @@
 - 由「平鋪 sorted by rule_id」改為「依 `ordered_families()` 分組，family 標題（如 `### VERSION`）下列該 family 的規則，family 內按 `rule_id` 排序」。
 - **保留不變**：頂部 summary 計數（pass/fail/warn/skip）、每條規則的 icon／message／exempt／detail 區塊、`return 1 if fails else 0` 的 exit code 契約。
 - 介面：`emit(results, families: dict[str, str] | None = None)`；`families` 為 `rule_id -> family` 映射，`None`（未提供）時 fallback 回舊平鋪行為（向後相容，不破壞既有呼叫）。
+- **不變量（重要）**：body 的逐條規則區塊數 **恆等於** summary 計數——任何 `results` 內的結果都不得從逐條清單消失。因此 emit 走訪 `ordered_families()` 後，**必須**再輸出一個尾端 catch-all 區段（標題 `### OTHER`）收納「family 值不在 `ordered_families()` 內」或「`rule_id` 不在 `families` map 內」的結果。等價作法：`ordered_families()` 尾端固定附上 `"OTHER"`。這防止未分類/typo 的規則診斷被靜默吞掉（runtime 不跑完整性測試，故 emit 本身要防禦）。
 
 **`cli.py` 變更：**
 - `run` 內組出 `families = {r.rule_id: families_mod.family_of(r.rule_id) for r in rules}`，傳給 `emit(results, families)`。
@@ -80,6 +81,12 @@
 
 **規則範圍（原 L269）** 移除手抄的「本 repo 為 R-01~R-23 完整實作」；改述為不綁數字（例：「累積已完成的 feature batch」），並指向 `RELEASES.md`／`CHANGELOG.md` 為規則清單權威。
 
+**dogfood 版號（原 L21，覆審補漏）** 現有 `本 repo 自身亦 dog-food 本套 policy（profile: flat, policy_version: 1.0.10）` 是**第二個沒人守的手抄版號字面**（今日剛好對，下次 bump 會照 L271 的方式漂移）。依「不重抄單一真相」原則，**移除該字面數字**、改指向來源（例：「`policy_version` 見 `.paul-project.yml` / `VERSION`」），使其**無數字可漂移**——毋須為它再加第二個 marker，仍符合「只守 repo 版號」的決策。§1.2 缺口至此才真正關閉：L271 由 R-26 marker 強制、L21 無字面。
+
+**marker 唯一性約束（覆審補漏）** `_marker_sync.marker_block` 以 `re.search` 綁**第一個** `BEGIN…END` 同名 pair。故：(a) 同一 `reflected_in` 檔內 marker 名須唯一；(b) 字面 `marker="repo-version"` 的 BEGIN/END pair **不得**出現在 README 散文/範例（README 既有的 marker 語法示例用佔位名 `<name>`，不衝突；實作時務必確認無第二個 `repo-version` pair）。
+
+**marker 值 = 動工時的 VERSION（提醒）** 寫入 marker 的是**動工當下的 `VERSION`（現為 `1.0.10`）**，**不是** header 的目標版本 1.0.11（1.0.11 由 §6 的 release 流程 merge 後另行 bump，並同步更新此 marker，見 §3 Part 3）。`normalize=.strip()` 已吞尾端換行，故 marker 區塊只放 `1.0.10` 一行即與 `cat VERSION` 相等。
+
 ### Part 3 — R-26 dogfood（零新程式碼）
 
 **`.paul-project.yml` 新增：**
@@ -95,6 +102,10 @@ generated_facts:
 **release SOP 更新：**
 - `RELEASES.md` 的升版 SOP 與 release-process 記憶：bump 清單加一條「更新 README `repo-version` marker（＝新 `VERSION`）」。R-26 為安全網（漏更新則 release PR 的 CI 會擋）。
 
+### Part 4 — docs/MOC.md 連結（覆審補漏）
+
+本設計 spec（及後續 plan）屬 `docs/superpowers/**` 受治理產物，`policy_check --repo .` 現況 R-24 已對它報 advisory WARN（orphan：未被 `docs/MOC.md` 連結）。故本 PR 須把 spec／plan 連進 `docs/MOC.md`（Plans／Specs 段），消除該 WARN。`families.py` 屬 code、非 doc，MOC 只映射 docs，毋須為它連結。
+
 ## 4. 架構與邊界（isolation）
 
 - `families.py`：純資料 + 兩個查詢函式，無副作用、無依賴 rule 實作，可獨立測試。
@@ -105,7 +116,7 @@ generated_facts:
 ## 5. 測試策略
 
 1. `test_families.py`：完整性（每 rule_id 剛好一個 family）＋ `family_of` / `ordered_families` 行為。
-2. `test_report_grouping.py`：給定假 results + families map，斷言輸出含 family 標題、family 順序正確、family 內按 rule_id、summary 與 exit code 不變；`families=None` 時等同舊平鋪。
+2. `test_report_grouping.py`：給定假 results + families map，斷言輸出含 family 標題、family 順序正確、family 內按 rule_id、summary 與 exit code 不變；`families=None` 時等同舊平鋪。**外加**：給一個 `rule_id` 不在 families map（或 family=`OTHER`）的假 result，斷言它**仍出現在輸出**（`### OTHER` 區段）——即 body 區塊數 == summary 總數的不變量。
 3. R-26 dogfood：
    - green：README marker == `VERSION` → 本 repo `policy_check --repo .` 中 R-26 PASS（由 NA 轉 PASS）。
    - red：暫時改 `VERSION`（或 marker）使兩者不符 → R-26 FAIL（以 tmp fixture repo 或 monkeypatch 驗，不污染真檔）。
