@@ -30,7 +30,7 @@ def _run_r26(root: Path):
         [sys.executable, "-m", "policy_check", "--repo", str(root), "--only", "R-26"],
         capture_output=True,
         text=True,
-        env={**os.environ, "PYTHONPATH": str(REPO)},
+        env={**os.environ, "PYTHONPATH": str(REPO), "GITHUB_STEP_SUMMARY": ""},
     )
 
 
