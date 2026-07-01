@@ -5,8 +5,9 @@ from pathlib import Path
 
 from policy_check import config as cfg
 from policy_check import pr_context as prc
-from policy_check.rules.base import RuleContext
 from policy_check.rules import registry
+from policy_check.rules import families
+from policy_check.rules.base import RuleContext
 from policy_check.report import emit
 
 
@@ -55,7 +56,8 @@ def main(argv: list[str] | None = None) -> int:
         wanted = {x.strip() for x in args.only.split(",")}
         rules = [r for r in rules if r.rule_id in wanted]
     results = [r.check(ctx) for r in rules]
-    return emit(results)
+    family_map = {r.rule_id: families.family_of(r.rule_id) for r in rules}
+    return emit(results, family_map)
 
 
 if __name__ == "__main__":
