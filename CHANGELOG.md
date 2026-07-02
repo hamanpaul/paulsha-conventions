@@ -5,6 +5,11 @@
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
 本專案遵循 hamanpaul project policy v1.0.4。
 
+## [1.0.12] - 2026-07-02
+
+### Added
+- `.paul-project.yml` 新增 optional `auto_build:` 區塊（LLM auto build 慣例欄位：`description`/`setup`/`steps`/`artifacts`/`verify`），R-08 做 lenient 形狀驗證（未知 subkey 放行、engine 永不執行其中命令）。
+
 ## [1.0.11] - 2026-07-01
 
 ### Added

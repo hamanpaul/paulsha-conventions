@@ -353,7 +353,7 @@ options:
 當前版本（權威值見 `VERSION`）：
 
 <!-- BEGIN: generated-fact marker="repo-version" -->
-1.0.11
+1.0.12
 <!-- END: generated-fact marker="repo-version" -->
 
 ## 相關專案
