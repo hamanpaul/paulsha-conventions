@@ -4,11 +4,12 @@
 本 repo 以 `moc.map: docs/MOC.md` 宣告，由 R-24（moc-alignment）盯其與本次變更同步。
 
 ## Active openspec changes
-（目前無 active change。）
+- [auto-build-block（#30 提案 A）](../openspec/changes/auto-build-block/proposal.md) — 實作中
 
 （已落地者見 `openspec/changes/archive/`。[#20 gitlab-internalization](../openspec/changes/archive/2026-07-01-gitlab-internalization/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/gitlab-ci-gate/`。#25 doc-drift-action 已於本批落地並 archive，canonical specs 見 `openspec/specs/doc-drift-core/`・`openspec/specs/doc-drift-action/`（`doc-reference`／`moc-alignment` 規格亦同步更新）。#23 cross-repo-drift-governance 已於本批落地並 archive，canonical spec 見 `openspec/specs/cross-repo-drift-governance/`。Runbook：[`docs/org-ruleset-runbook.md`](org-ruleset-runbook.md)。）
 
 ## Plans（docs/superpowers/plans）
+- [auto-build-block（#30 提案 A）](superpowers/plans/2026-07-02-auto-build-block.md) — 實作中
 - [gitlab-internalization（#20）](superpowers/plans/2026-07-01-gitlab-internalization.md) — 已完成（#20，change 已 archive）
 - [rule families + 版號 generated-fact（無 issue）](superpowers/plans/2026-07-01-rule-families-and-version-fact.md) — 已完成（change 已 archive）
 - [doc-drift 獨立 Action（#25）](superpowers/plans/2026-06-30-doc-drift-action.md) — 已落地（#25，change 已 archive）
@@ -23,6 +24,7 @@
 - [rollout github defaults + new-project-template](superpowers/plans/2026-04-23-rollout-github-defaults-and-new-project-template.md) — 已完成
 
 ## Specs / designs（docs/superpowers/specs）
+- [auto-build-block design（#30 提案 A）](superpowers/specs/2026-07-02-auto-build-block-design.md) — 實作中
 - [gitlab-internalization design（#20）](superpowers/specs/2026-07-01-gitlab-internalization-design.md) — 已完成（#20，change 已 archive；canonical spec 見 `openspec/specs/gitlab-ci-gate/`）
 - [rule families + 版號 generated-fact design（無 issue）](superpowers/specs/2026-07-01-rule-families-and-version-fact-design.md) — 已完成（change 已 archive）
 - [doc-drift 獨立 Action design（#25）](superpowers/specs/2026-06-30-doc-drift-action-design.md) — 已落地（#25，change 已 archive）

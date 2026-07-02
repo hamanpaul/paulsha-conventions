@@ -19,4 +19,4 @@
 ## 4. Gate
 
 - [x] 4.1 `python3 -m policy_check --repo .` 無任何 failure
-- [ ] 4.2 code review 無未解 Critical/Important（含 fix 後 re-review）
+- [x] 4.2 code review 無未解 Critical/Important（含 fix 後 re-review）
