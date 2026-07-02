@@ -46,6 +46,9 @@ issue 待決事項第 2 項（A1 純 YAML vs A2 加 R-08 驗證）。選 **A2 �
   演進成本壓在「不必 bump engine」這一側）。
 - **無必填 subkey**：R-08 是形狀檢查器，不是語意 gate；空 mapping PASS，
   與其他 optional 區塊行為一致。
+- **顯式 null subkey 視同未宣告**（codex 覆審後明確化）：`steps:` 後無值＝略過型別檢查，
+  與 `secret_scan.markers:` null 等既有區塊語意一致；收緊成 key-presence 檢查反而會讓
+  `auto_build` 比其他區塊更嚴，破壞一致性。已有測試釘住。
 
 理由：型別檢查抓得住最常見的手誤（str 寫成 list、list 寫成 str），
 成本只是 R-08 一段 ~30 行；A1 的「打錯字引擎不提醒」缺點確實存在，

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3 + PyYAML + pytest（現有 policy_check 引擎）。
 
-**Spec:** `openspec/changes/auto-build-block/`（proposal/design/specs/tasks）＋ `docs/superpowers/specs/2026-07-02-auto-build-block-design.md`
+**Spec:** `openspec/changes/archive/2026-07-02-auto-build-block/`（proposal/design/specs/tasks；實作時位於 `openspec/changes/auto-build-block/`，已 archive）＋ canonical spec `openspec/specs/auto-build-config/`＋ `docs/superpowers/specs/2026-07-02-auto-build-block-design.md`
 
 ---
 

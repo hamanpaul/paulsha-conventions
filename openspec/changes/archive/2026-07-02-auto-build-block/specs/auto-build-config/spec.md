@@ -29,7 +29,9 @@ R-08 及所有既有規則的行為 MUST 與本 capability 引入前完全相同
 ### Requirement: 已知 subkey 型別驗證
 R-08 SHALL 對 `auto_build` 的已知 subkey 做型別檢查：`description` MUST 為 str；
 `setup`、`steps`、`artifacts`、`verify` MUST 各為 list[str]（空 list 合法）。
-違反者 R-08 MUST 回報 FAIL，訊息含 `auto_build.<subkey>`。所有 subkey 皆非必填。
+違反者 R-08 MUST 回報 FAIL，訊息含 `auto_build.<subkey>`。所有 subkey 皆非必填；
+顯式 null 之 subkey（如 `steps:` 後無值）SHALL 視同未宣告、略過型別檢查——
+與 `secret_scan`／`moc` 等既有 optional 區塊的 subkey null 語意一致。
 
 #### Scenario: steps 寫成字串
 - **WHEN** `auto_build.steps` 的值為 `"make image"`（str 而非 list）
@@ -50,6 +52,10 @@ R-08 SHALL 對 `auto_build` 的已知 subkey 做型別檢查：`description` MUS
 #### Scenario: 只寫部分欄位
 - **WHEN** `auto_build` 只含 `steps: ["make"]`
 - **THEN** R-08 回報 PASS
+
+#### Scenario: subkey 顯式 null 視同未宣告
+- **WHEN** `auto_build` 含 `description:` 與 `steps:`（皆無值，YAML null）
+- **THEN** R-08 回報 PASS（同 subkey 未宣告，與其他 optional 區塊一致）
 
 ### Requirement: 未知 subkey 放行
 R-08 SHALL 忽略 `auto_build` 內未知 subkey（不驗證、不 FAIL、不 WARN），

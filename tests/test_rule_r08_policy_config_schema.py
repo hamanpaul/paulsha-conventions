@@ -457,3 +457,15 @@ def test_r08_pass_on_bare_auto_build_key(tmp_path):
     )
     result = _r08().check(_ctx(repo))
     assert result.status == Status.PASS
+
+
+def test_r08_pass_on_null_auto_build_subkeys(tmp_path):
+    # 顯式 null subkey（description: / steps: 後無值）視同未宣告、略過型別檢查——
+    # 與 secret_scan/moc 等既有 optional 區塊的 subkey null 語意一致
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\n"
+        "auto_build:\n  description:\n  steps:\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS

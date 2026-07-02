@@ -145,7 +145,8 @@ auto_build:
 ```
 
 - **R-08 只驗形狀**：`auto_build` 須為 mapping；`description` str；`setup`/`steps`/`artifacts`/`verify`
-  各為 list[str]。**未知 subkey 一律放行**（per-project 擴充與欄位演進不需 engine release），無必填 subkey。
+  各為 list[str]。**未知 subkey 一律放行**（per-project 擴充與欄位演進不需 engine release），
+  無必填 subkey；顯式 null 的 subkey（如 `steps:` 後無值）視同未宣告（與其他 optional 區塊一致）。
 - **engine 永不執行**：與 `cli`（R-16）、`cli_tree`（R-25）、`generated_facts`（R-26）等命令執行型
   設定不同，`auto_build` 內所有命令字串對 policy engine 而言是純資料，任何規則都不會執行它們。
   消費者是讀 config 的 LLM agent；執行與否及其安全審查由該 agent 的 Human-in-the-loop 流程負責。
