@@ -321,3 +321,151 @@ def test_r08_pass_on_valid_or_unset_conventions_engine_mode(tmp_path, mode):
     repo = _write_config(tmp_path, cfg)
     result = _r08().check(_ctx(repo))
     assert result.status == Status.PASS
+
+
+# ---- auto_build schema (issue #30 提案 A) ----
+
+def test_r08_pass_when_auto_build_absent(tmp_path):
+    # 回歸：未宣告 auto_build 行為不變
+    repo = _write_config(tmp_path, "policy_profile: flat\npolicy_version: 1.0.11\n")
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r08_fail_when_auto_build_not_mapping(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\nauto_build: make image\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "auto_build must be a mapping" in result.message
+
+
+def test_r08_pass_on_empty_auto_build_mapping(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\nauto_build: {}\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r08_fail_when_auto_build_steps_is_str(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\nauto_build:\n  steps: make image\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "auto_build.steps" in result.message
+
+
+def test_r08_fail_when_auto_build_steps_mixed_types(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\nauto_build:\n  steps: [make, 42]\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "auto_build.steps" in result.message
+
+
+def test_r08_fail_when_auto_build_description_not_str(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\nauto_build:\n  description: [a, b]\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "auto_build.description" in result.message
+
+
+def test_r08_pass_valid_full_auto_build(tmp_path):
+    cfg = (
+        "policy_profile: flat\npolicy_version: 1.0.11\n"
+        "auto_build:\n"
+        "  description: build router firmware image in docker\n"
+        '  setup: ["docker pull registry.example/fw-builder:latest"]\n'
+        '  steps: ["docker run --rm -v $PWD:/src fw-builder make image"]\n'
+        '  artifacts: ["out/*.img"]\n'
+        '  verify: ["test -s out/firmware.img"]\n'
+    )
+    repo = _write_config(tmp_path, cfg)
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r08_pass_partial_auto_build(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        'policy_profile: flat\npolicy_version: 1.0.11\nauto_build:\n  steps: ["make"]\n',
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r08_pass_auto_build_unknown_subkey(tmp_path):
+    # 未知 subkey 放行：per-project 擴充與欄位演進不需 engine release
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\n"
+        'auto_build:\n  steps: ["make"]\n  timeout_minutes: 30\n',
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r08_never_executes_auto_build_commands(tmp_path):
+    # R-08 只驗形狀：steps 內命令是純資料，驗證過程不得產生副作用
+    marker = tmp_path / "side-effect-marker"
+    cfg = (
+        "policy_profile: flat\npolicy_version: 1.0.11\n"
+        f'auto_build:\n  steps: ["touch {marker}"]\n'
+    )
+    repo = _write_config(tmp_path, cfg)
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
+    assert not marker.exists()
+
+
+def test_r08_fail_when_auto_build_is_bool(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\nauto_build: yes\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "auto_build must be a mapping" in result.message
+
+
+def test_r08_pass_on_empty_auto_build_steps_list(tmp_path):
+    # spec：空 list 合法——釘住 all() 對空 iterable 的語意，防日後 truthiness 式重構回歸
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\nauto_build:\n  steps: []\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r08_pass_on_bare_auto_build_key(tmp_path):
+    # bare `auto_build:`（YAML null）視同未宣告——與其他 optional 區塊一致
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\nauto_build:\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS
+
+
+def test_r08_pass_on_null_auto_build_subkeys(tmp_path):
+    # 顯式 null subkey（description: / steps: 後無值）視同未宣告、略過型別檢查——
+    # 與 secret_scan/moc 等既有 optional 區塊的 subkey null 語意一致
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.11\n"
+        "auto_build:\n  description:\n  steps:\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.PASS

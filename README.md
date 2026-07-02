@@ -126,6 +126,31 @@ generated_facts:
 - **generated-fact marker 語法**：`<!-- BEGIN: generated-fact marker="<name>" -->` … `<!-- END: generated-fact marker="<name>" -->`；command 以 `shlex.split` 不經 shell 執行、`cwd=repo_root`、`LC_ALL=C`、固定 30 秒 timeout，只比對正規化 stdout。
 - **安全注意（命令執行型規則）**：`R-16`（`cli`）、`R-25` 的 `cli_tree` extractor 與 `R-26`（`generated_facts`）會執行 `.paul-project.yml` 宣告的命令（無 shell injection，但命令字串本身受 config 控制並繼承完整環境）。因此**不應**在未信任的 PR／fork 分支上執行 `policy_check`；只在可信任的 repo config 上啟用。`cli_tree` 在 `mode: changed` 不會被執行（僅 `mode: all` 才跑）。
 
+### `auto_build` 區塊（LLM auto build 慣例，#30）
+
+`.paul-project.yml` 可宣告 optional 的 `auto_build:` 區塊，承載 per-project build flow，
+供 LLM auto build agent 冷讀即得「怎麼 build 這個專案」；不用 build 的 repo 整塊不寫、零負擔：
+
+```yaml
+auto_build:
+  description: "router firmware image via docker build container"  # str：一句話 build 目標
+  setup:                       # list[str]：環境準備命令
+    - "docker pull registry.example/fw-builder:latest"
+  steps:                       # list[str]：建置命令，依序執行
+    - "docker run --rm -v $PWD:/src fw-builder make -C /src image"
+  artifacts:                   # list[str]：預期產物 glob
+    - "out/*.img"
+  verify:                      # list[str]：建置成功驗證命令
+    - "test -s out/firmware.img"
+```
+
+- **R-08 只驗形狀**：`auto_build` 須為 mapping；`description` str；`setup`/`steps`/`artifacts`/`verify`
+  各為 list[str]。**未知 subkey 一律放行**（per-project 擴充與欄位演進不需 engine release），
+  無必填 subkey；顯式 null 的 subkey（如 `steps:` 後無值）視同未宣告（與其他 optional 區塊一致）。
+- **engine 永不執行**：與 `cli`（R-16）、`cli_tree`（R-25）、`generated_facts`（R-26）等命令執行型
+  設定不同，`auto_build` 內所有命令字串對 policy engine 而言是純資料，任何規則都不會執行它們。
+  消費者是讀 config 的 LLM agent；執行與否及其安全審查由該 agent 的 Human-in-the-loop 流程負責。
+
 ## CHANGELOG fragment 模型（並行安全）
 
 為消除並行 agent 改共用 `CHANGELOG.md [Unreleased]` 的 merge conflict，待發布記錄改採
