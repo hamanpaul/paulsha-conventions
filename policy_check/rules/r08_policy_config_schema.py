@@ -224,6 +224,25 @@ class R08PolicyConfigSchema:
                 return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
                                   message="moc.triggers must be a list of strings")
 
+        # 驗證 auto_build 區塊（#30）：LLM auto build 慣例欄位。
+        # 只驗形狀、永不執行其中命令；未知 subkey 一律放行（欄位演進不綁 engine release）。
+        auto_build = data.get("auto_build")
+        if auto_build is not None:
+            if not isinstance(auto_build, dict):
+                return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                                  message="auto_build must be a mapping")
+            description = auto_build.get("description")
+            if description is not None and not isinstance(description, str):
+                return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                                  message="auto_build.description must be a string")
+            for key in ("setup", "steps", "artifacts", "verify"):
+                val = auto_build.get(key)
+                if val is None:
+                    continue
+                if not isinstance(val, list) or not all(isinstance(x, str) for x in val):
+                    return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
+                                      message=f"auto_build.{key} must be a list of strings")
+
         return RuleResult(
             rule_id=self.rule_id,
             status=Status.PASS,
