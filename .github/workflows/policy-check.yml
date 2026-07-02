@@ -12,7 +12,7 @@ jobs:
     uses: ./.github/workflows/reusable-policy-check.yml
     with:
       policy_profile: flat
-      policy_version: "1.0.11"
+      policy_version: "1.0.12"
       # Self-dogfood: pin to the current commit so the local reusable workflow and
       # policy engine checkout are always in sync.  ${{ github.sha }} evaluates to a
       # full 40-char commit SHA at runtime, satisfying the full-SHA-only contract.
