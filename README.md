@@ -211,13 +211,13 @@ Build-time (networked) — build the wheel and dependency closure:
 ```bash
 python3 -m pip wheel --no-deps --wheel-dir dist .
 mkdir -p vendor
-python3 -m pip download --dest vendor dist/policy_check-1.0.10-py3-none-any.whl
+python3 -m pip download --dest vendor dist/policy_check-X.Y.Z-py3-none-any.whl
 ```
 
 Gate-time — the **Python package install** can be offline, consuming only vendored files:
 
 ```bash
-python3 -m pip install --no-index --find-links vendor policy-check==1.0.10
+python3 -m pip install --no-index --find-links vendor policy-check==X.Y.Z
 ```
 
 Keep the boundary clear: build-time / release needs network to build the wheel and fetch the full dependency closure; gate-time / MR-check installs `policy-check` and its vendored Python deps offline — but `universal-ctags` must still be pre-installed on the runner image or provided via an internal package mirror.
@@ -247,7 +247,7 @@ jobs:
     uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@aabbccddeeff0011223344556677889900aabbcc
     with:
       policy_profile: stage-driven  # or flat
-      policy_version: 1.0.10        # example; use the version your pinned SHA corresponds to
+      policy_version: X.Y.Z        # example; use the version your pinned SHA corresponds to
       policy_engine_ref: aabbccddeeff0011223344556677889900aabbcc
 ```
 
@@ -256,7 +256,7 @@ jobs:
 ```yaml
 # .paul-project.yml
 policy_profile: flat
-policy_version: 1.0.10
+policy_version: X.Y.Z
 conventions_engine:
   mode: pip
 ```
@@ -502,13 +502,13 @@ build-time（可連網）先做 wheel 與相依閉包：
 ```bash
 python3 -m pip wheel --no-deps --wheel-dir dist .
 mkdir -p vendor
-python3 -m pip download --dest vendor dist/policy_check-1.0.10-py3-none-any.whl
+python3 -m pip download --dest vendor dist/policy_check-X.Y.Z-py3-none-any.whl
 ```
 
 gate-time 的 **Python 套件安裝** 可離線，只吃已 vendored 的檔案：
 
 ```bash
-python3 -m pip install --no-index --find-links vendor policy-check==1.0.10
+python3 -m pip install --no-index --find-links vendor policy-check==X.Y.Z
 ```
 
 界線請分清楚：
@@ -549,7 +549,7 @@ jobs:
     uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@aabbccddeeff0011223344556677889900aabbcc
     with:
       policy_profile: stage-driven  # 或 flat
-      policy_version: 1.0.10  # 範例；填你釘選 SHA 對應的實際版本
+      policy_version: X.Y.Z  # 範例；填你釘選 SHA 對應的實際版本
       # 必須傳入完整 40 字元 hex commit SHA，指向 hamanpaul/paulsha-conventions。
       # 不可使用 tag、short SHA 或 github.workflow_sha（那是 caller 自己 repo 的 SHA）。
       # uses: 與 policy_engine_ref 兩者必須鎖定到同一個 SHA。
@@ -569,7 +569,7 @@ Workflow 會自動：
 ```yaml
 # .paul-project.yml
 policy_profile: flat
-policy_version: 1.0.10
+policy_version: X.Y.Z
 conventions_engine:
   mode: pip
 ```
@@ -587,7 +587,7 @@ policy-check:
     # 若 runner image 未預裝 universal-ctags，這一步仍需網路或公司內部 APT mirror
     - apt-get update && apt-get install -y universal-ctags
     # Python 套件安裝可離線，只吃 build-time 已 vendored 的 wheel 與相依
-    - python3 -m pip install --no-index --find-links vendor policy-check==1.0.10
+    - python3 -m pip install --no-index --find-links vendor policy-check==X.Y.Z
   script:
     - policy-check --repo .
 ```
