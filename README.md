@@ -1,9 +1,320 @@
 # paulsha-conventions
 
-> `hamanpaul/*` 跨專案 policy 守門員  
-> 讓文件、版號、分支、PR 保持一致，防止規範漂移
+> **[English](#english)** ｜ **[繁體中文](#繁體中文)**
 
-## 專案背景
+> `hamanpaul/*` cross-repo policy gatekeeper — keeps docs, versions, branches, and PRs consistent, and prevents convention drift.
+> `hamanpaul/*` 跨專案 policy 守門員 — 讓文件、版號、分支、PR 保持一致，防止規範漂移。
+
+![paulsha-conventions — 20-second demo](docs/media/brag-en.gif)
+
+> ▶ Full video with sound — [English](docs/media/brag-en.mp4) ｜ [繁體中文](docs/media/brag.mp4)
+
+---
+
+## Install
+
+This README is the canonical install reference. Editable local install:
+
+```bash
+python3 -m pip install -e ".[test]"
+```
+
+For offline / air-gapped (vendored wheels) installs and CI integration, see [English → Install](#install-1) / [繁體中文 → 安裝](#安裝).
+
+## Usage
+
+Run the full rule set against the current repo:
+
+```bash
+python3 -m policy_check --repo .
+```
+
+Scope to specific rules with `--only R-01,R-09`. For CI (GitHub reusable workflow, GitLab merge-request pip gate), the helper scripts, and new-project bootstrap, see [English → Usage](#usage-1) / [繁體中文 → 使用](#使用).
+
+## Version
+
+The canonical project version lives in `VERSION`; release tags use `vX.Y.Z`. Version semantics (`profile: flat`) are described under [English → Versioning](#versioning) / [繁體中文 → 版本](#版本). Current version:
+
+<!-- BEGIN: generated-fact marker="repo-version" -->
+1.0.12
+<!-- END: generated-fact marker="repo-version" -->
+
+---
+
+## English
+
+A cross-repo **policy engine** covering every `hamanpaul/*` repository:
+
+- **New repo bootstrap** — auto-seed a compliant skeleton (via `new-project-template`).
+- **CI gate** — block non-compliant changes before they merge.
+- **Agent checklist** — surface the conventions to an agent when it enters a session.
+- **Forced synchronization** — code must move together with docs / CHANGELOG / VERSION.
+
+This repository **dog-foods its own policy** (`profile: flat`; `policy_version` in `.paul-project.yml` / `VERSION`). The version lineage (policy_version ↔ engine tag/SHA) lives in [`RELEASES.md`](./RELEASES.md).
+
+### What problem does it solve?
+
+- "Changed code but forgot to update the CHANGELOG."
+- "A CLI flag changed but the README was not updated."
+- "Branch naming is inconsistent and version semantics drift."
+- "The policy says comply — but the policy repo itself does not."
+
+### Rules (R-01 ~ R-26)
+
+| ID | Check | Fail condition | Exempt label |
+|----|-------|----------------|--------------|
+| R-01 | `README.md` exists | missing, or < 100 bytes | — |
+| R-02 | `README.md` required sections | missing `## Install` / `## Usage` / `## Version` | `policy-exempt:readme-sections` |
+| R-03 | `CHANGELOG.md` exists | missing | — |
+| R-04 | `CHANGELOG.md` format | missing the `# Changelog` header (the fragment model no longer requires `[Unreleased]`) | `policy-exempt:changelog-format` |
+| R-05 | `VERSION` exists | missing | — |
+| R-06 | `VERSION` is semantic | does not match `<MAJOR>.<MINOR>.<PATCH>(-fix\.\d+)?` | — |
+| R-07 | `VERSION` matches latest tag | mismatch without a `release:*` label | — |
+| R-08 | `.paul-project.yml` exists & complete | missing, or missing `policy_profile` / `policy_version` | — |
+| R-09 | code change ⇒ changelog fragment | code paths changed but this PR added no `changelog.d/*.md` fragment | `skip-changelog` |
+| R-10 | PR title is conventional-commit | regex mismatch | `policy-exempt:pr-title` |
+| R-11 | PR body checkboxes all ticked | a required box is unticked | auto-passes under `wip` |
+| R-12 | branch source is correct | target = main but source ≠ `feature/*`; target = `feature/*` but source ≠ `wt/<feature>/*` | `policy-exempt:branch-name` |
+| R-13 | agent convention files exist | missing `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md` | `policy-exempt:agent-files` |
+| R-14 | agent-files single-source integrity (config-gated) | `copy` (default): the four files' `policy_version` disagrees with `.paul-project.yml`; `symlink`: a mirror file is not a symlink / does not resolve to `CLAUDE.md` / the canonical file is itself a symlink | — |
+| R-15 | caller workflow pins by tag / SHA (this repo's policy-check dual-pinning path additionally requires a full 40-char SHA) | `uses:` points at a branch ref (`@main`, `@develop`) or has no ref | — |
+| R-16 | CLI help in sync with docs | commands declared in `.paul-project.yml.cli` produce help output that differs from the marker block | `policy-exempt:cli-help` |
+| R-17 | PR ↔ issue link | PR body contains `#N` but not in closing-keyword form (`Closes` / `Fixes` / `Resolves #N`) | `policy-exempt:issue-link` |
+| R-18 | docs / README track code changes | code_paths changed but `README.md` / `docs/**` was not updated (**WARN**, does not block merge) | `policy-exempt:docs-sync` |
+| R-19 | repo has tests ⇒ CI runs them | a `tests/` dir exists (with `test_*.py` / `*_test.py`) but no `.github/workflows/**` runs any test command | `policy-exempt:ci-tests` |
+| R-20 | workflow policy_version in sync | the literal `policy_version` / `POLICY_VERSION` declared in a workflow disagrees with `.paul-project.yml` | — |
+| R-21 | tier = shareable secret scan | a repo declaring `tier: shareable` contains employer markers / personal absolute paths / credential patterns not covered by `secret_scan.allow` or self-exemption | `policy-exempt:secret-scan` |
+| R-22 | docs have no dangling code references | a path / internal link / backtick symbol referenced inside the canonical doc scope (`doc_paths`) does not exist; symbols use a language-agnostic scoped identity (ctags `(language, kind, scope, name)` diff); newly introduced breakage **FAIL**, pre-existing dangling **WARN** | `policy-exempt:doc-reference` |
+| R-23 | engine pin matches policy_version | a workflow `uses:` pointing at `conventions_engine.repo` pins an engine version (tag `@vX.Y.Z`, or SHA `@<sha>` + trailing `# vX.Y.Z`) that disagrees with `.paul-project.yml`'s `policy_version` | `policy-exempt:engine-pin` |
+| R-24 | MOC aligned with this change | when a repo declares `moc`: `moc.static` out of sync (**WARN**) / `moc.map` has a dangling link (new breakage **FAIL**, pre-existing **WARN**) / an active openspec change・plan・spec is unlinked (**WARN**) | `policy-exempt:moc-alignment` |
+| R-25 | doc coverage (omission gate, opt-in) | when a repo declares `doc_coverage`: a public fact extracted from the sources is not exactly mentioned in any target doc | — |
+| R-26 | generated-fact marker sync (opt-in) | when a repo declares `generated_facts`: the marker block content disagrees with the command's normalized stdout, the marker is missing, the command exits non-zero, or the config is incomplete | — |
+
+**Exemption label allowlist**: the `policy-exempt:*` / `skip-changelog` / `wip` labels listed above are the complete set of usable exemption labels; the gate honors only these — anything else counts as un-exempted.
+
+### Doc-alignment governance (three tiers)
+
+Doc staleness is governed in three tiers; only Tier 2 is a deterministic gate:
+
+- **Tier 1 (prevention)** — when an agent changes code, it also updates the docs that reference that artifact (see the four agent convention-file checklists).
+- **Tier 2 (deterministic gate)** — R-22 detects structural dangling references in `README.md` / `docs/**` in CI: newly introduced breakage FAILs, pre-existing dangling WARNs. The deterministic tier only looks at structural rot (a reference died); it does not judge semantics.
+- **Tier 3 (semantic review)** — set GitHub Copilot as a PR reviewer to review semantic staleness ("the reference still resolves but the description is out of date") — advisory, does not block merge.
+
+#### Standalone doc-drift Action (OSS-ready, #25)
+
+The doc↔code drift core of R-22 / R-24 is factored into a language-agnostic, zero-config shared kernel (`policy_check/doc_drift/`, organized by refs / paths / symbols / coverage / langs / provision primitives) and packaged as a standalone composite action (`.github/actions/doc-drift/`, see its [README](.github/actions/doc-drift/README.md)) that any repo can `uses:`. It does not require the target repo to adopt `.paul-project.yml`; symbol extraction uses universal-ctags scoped identity `(language, kind, scope, name)` diff, supporting **Python / bash / C / C++**. The action offers `doc-drift` and `moc` modes and supplies its own base/head SHA (so it does not fail up front under shallow checkout); FAIL blocks merge with a non-zero exit, WARN is advisory.
+
+> **Complementary to lychee**: this action only guards against dangling in-repo code-artifact references; external URL liveness / HTTP / anchors are delegated to [lychee](https://github.com/lycheeverse/lychee-action).
+
+#### Cross-repo version propagation (mechanism layer, #23)
+
+The deterministic three-tier doc-alignment is **intra-repo**; cross-repo `policy_version` drift is governed by a mechanism layer (the engine only enforces + detects + documents; it **does not** mutate downstream):
+
+- **Enforce (block)** — the org ruleset's `Policy Freshness` required workflow runs `python3 -m policy_check.drift check`; a repo lagging behind canonical cannot merge its PR. See [`docs/org-ruleset-runbook.md`](docs/org-ruleset-runbook.md).
+- **Detect (name)** — `python3 -m policy_check.drift report --org hamanpaul` read-only lists each repo's `policy_version` and drift state (`current` / `behind` / `ahead` / `unmanaged`).
+- **Remediate (bump)** — a lagging repo self-bumps via its own agent following the "version propagation SOP" in [RELEASES.md](RELEASES.md).
+
+> `policy_check.drift` is an ops tool, **not** an R-xx gate rule; it is not part of the FAIL set of `python3 -m policy_check --repo .`.
+
+#### Document-rule config surfaces (`doc_paths` / `doc_coverage` / `generated_facts`)
+
+`.paul-project.yml` exposes three document-governance surfaces, all backward compatible (unset ⇒ existing behavior preserved):
+
+```yaml
+# 1) canonical doc scope: shared by R-18 / R-22; defaults to README.md + docs/**
+doc_paths:
+  - "README.md"
+  - "docs/**"
+  - "CLAUDE.md"
+
+# 2) doc_coverage (opt-in, R-25): catches "added X but never documented it" omission drift
+doc_coverage:
+  mode: "changed"          # changed (only newly added facts, default) | all
+  targets: ["README.md"]   # canonical docs, must fall inside doc_paths
+  sources:
+    - kind: "modules"      # fact = repo-relative path
+      include: ["pkg/**/*.py"]
+      exclude: ["**/__init__.py"]
+    - kind: "rpc_methods"  # fact = the single capture group of the pattern
+      include: ["pkg/service.py"]
+      pattern: 'method == "([^"]+)"'
+    - kind: "env_vars"     # fact = PREFIX[A-Z0-9_]+ token
+      include: ["pkg/**/*.py"]
+      prefix: "APP_"
+    - kind: "cli_tree"     # fact = one command path per stdout line
+      command: "python3 scripts/list-cli-paths.py"
+
+# 3) generated_facts (opt-in, R-26): generic marker-sync that generalizes R-16's cli-help pattern
+generated_facts:
+  - kind: "fact_list"
+    command: "python3 scripts/render-rpc-facts.py"
+    reflected_in: "README.md"
+    marker: "rpc-methods"
+```
+
+- **Mention semantics**: R-25 uses case-sensitive exact token/phrase matching; a substring hit does not count as coverage.
+- **`changed`-mode boundary**: when base diff context is missing (e.g. a local `--repo .`) it downgrades to WARN; `cli_tree` cannot snapshot the base, so it is only checked under `mode: all`.
+- **Security note (command-executing rules)**: `R-16` (`cli`), R-25's `cli_tree` extractor and `R-26` (`generated_facts`) execute the commands declared in `.paul-project.yml` (no shell injection, but the command string itself is config-controlled and inherits the full environment). Therefore **do not** run `policy_check` on untrusted PR / fork branches; only enable it on trusted repo config.
+
+#### The `auto_build` block (LLM auto-build convention, #30)
+
+`.paul-project.yml` may declare an optional `auto_build:` block carrying a per-project build flow, so an LLM auto-build agent can cold-read "how to build this project"; repos that do not build simply omit the whole block:
+
+```yaml
+auto_build:
+  description: "router firmware image via docker build container"  # str: one-line build target
+  setup:                       # list[str]: environment prep commands
+    - "docker pull registry.example/fw-builder:latest"
+  steps:                       # list[str]: build commands, run in order
+    - "docker run --rm -v $PWD:/src fw-builder make -C /src image"
+  artifacts:                   # list[str]: expected artifact globs
+    - "out/*.img"
+  verify:                      # list[str]: build-success verification commands
+    - "test -s out/firmware.img"
+```
+
+- **R-08 only validates shape**: `auto_build` must be a mapping; `description` a str; `setup` / `steps` / `artifacts` / `verify` each a list[str]. **Unknown subkeys always pass** (per-project extension needs no engine release); there are no required subkeys, and an explicitly-null subkey is treated as unset.
+- **The engine never executes it**: unlike command-executing config (`cli` / `cli_tree` / `generated_facts`), every command string under `auto_build` is pure data to the policy engine — no rule executes it. The consumer is the LLM agent reading the config; execution and its safety review are that agent's human-in-the-loop responsibility.
+
+### CHANGELOG fragment model (parallel-safe)
+
+To eliminate merge conflicts from parallel agents editing a shared `CHANGELOG.md [Unreleased]`, pending records use **one fragment file per PR** (the changesets / towncrier pattern, but agents write fragments and the gate validates them):
+
+- **Each PR** adds `changelog.d/<issue>-<slug>.md` (without touching `CHANGELOG.md`):
+
+  ```markdown
+  ---
+  type: feat        # required, conventional-commit type
+  scope: changelog  # optional
+  issue: 24         # optional
+  ---
+  One-line description (becomes a CHANGELOG bullet).
+  ```
+
+  Different issues naturally produce different files with zero shared lines ⇒ **parallel PRs never conflict**.
+- **type → Keep-a-Changelog section** fixed mapping: `feat`→Added, `fix`→Fixed, `refactor`/`perf`/`change`→Changed, `remove`→Removed, `deprecate`→Deprecated, `security`→Security. Unknown type ⇒ collation fails. `docs`/`test`/`chore` go through `skip-changelog`.
+- **Release convergence**: on a version bump, run
+
+  ```bash
+  python3 -m policy_check.changelog collate --version X.Y.Z --date YYYY-MM-DD
+  ```
+
+  which groups `changelog.d/*.md` by type into a `## [X.Y.Z] - <date>` section (Keep-a-Changelog format, R-04 still passes) and empties the directory.
+- `R-09` now validates "did this PR add a fragment"; `R-04` no longer requires `[Unreleased]`. This is a behavior-bound hard cutover (downstream upgrades by pinning versions; unupgraded repos keep the old `[Unreleased]` behavior).
+
+### Install
+
+See the canonical [Install](#install) above for the editable install. For downstream CI that ships the engine as a wheel to a GitLab merge-request pipeline (offline / air-gapped runners), you **must** vendor the engine wheel together with its dependency closure; `pip install --no-index <wheel>` alone is not enough because the offline runner still needs `PyYAML` etc.
+
+Build-time (networked) — build the wheel and dependency closure:
+
+```bash
+python3 -m pip wheel --no-deps --wheel-dir dist .
+mkdir -p vendor
+python3 -m pip download --dest vendor dist/policy_check-X.Y.Z-py3-none-any.whl
+```
+
+Gate-time — the **Python package install** can be offline, consuming only vendored files:
+
+```bash
+python3 -m pip install --no-index --find-links vendor policy-check==X.Y.Z
+```
+
+Keep the boundary clear: build-time / release needs network to build the wheel and fetch the full dependency closure; gate-time / MR-check installs `policy-check` and its vendored Python deps offline — but `universal-ctags` must still be pre-installed on the runner image or provided via an internal package mirror.
+
+### Usage
+
+#### 1. Local check (development)
+
+```bash
+python3 -m policy_check --repo .
+# only specific rules:
+python3 -m policy_check --repo . --only R-01,R-02,R-03
+```
+
+#### 2. CI integration (downstream repos)
+
+**GitHub reusable workflow** — call this repo's reusable workflow from `.github/workflows/policy-check.yml`:
+
+```yaml
+name: Policy Check
+on: [pull_request]
+
+jobs:
+  policy:
+    # Pin BOTH the reusable workflow and the policy engine to the SAME full 40-char commit SHA.
+    # Do NOT use a tag or branch ref — a full SHA is required by the engine validation step.
+    uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@aabbccddeeff0011223344556677889900aabbcc
+    with:
+      policy_profile: stage-driven  # or flat
+      policy_version: X.Y.Z        # example; use the version your pinned SHA corresponds to
+      policy_engine_ref: aabbccddeeff0011223344556677889900aabbcc
+```
+
+**GitLab merge_request gate (pip mode)** — the downstream `.paul-project.yml` declares pip mode so R-23 validates the "installed package version" against `policy_version` in lockstep; the GitLab merge-request pipeline loads MR context from `CI_MERGE_REQUEST_*`, and R-12 is marked NA on the GitLab path:
+
+```yaml
+# .paul-project.yml
+policy_profile: flat
+policy_version: X.Y.Z
+conventions_engine:
+  mode: pip
+```
+
+#### 3. Helper scripts
+
+`scripts/update-cli-help.sh` — actually runs each command declared in `.paul-project.yml.cli` and rewrites the marker blocks in the docs (the R-16 sync mechanism). CI does **not** auto-fix; developers run it locally and commit the updated docs. The script fixes `LC_ALL=C` to avoid locale-dependent output.
+
+#### 4. New-project bootstrap
+
+Use `hamanpaul/new-project-template` to create a new repo that automatically includes `.paul-project.yml`, the README / CHANGELOG / VERSION skeleton, the four agent convention files, and a `.github/workflows/policy-check.yml` calling this repo's reusable workflow:
+
+```bash
+gh repo create hamanpaul/<new-project> --template hamanpaul/new-project-template
+```
+
+#### Command-line help
+
+<!-- BEGIN: cli-help marker="policy-check-help" -->
+usage: policy-check [-h] [--repo REPO] [--pr-title PR_TITLE]
+                    [--pr-body PR_BODY] [--pr-labels PR_LABELS]
+                    [--pr-base-ref PR_BASE_REF] [--pr-head-ref PR_HEAD_REF]
+                    [--only ONLY]
+
+options:
+  -h, --help            show this help message and exit
+  --repo REPO           Repository root
+  --pr-title PR_TITLE
+  --pr-body PR_BODY
+  --pr-labels PR_LABELS
+                        Comma-separated
+  --pr-base-ref PR_BASE_REF
+  --pr-head-ref PR_HEAD_REF
+  --only ONLY           Comma-separated rule IDs (e.g. R-01,R-09)
+<!-- END: cli-help marker="policy-check-help" -->
+
+### Versioning
+
+`VERSION` (repo root) is the single source of truth for the project version.
+
+Version semantics (`profile: flat`):
+- **MAJOR**: formal release (features reach externally-usable state).
+- **MINOR**: features stabilized (all planned features landed + 7 days with no hotfix).
+- **PATCH**: a completed feature batch (full rule list in `RELEASES.md` / `CHANGELOG.md`).
+- **-fix.N**: post-landing bug fix (not a new feature, not stabilization, not a release).
+
+### Related projects
+
+- [`hamanpaul/.github`](https://github.com/hamanpaul/.github): account-level community defaults (PR template / Issue template / SECURITY / CONTRIBUTING).
+- [`hamanpaul/new-project-template`](https://github.com/hamanpaul/new-project-template): new-project skeleton (for `gh repo create --template`).
+
+### License
+
+The license follows the repository owner's preference; see the `LICENSE` file at the repo root if present.
+
+## 繁體中文
+
+### 專案背景
 
 本 repo 提供一套跨 `hamanpaul/*` 所有專案的 **policy engine**，目標：
 
@@ -12,7 +323,7 @@
 - **Agent checklist**：進入 session 時自動看到規範
 - **強制同步**：code 與 docs / CHANGELOG / VERSION 必須一起動
 
-### 解決什麼問題？
+#### 解決什麼問題？
 - 防止「改了 code 忘記改 CHANGELOG」
 - 防止「CLI flag 改了但 README 沒更新」
 - 防止「分支命名混亂、版號語意不一致」
@@ -22,7 +333,7 @@
 
 版本譜系（policy_version ↔ engine tag/SHA 對照）見 [`RELEASES.md`](./RELEASES.md)。
 
-## 規則總覽（R-01 ~ R-26）
+### 規則總覽（R-01 ~ R-26）
 
 | ID | 檢查項 | 失敗條件 | 豁免 label |
 |----|--------|----------|------------|
@@ -55,7 +366,7 @@
 
 **Exemption Labels 白名單**：上表所列 `policy-exempt:*` / `skip-changelog` / `wip` 即所有可用豁免 label；gate 只認這些，其他一律視同未豁免。
 
-## Doc-alignment governance（三層）
+### Doc-alignment governance（三層）
 
 文件陳舊分三層治理，只有 Tier 2 為確定性 gate：
 
@@ -63,7 +374,7 @@
 - **Tier 2（確定性 gate）**：R-22 在 CI 偵測 `README.md` / `docs/**` 的結構化懸空引用——本次新破壞 FAIL、陳年 WARN。確定性層只看「結構性 rot」（引用死掉），不判斷語意。
 - **Tier 3（語意複審）**：建議將 GitHub Copilot 設為 PR reviewer，複審「引用仍在但描述已過時」的語意陳舊（advisory，不擋 merge）。
 
-### 獨立 doc-drift Action（OSS-ready，#25）
+#### 獨立 doc-drift Action（OSS-ready，#25）
 
 R-22/R-24 的 doc↔code 漂移核心抽成語言無關、零設定的共用核心（`policy_check/doc_drift/`，按
 refs/paths/symbols/coverage/langs/provision primitive 組織），並包成可被**任意 repo** `uses:` 的
@@ -75,7 +386,7 @@ FAIL 以非零 exit 擋 merge、WARN advisory。
 
 > **與 lychee 的互補**：本 Action 只管 in-repo code 產物引用不懸空；外部 URL 活性／HTTP／anchor 交由 [lychee](https://github.com/lycheeverse/lychee-action)。
 
-### 跨 repo 升版傳播（機制層，#23）
+#### 跨 repo 升版傳播（機制層，#23）
 
 確定性的三層 doc-alignment 是 **intra-repo**；跨 repo 的 `policy_version` 漂移由本機制層治理（engine 只強制＋偵測＋文件，**不主動改下游**）：
 
@@ -85,7 +396,7 @@ FAIL 以非零 exit 擋 merge、WARN advisory。
 
 > `policy_check.drift` 是 ops 工具，**非 R-xx gate 規則**，不進 `python3 -m policy_check --repo .` 的 FAIL 集合。
 
-### 文件規則設定面（`doc_paths` / `doc_coverage` / `generated_facts`）
+#### 文件規則設定面（`doc_paths` / `doc_coverage` / `generated_facts`）
 
 `.paul-project.yml` 提供三個文件治理設定面，皆向後相容（未宣告即維持既有行為）：
 
@@ -126,7 +437,7 @@ generated_facts:
 - **generated-fact marker 語法**：`<!-- BEGIN: generated-fact marker="<name>" -->` … `<!-- END: generated-fact marker="<name>" -->`；command 以 `shlex.split` 不經 shell 執行、`cwd=repo_root`、`LC_ALL=C`、固定 30 秒 timeout，只比對正規化 stdout。
 - **安全注意（命令執行型規則）**：`R-16`（`cli`）、`R-25` 的 `cli_tree` extractor 與 `R-26`（`generated_facts`）會執行 `.paul-project.yml` 宣告的命令（無 shell injection，但命令字串本身受 config 控制並繼承完整環境）。因此**不應**在未信任的 PR／fork 分支上執行 `policy_check`；只在可信任的 repo config 上啟用。`cli_tree` 在 `mode: changed` 不會被執行（僅 `mode: all` 才跑）。
 
-### `auto_build` 區塊（LLM auto build 慣例，#30）
+#### `auto_build` 區塊（LLM auto build 慣例，#30）
 
 `.paul-project.yml` 可宣告 optional 的 `auto_build:` 區塊，承載 per-project build flow，
 供 LLM auto build agent 冷讀即得「怎麼 build 這個專案」；不用 build 的 repo 整塊不寫、零負擔：
@@ -151,7 +462,7 @@ auto_build:
   設定不同，`auto_build` 內所有命令字串對 policy engine 而言是純資料，任何規則都不會執行它們。
   消費者是讀 config 的 LLM agent；執行與否及其安全審查由該 agent 的 Human-in-the-loop 流程負責。
 
-## CHANGELOG fragment 模型（並行安全）
+### CHANGELOG fragment 模型（並行安全）
 
 為消除並行 agent 改共用 `CHANGELOG.md [Unreleased]` 的 merge conflict，待發布記錄改採
 **每 PR 一個 fragment 檔**（changesets / towncrier 模式，但 agent 寫碎片、gate 驗碎片）：
@@ -177,13 +488,12 @@ auto_build:
 - `R-09` 改驗「本 PR 有無 fragment」、`R-04` 不再要求 `[Unreleased]`。屬行為綁版本的 hard cutover
   （下游靠 pin 版本主動升級，未升級者用舊 `[Unreleased]` 行為）。
 
-## Install
-
+### 安裝
 ```bash
 python3 -m pip install -e ".[test]"
 ```
 
-### 離線 pip 安裝（給 GitLab gate / air-gapped runner）
+#### 離線 pip 安裝（給 GitLab gate / air-gapped runner）
 
 若下游 CI 不走 GitHub reusable workflow，而是把引擎當成 wheel 發佈到 GitLab merge request pipeline，**必須**一併 vendor 引擎 wheel 與相依閉包；只做 `pip install --no-index <wheel>` 並不足夠，因為離線 runner 仍需要 `PyYAML` 等相依。
 
@@ -192,13 +502,13 @@ build-time（可連網）先做 wheel 與相依閉包：
 ```bash
 python3 -m pip wheel --no-deps --wheel-dir dist .
 mkdir -p vendor
-python3 -m pip download --dest vendor dist/policy_check-1.0.10-py3-none-any.whl
+python3 -m pip download --dest vendor dist/policy_check-X.Y.Z-py3-none-any.whl
 ```
 
 gate-time 的 **Python 套件安裝** 可離線，只吃已 vendored 的檔案：
 
 ```bash
-python3 -m pip install --no-index --find-links vendor policy-check==1.0.10
+python3 -m pip install --no-index --find-links vendor policy-check==X.Y.Z
 ```
 
 界線請分清楚：
@@ -206,9 +516,8 @@ python3 -m pip install --no-index --find-links vendor policy-check==1.0.10
 - **build-time / 發行階段**：需要網路，負責 build wheel 並抓完整相依閉包。
 - **gate-time / MR 檢查階段**：`policy-check` 與其 vendored Python 相依可離線安裝；但 `universal-ctags` 仍需預裝在 runner image，或透過公司內部 package mirror 提供。
 
-## Usage
-
-### 1. 本地檢查（開發階段）
+### 使用
+#### 1. 本地檢查（開發階段）
 
 對當前 repo 跑完整檢查：
 
@@ -222,9 +531,9 @@ python3 -m policy_check --repo .
 python3 -m policy_check --repo . --only R-01,R-02,R-03
 ```
 
-### 2. CI 整合（下游 repo）
+#### 2. CI 整合（下游 repo）
 
-#### GitHub reusable workflow
+##### GitHub reusable workflow
 
 在下游專案 `.github/workflows/policy-check.yml` 中呼叫本 repo 提供的 **reusable workflow**：
 
@@ -240,7 +549,7 @@ jobs:
     uses: hamanpaul/paulsha-conventions/.github/workflows/reusable-policy-check.yml@aabbccddeeff0011223344556677889900aabbcc
     with:
       policy_profile: stage-driven  # 或 flat
-      policy_version: 1.0.10  # 範例；填你釘選 SHA 對應的實際版本
+      policy_version: X.Y.Z  # 範例；填你釘選 SHA 對應的實際版本
       # 必須傳入完整 40 字元 hex commit SHA，指向 hamanpaul/paulsha-conventions。
       # 不可使用 tag、short SHA 或 github.workflow_sha（那是 caller 自己 repo 的 SHA）。
       # uses: 與 policy_engine_ref 兩者必須鎖定到同一個 SHA。
@@ -253,14 +562,14 @@ Workflow 會自動：
 - 跑完整規則檢查
 - 在 GitHub Actions Summary 輸出結果
 
-#### GitLab merge_request gate（pip mode）
+##### GitLab merge_request gate（pip mode）
 
 下游 repo 的 `.paul-project.yml` 需顯式宣告 pip mode，讓 R-23 改驗「已安裝套件版號」與 `policy_version` lockstep；GitLab merge request pipeline 亦會自 `CI_MERGE_REQUEST_*` 載入 MR context，R-12 在 GitLab 路徑標示為 NA。
 
 ```yaml
 # .paul-project.yml
 policy_profile: flat
-policy_version: 1.0.10
+policy_version: X.Y.Z
 conventions_engine:
   mode: pip
 ```
@@ -278,16 +587,16 @@ policy-check:
     # 若 runner image 未預裝 universal-ctags，這一步仍需網路或公司內部 APT mirror
     - apt-get update && apt-get install -y universal-ctags
     # Python 套件安裝可離線，只吃 build-time 已 vendored 的 wheel 與相依
-    - python3 -m pip install --no-index --find-links vendor policy-check==1.0.10
+    - python3 -m pip install --no-index --find-links vendor policy-check==X.Y.Z
   script:
     - policy-check --repo .
 ```
 
 此範例假設 runner 在 gate-time 已取得 build-time 產出的 `vendor/` 內容。若要讓 MR gate 不碰外部網路，請把 `universal-ctags` 預裝進 runner image；否則至少需接公司內部 APT / package mirror。換言之，這裡的離線保證只涵蓋 **Python wheel / vendored 相依安裝** 這一段。**Artifactory / 內部 PyPI / GitLab Package Registry** 哪一條作為正式發行管道，仍屬需由公司決定的 follow-up。
 
-### 3. Helper Scripts
+#### 3. Helper Scripts
 
-#### `scripts/update-cli-help.sh`
+##### `scripts/update-cli-help.sh`
 
 **用途**：實跑 `.paul-project.yml.cli` 宣告的每個 command，自動回寫 docs 內的 marker 區塊（R-16 同步機制）。
 
@@ -302,7 +611,7 @@ bash /path/to/paulsha-conventions/scripts/update-cli-help.sh
 - 開發者在本地跑，commit 更新後的 docs
 - 此 script 固定 `LC_ALL=C` 避免多語系輸出差異
 
-### 4. 新專案 Bootstrap
+#### 4. 新專案 Bootstrap
 
 使用 `hamanpaul/new-project-template` 建立新 repo，自動包含：
 - `.paul-project.yml`（需填入 profile / version）
@@ -320,28 +629,11 @@ bash /path/to/paulsha-conventions/scripts/update-cli-help.sh
 gh repo create hamanpaul/<new-project> --template hamanpaul/new-project-template
 ```
 
-### CLI Help
+#### CLI Help
 
-<!-- BEGIN: cli-help marker="policy-check-help" -->
-usage: policy-check [-h] [--repo REPO] [--pr-title PR_TITLE]
-                    [--pr-body PR_BODY] [--pr-labels PR_LABELS]
-                    [--pr-base-ref PR_BASE_REF] [--pr-head-ref PR_HEAD_REF]
-                    [--only ONLY]
+（見 [English → Command-line help](#command-line-help)）
 
-options:
-  -h, --help            show this help message and exit
-  --repo REPO           Repository root
-  --pr-title PR_TITLE
-  --pr-body PR_BODY
-  --pr-labels PR_LABELS
-                        Comma-separated
-  --pr-base-ref PR_BASE_REF
-  --pr-head-ref PR_HEAD_REF
-  --only ONLY           Comma-separated rule IDs (e.g. R-01,R-09)
-<!-- END: cli-help marker="policy-check-help" -->
-
-## Version
-
+### 版本
 `VERSION` 檔（repo root）為專案版號 single source of truth。
 
 **本 repo 版號語意**（`profile: flat`）：
@@ -352,15 +644,13 @@ options:
 
 當前版本（權威值見 `VERSION`）：
 
-<!-- BEGIN: generated-fact marker="repo-version" -->
-1.0.12
-<!-- END: generated-fact marker="repo-version" -->
+當前版本見上方 [Version](#version) 區塊（權威值：`VERSION`）。
 
-## 相關專案
+### 相關專案
 
 - [`hamanpaul/.github`](https://github.com/hamanpaul/.github)：GitHub 社群預設（PR template / Issue template / SECURITY / CONTRIBUTING）
 - [`hamanpaul/new-project-template`](https://github.com/hamanpaul/new-project-template)：新專案骨架（供 `gh repo create --template` 使用）
 
-## License
+### License
 
-See [`LICENSE`](./LICENSE) if present, otherwise defaults to repository owner's preference.
+授權依 repository owner 的偏好；repo 根目錄若有 `LICENSE` 檔案請以其為準。
