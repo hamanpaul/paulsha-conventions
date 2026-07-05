@@ -5,9 +5,9 @@
 > `hamanpaul/*` cross-repo policy gatekeeper — keeps docs, versions, branches, and PRs consistent, and prevents convention drift.
 > `hamanpaul/*` 跨專案 policy 守門員 — 讓文件、版號、分支、PR 保持一致，防止規範漂移。
 
-<video src="https://github.com/hamanpaul/paulsha-conventions/raw/main/docs/media/brag-en.mp4" poster="https://github.com/hamanpaul/paulsha-conventions/raw/main/docs/media/brag-poster.png" controls muted width="760"></video>
+![paulsha-conventions — 20-second demo](docs/media/brag-en.gif)
 
-> ▶ 20s demo — [English](docs/media/brag-en.mp4) ｜ [繁體中文](docs/media/brag.mp4). If the player does not load, click a link to download.
+> ▶ Full video with sound — [English](docs/media/brag-en.mp4) ｜ [繁體中文](docs/media/brag.mp4)
 
 ---
 
