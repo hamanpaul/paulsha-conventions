@@ -145,6 +145,8 @@ def verify_bundle(root: Path) -> dict[str, Any]:
         )
         is None
         or re.fullmatch(r"\d+\.\d+", str(compatibility.get("python") or "")) is None
+        or not isinstance(compatibility.get("abi"), str)
+        or not compatibility["abi"]
         or not isinstance(compatibility.get("platform"), str)
         or not compatibility["platform"]
     ):
@@ -363,6 +365,7 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
     current = {
         "implementation": sys.implementation.name,
         "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+        "abi": str(sysconfig.get_config_var("SOABI") or ""),
         "platform": sysconfig.get_platform(),
     }
     if compatibility != current:

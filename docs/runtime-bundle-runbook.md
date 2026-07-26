@@ -46,7 +46,7 @@ policy-runtime-bundle build \
 
 發行建置環境需提供 Python 3.11+、`build` 與 pip。Python dependency 版本由
 `policy_check/runtime_bundle/constraints.txt` 鎖定；builder 會正規化 archive
-mode/mtime/owner/order，並把 build interpreter 與 platform 寫入 manifest。
+mode/mtime/owner/order，並把 build interpreter、ABI 與 platform 寫入 manifest。
 
 在任何 Python 3.11+ 主機以外部 digest 驗證 archive 與 member，再原子解包：
 
@@ -69,7 +69,7 @@ bundle 內 stdlib manager。manager 在同一 runtime root 建 staging venv，
 使用 `pip --no-index --find-links` 離線安裝，於暫存 HOME 與獨立 git fixture
 執行完整 `PREFLIGHT PASS`，成功後才 rename 成 immutable release 並原子切換
 `current` 與 `state.json`。 <!-- doc-drift-ignore -->
-若 host 的 Python major/minor、implementation 或 platform 不等於 manifest 的
+若 host 的 Python major/minor、implementation、ABI 或 platform 不等於 manifest 的
 `runtime_compatibility`，會在建立 staging 前 fail-closed；這避免把建置主機的
 ABI/platform-specific wheel closure 誤當成任意 Python 3.11+ 通用 bundle。
 

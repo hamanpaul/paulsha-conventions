@@ -24,7 +24,7 @@ paulsha-conventions-vX.Y.Z/
 ```
 
 `manifest.json` schema 1 至少包含 policy/skill/package version、canonical repo、
-tag、commit、build Python implementation/major-minor/platform compatibility、
+tag、commit、build Python implementation/major-minor/ABI/platform compatibility、
 prerequisites、每個 wheel 的 filename/hash、skill tree hash 與 runtime manager
 hash。Installer 只接受相同 runtime compatibility，避免把 ABI/platform-specific
 closure 當作通用 wheel 集合。`SHA256SUMS` 覆蓋 manifest 與所有 payload；

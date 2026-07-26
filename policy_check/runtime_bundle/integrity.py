@@ -152,6 +152,8 @@ def _require_manifest_shape(manifest: dict[str, Any]) -> None:
         )
         is None
         or re.fullmatch(r"\d+\.\d+", str(compatibility.get("python") or "")) is None
+        or not isinstance(compatibility.get("abi"), str)
+        or not compatibility["abi"]
         or not isinstance(compatibility.get("platform"), str)
         or not compatibility["platform"]
     ):

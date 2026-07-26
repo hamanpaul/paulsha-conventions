@@ -357,7 +357,7 @@ The stable deployed skill launcher reads the target repository's exact
 release's isolated venv with `-P`. A missing version is a hard failure; it never
 falls back to `current`, a workflow checkout, another installed version, or the
 network. Because dependency wheels can be ABI/platform specific, installation
-also requires the exact Python major/minor, implementation, and platform
+also requires the exact Python major/minor, implementation, ABI, and platform
 recorded by the builder. Upgrade activation happens only after offline install
 and full preflight smoke. Rollback switches to an already verified release:
 
@@ -831,8 +831,8 @@ policy-runtime-bundle extract \
 版本的 installed release，再用該 venv 的 Python `-P` 執行。缺版直接失敗，
 不會 fallback 到 `current`、workflow、其他版本或網路。升級須在離線安裝與
 完整 preflight smoke 都通過後才 activation。相依 wheel 可能綁 ABI/platform，
-因此安裝主機必須符合 manifest 記錄的 Python major/minor、implementation 與
-platform；rollback 只切到既有 VERIFIED release。操作細節見
+因此安裝主機必須符合 manifest 記錄的 Python major/minor、implementation、ABI
+與 platform；rollback 只切到既有 VERIFIED release。操作細節見
 [runtime bundle runbook](docs/runtime-bundle-runbook.md)。
 
 #### 4. CI 整合（下游 repo）

@@ -322,10 +322,12 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
             "runtime_compatibility": {
                 "implementation": sys.implementation.name,
                 "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+                "abi": str(sysconfig.get_config_var("SOABI") or ""),
                 "platform": sysconfig.get_platform(),
             },
             "prerequisites": [
                 f"python=={sys.version_info.major}.{sys.version_info.minor}",
+                f"abi=={sysconfig.get_config_var('SOABI') or ''}",
                 f"platform=={sysconfig.get_platform()}",
                 "git",
                 "sha256sum",
