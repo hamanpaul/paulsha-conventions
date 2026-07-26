@@ -5,6 +5,16 @@
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
 本專案遵循 hamanpaul project policy v1.0.4。
 
+## [1.0.13] - 2026-07-26
+
+### Added
+- 新增由本 repo 擁有並部署的 canonical `preflight-ci` skill 與 local CI-parity CLI，涵蓋完整 PR context、限縮於 GitHub CLI 的 env-token 認證、typed repo-owned gates、離線與 source/pinned engine 驗證。
+
+### Fixed
+- 修正 RELEASES release ledger 的 tag→commit SHA 對照，避免 `v1.0.5` 到 `v1.0.12` 仍參照 merge commit，並新增 release ledger 自我檢測測試。
+- R-21 改為依 repo visibility 與 tier 組合判定命中等級，並補齊 AWS / GitHub token 命中類別與可驗證的 report 輸出；同時加入
+  `--repo-visibility` 與 Provider/CI visibility 來源。
+
 ## [1.0.12] - 2026-07-02
 
 ### Added
