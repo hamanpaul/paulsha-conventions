@@ -33,6 +33,14 @@ command -v sha256sum >/dev/null 2>&1 || {
 }
 (cd "$BUNDLE_ROOT" && sha256sum --check --strict SHA256SUMS)
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
+  echo "ERROR: Python 3.11+ is required to install this runtime bundle" >&2
+  exit 2
+}
+"$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' || {
+  echo "ERROR: Python 3.11+ is required to install this runtime bundle" >&2
+  exit 2
+}
 exec "$PYTHON_BIN" -P "$BUNDLE_ROOT/runtime/runtime_manager.py" \
   install --bundle "$BUNDLE_ROOT" "$@"
 """
@@ -164,7 +172,11 @@ def _tag_snapshot(repo: Path, tag: str, destination: Path) -> Path:
                     or any(part in {"", ".", ".."} for part in path.parts)
                 ):
                     raise BundleError("git archive contains an unsafe member")
-            source_tar.extractall(snapshot, filter="data")
+            if sys.version_info >= (3, 11, 4):
+                source_tar.extractall(snapshot, filter="data")
+            else:
+                # Members were already restricted to safe relative paths.
+                source_tar.extractall(snapshot)
     except (OSError, tarfile.TarError) as exc:
         raise BundleError("cannot extract clean tag snapshot") from exc
     return snapshot
@@ -223,7 +235,10 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
     if archive.exists() or digest_file.exists():
         raise BundleError(f"output already exists: {archive}")
 
-    with tempfile.TemporaryDirectory(prefix="runtime-bundle-") as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix=".runtime-bundle-",
+        dir=destination,
+    ) as temporary:
         temp = Path(temporary)
         snapshot = _tag_snapshot(source, tag, temp)
         _prepare_package_version(snapshot, version)
@@ -283,9 +298,13 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
         runtime_dir = bundle / "runtime"
         runtime_dir.mkdir()
         manager_source = snapshot / "policy_check" / "runtime_bundle" / "manager.py"
-        if not manager_source.is_file():
-            raise BundleError("tag snapshot is missing the runtime manager")
+        verifier_source = (
+            snapshot / "policy_check" / "runtime_bundle" / "verification.py"
+        )
+        if not manager_source.is_file() or not verifier_source.is_file():
+            raise BundleError("tag snapshot is missing runtime bootstrap sources")
         shutil.copy2(manager_source, runtime_dir / "runtime_manager.py")
+        shutil.copy2(verifier_source, runtime_dir / "runtime_verifier.py")
         installer = bundle / "install.sh"
         installer.write_text(INSTALLER, encoding="utf-8")
         installer.chmod(0o755)
@@ -318,6 +337,10 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
             "runtime": {
                 "path": "runtime/runtime_manager.py",
                 "sha256": sha256_file(runtime_dir / "runtime_manager.py"),
+                "verifier_path": "runtime/runtime_verifier.py",
+                "verifier_sha256": sha256_file(
+                    runtime_dir / "runtime_verifier.py"
+                ),
             },
             "runtime_compatibility": {
                 "implementation": sys.implementation.name,

@@ -64,8 +64,9 @@ bundle payload 驗證。已安全解包的目錄仍可另跑
 
 ## Install and state
 
-`install.sh` 先以 `sha256sum --check --strict` 驗證所有 payload，之後才執行 <!-- doc-drift-ignore -->
-bundle 內 stdlib manager。manager 在同一 runtime root 建 staging venv，
+`install.sh` 先確認 Python 3.11+，再以 `sha256sum --check --strict` 驗證所有
+payload，之後才執行 <!-- doc-drift-ignore --> bundle 內 stdlib manager。manager
+與 source engine 共用同一份 stdlib verifier；manager 在同一 runtime root 建 staging venv，
 使用 `pip --no-index --find-links` 離線安裝，於暫存 HOME 與獨立 git fixture
 執行完整 `PREFLIGHT PASS`，成功後才 rename 成 immutable release 並原子切換
 `current` 與 `state.json`。 <!-- doc-drift-ignore -->
@@ -95,7 +96,9 @@ stable launcher 只從目標 repo 的 `.project-policy.yml`（legacy alias 相�
 讀 exact `policy_version`，要求 `releases/<version>/VERIFIED`、artifact checksum、
 manifest、venv distribution 全部相符。`current` 僅供 agent skill discoverability，
 不是 engine version fallback。目標版本未安裝時應安裝該精確 release，不應切換
-到最新版或較舊版。
+到最新版或較舊版。bootstrap launcher 本身由 active release 提供，但它只負責
+載入共用 verifier 與 selector；真正執行的 engine/skill/manifest identity 仍由
+目標 repo 的 exact version 決定。
 
 ## Rollback and uninstall
 
@@ -114,7 +117,15 @@ policy-runtime-bundle uninstall --version X.Y.Z
 
 任何 staging/smoke 失敗都不得改變 `current`。若驗證回報 tamper，可 uninstall
 由 `state.json` 明確列管且非 active 的精確 release，<!-- doc-drift-ignore --> 再從已核對外部 SHA-256
-的 artifact 重裝；不要刪除整個 runtime root。
+的 artifact 重裝。若 tamper 發生在 active release，使用同一份已核對外部
+SHA-256 的 bundle 執行：
+
+```bash
+./install.sh --force-reinstall
+```
+
+manager 會先完成全新 staging/venv/smoke，再原子交換 state-owned 同版 release；
+不得以手動刪除 active directory 或整個 runtime root 代替。
 
 ## Publication boundary
 

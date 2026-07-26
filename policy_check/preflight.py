@@ -933,12 +933,14 @@ def _run_steps(
     all_passed = True
     executed = 0
     conditionally_skipped = 0
+    explicitly_skipped_tests = 0
     for step in steps:
         if policy_only:
             print(f"{step.name}: SKIP (policy-only)")
             continue
         if skip_tests and step.kind == "tests":
             print(f"{step.name}: SKIP (skip-tests)")
+            explicitly_skipped_tests += 1
             continue
         if step.when_path_exists is not None and not _resolve_inside(
             repo_root,
@@ -983,9 +985,16 @@ def _run_steps(
         )
         all_passed = all_passed and ok
     if not policy_only and executed == 0:
-        if steps and skip_tests and conditionally_skipped == 0:
+        if (
+            steps
+            and explicitly_skipped_tests > 0
+            and explicitly_skipped_tests + conditionally_skipped == len(steps)
+        ):
             return all_passed
-        print("repo-gates: FAIL (no declared preflight step executed)")
+        if not steps:
+            print("repo-gates: FAIL (no preflight steps declared)")
+        else:
+            print("repo-gates: FAIL (all eligible preflight steps were conditional skips)")
         return False
     return all_passed
 

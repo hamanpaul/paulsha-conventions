@@ -29,6 +29,8 @@ def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
     runtime = bundle / "runtime" / "runtime_manager.py"
     runtime.parent.mkdir()
     runtime.write_text("# stdlib runtime manager\n", encoding="utf-8")
+    verifier = bundle / "runtime" / "runtime_verifier.py"
+    verifier.write_text("# shared stdlib runtime verifier\n", encoding="utf-8")
     installer = bundle / "install.sh"
     installer.write_text(builder.INSTALLER, encoding="utf-8")
     installer.chmod(0o755)
@@ -57,6 +59,8 @@ def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
         "runtime": {
             "path": "runtime/runtime_manager.py",
             "sha256": integrity.sha256_file(runtime),
+            "verifier_path": "runtime/runtime_verifier.py",
+            "verifier_sha256": integrity.sha256_file(verifier),
         },
         "runtime_compatibility": {
             "implementation": sys.implementation.name,
@@ -109,6 +113,61 @@ def test_verify_bundle_accepts_closed_file_set(tmp_path: Path) -> None:
     assert manager.verify_bundle(bundle)["skill_version"] == "1.0.13"
 
 
+def test_vendored_manager_loads_the_shared_verifier_under_safe_path(
+    tmp_path: Path,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "bundle")
+    bootstrap = tmp_path / "bootstrap"
+    bootstrap.mkdir()
+    manager_source = Path(manager.__file__).resolve()
+    verifier_source = manager_source.with_name("verification.py")
+    runtime_manager = bootstrap / "runtime_manager.py"
+    runtime_verifier = bootstrap / "runtime_verifier.py"
+    runtime_manager.write_bytes(manager_source.read_bytes())
+    runtime_verifier.write_bytes(verifier_source.read_bytes())
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-P",
+            str(runtime_manager),
+            "verify",
+            "--bundle",
+            str(bundle),
+        ],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "BUNDLE VERIFIED 1.0.13"
+
+
+def test_installer_reports_python_311_requirement_before_using_safe_path(
+    tmp_path: Path,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "bundle")
+    incompatible = tmp_path / "python-old"
+    incompatible.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    incompatible.chmod(0o755)
+    env = dict(os.environ)
+    env["PYTHON_BIN"] = str(incompatible)
+
+    result = subprocess.run(
+        [str(bundle / "install.sh")],
+        cwd=bundle,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "Python 3.11+" in result.stderr
+
+
 def test_verify_bundle_accepts_fix_suffix_as_post_package_version(
     tmp_path: Path,
 ) -> None:
@@ -125,6 +184,7 @@ def test_verify_bundle_accepts_fix_suffix_as_post_package_version(
         "wheels/policy_check-1.0.13-py3-none-any.whl",
         "skills/preflight-ci/SKILL.md",
         "runtime/runtime_manager.py",
+        "runtime/runtime_verifier.py",
         "manifest.json",
     ],
 )
@@ -452,6 +512,77 @@ def test_install_upgrade_rollback_and_uninstall_are_scoped(
     assert (runtime_root / "current").resolve().name == "1.0.13"
     manager.uninstall(runtime_root, "1.0.14")
     assert not (runtime_root / "releases" / "1.0.14").exists()
+
+
+def test_force_reinstall_recovers_tampered_active_release(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+
+    class FakeEnvBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, path):
+            python = Path(path) / (
+                "Scripts/python.exe" if os.name == "nt" else "bin/python"
+            )
+            python.parent.mkdir(parents=True)
+            python.write_text("# fake\n", encoding="utf-8")
+
+    monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
+    monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+
+    assert manager.install(bundle, runtime_root, skill_target) == "1.0.13"
+    active_manifest = (
+        runtime_root / "releases" / "1.0.13" / "artifact" / "manifest.json"
+    )
+    active_manifest.write_text("tampered\n", encoding="utf-8")
+    with pytest.raises(manager.RuntimeBundleError):
+        manager._verified_release(runtime_root, "1.0.13")
+
+    assert manager.install(
+        bundle,
+        runtime_root,
+        skill_target,
+        force_reinstall=True,
+    ) == "1.0.13"
+    assert manager._verified_release(runtime_root, "1.0.13").name == "1.0.13"
+    state = json.loads((runtime_root / "state.json").read_text(encoding="utf-8"))
+    assert state["current"] == "1.0.13"
+    assert state["previous"] is None
+
+
+def test_rollback_rejects_already_active_target_without_corrupting_previous(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = _install_fake_release(tmp_path, "1.0.13")
+    second = _install_fake_release(tmp_path, "1.0.14")
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+    (runtime_root / "current").symlink_to(second)
+    (runtime_root / "state.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "current": "1.0.14",
+                "previous": "1.0.13",
+                "installed": ["1.0.13", "1.0.14"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(manager, "_install_launcher", lambda *_a, **_kw: None)
+
+    with pytest.raises(manager.RuntimeBundleError, match="already active"):
+        manager.rollback(runtime_root, skill_target, "1.0.14")
+    state = json.loads((runtime_root / "state.json").read_text(encoding="utf-8"))
+    assert state["previous"] == first.name
 
 
 def test_install_records_state_before_switching_current(

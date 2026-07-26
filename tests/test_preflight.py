@@ -759,7 +759,7 @@ def test_run_steps_fails_when_every_declared_step_is_conditionally_skipped(
         skip_tests=False,
         policy_only=False,
     )
-    assert "no declared preflight step executed" in capsys.readouterr().out
+    assert "all eligible preflight steps were conditional skips" in capsys.readouterr().out
 
 
 def test_run_steps_requires_policy_only_when_no_steps_are_declared(
@@ -772,7 +772,7 @@ def test_run_steps_requires_policy_only_when_no_steps_are_declared(
         skip_tests=False,
         policy_only=False,
     )
-    assert "no declared preflight step executed" in capsys.readouterr().out
+    assert "no preflight steps declared" in capsys.readouterr().out
     assert preflight._run_steps(
         tmp_path,
         [],
@@ -795,6 +795,35 @@ def test_run_steps_allows_explicit_skip_tests_for_tests_only_config(
     assert preflight._run_steps(
         tmp_path,
         [step],
+        skip_tests=True,
+        policy_only=False,
+    )
+
+
+def test_run_steps_allows_explicit_skip_tests_with_missing_optional_validation(
+    tmp_path,
+) -> None:
+    steps = [
+        preflight.PreflightStep(
+            "optional",
+            "validation",
+            ("check",),
+            ".",
+            "missing-path",
+            10,
+        ),
+        preflight.PreflightStep(
+            "tests",
+            "tests",
+            ("pytest",),
+            ".",
+            None,
+            10,
+        ),
+    ]
+    assert preflight._run_steps(
+        tmp_path,
+        steps,
         skip_tests=True,
         policy_only=False,
     )

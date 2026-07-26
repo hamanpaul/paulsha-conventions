@@ -317,8 +317,10 @@ preflight:
       timeout_seconds: 1200
 ```
 
-`--skip-tests` skips only `kind: tests`; `--policy-only` skips every
-repository-owned step while preserving engine resolution and the policy gate.
+`--skip-tests` skips only `kind: tests`; if all other declared steps are
+optional and unavailable, that explicit reduction is accepted. A run with only
+conditional skips and no explicit test skip still fails. `--policy-only` skips
+every repository-owned step while preserving engine resolution and the policy gate.
 The effective head must match the current checkout branch, and `origin/<base>`
 must exist with a valid merge base; otherwise preflight stops instead of
 silently evaluating an empty changed-file set.
@@ -329,7 +331,7 @@ success exits 0.
 
 `policy-runtime-bundle` builds one immutable release unit containing the
 `policy-check` wheel, wheel-only dependency closure, `preflight-ci` skill,
-stdlib installer manager, manifest, and `SHA256SUMS`. Production builds accept
+stdlib installer manager plus its shared verifier, manifest, and `SHA256SUMS`. Production builds accept
 only a clean canonical checkout at an annotated tag. The build host needs
 Python 3.11+, `build`, and pip; dependency versions are constrained by the
 bundle-owned lock input:
@@ -364,6 +366,10 @@ and full preflight smoke. Rollback switches to an already verified release:
 ```bash
 policy-runtime-bundle rollback --version X.Y.Z
 ```
+
+An active release that fails tamper verification can be reconstructed from the
+same externally verified artifact with `install --force-reinstall`; the
+replacement is staged and smoked before the state-owned release is exchanged.
 
 See [the runtime bundle runbook](docs/runtime-bundle-runbook.md) for layout,
 state, rollback, tamper diagnosis, and the publication boundary owned by #39.
@@ -797,8 +803,9 @@ preflight:
       timeout_seconds: 1200
 ```
 
-`--skip-tests` 只跳過 `kind: tests`；`--policy-only` 會跳過所有 repo-owned
-steps，但仍執行 engine resolution 與 policy gate。參數／設定錯誤回 exit 2，
+`--skip-tests` 只跳過 `kind: tests`；若其餘宣告步驟都屬目前不存在的 optional
+path，這個明確縮減可通過；沒有明確 test skip、只有 conditional SKIP 時仍失敗。
+`--policy-only` 會跳過所有 repo-owned steps，但仍執行 engine resolution 與 policy gate。參數／設定錯誤回 exit 2，
 effective head 必須等於目前 checkout branch，且 `origin/<base>` 必須存在並可建立
 merge base；否則會直接停止，不會用空 changed-files 集合繼續。
 任一 gate 失敗回 exit 1，全部通過才回 exit 0。
@@ -807,7 +814,7 @@ merge base；否則會直接停止，不會用空 changed-files 集合繼續。
 
 `policy-runtime-bundle` 從 clean canonical annotated tag 建立單一不可變
 release unit，原子包含 engine wheel、wheel-only 相依閉包、`preflight-ci`
-skill、stdlib installer manager、manifest 與 `SHA256SUMS`。建置主機需有
+skill、stdlib installer manager 與共用 verifier、manifest 與 `SHA256SUMS`。建置主機需有
 Python 3.11+、`build` 與 pip；相依版本由 bundle 自有 constraint 鎖定：
 
 ```bash
@@ -832,7 +839,9 @@ policy-runtime-bundle extract \
 不會 fallback 到 `current`、workflow、其他版本或網路。升級須在離線安裝與
 完整 preflight smoke 都通過後才 activation。相依 wheel 可能綁 ABI/platform，
 因此安裝主機必須符合 manifest 記錄的 Python major/minor、implementation、ABI
-與 platform；rollback 只切到既有 VERIFIED release。操作細節見
+與 platform；rollback 只切到既有 VERIFIED release。active release 若被竄改，
+可用同一份已核對外部 digest 的 artifact 執行 `install --force-reinstall`；
+新 release 仍須先完成 staging 與 smoke 才替換。操作細節見
 [runtime bundle runbook](docs/runtime-bundle-runbook.md)。
 
 #### 4. CI 整合（下游 repo）

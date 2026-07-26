@@ -57,6 +57,16 @@ def _build_and_extract(repo: Path, root: Path, version: str) -> tuple[Path, str]
     return extracted, digest
 
 
+def _target_repo(root: Path, name: str, version: str) -> Path:
+    repo = root / name
+    repo.mkdir()
+    (repo / ".project-policy.yml").write_text(
+        f"policy_profile: flat\npolicy_version: {version}\n",
+        encoding="utf-8",
+    )
+    return repo
+
+
 def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
     tmp_path: Path,
 ) -> None:
@@ -95,8 +105,48 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
     assert manager.install(second_bundle, runtime_root, skill_target) == second
     assert (runtime_root / "current").resolve().name == second
 
-    assert manager.rollback(runtime_root, skill_target, first) == first
+    first_target = _target_repo(tmp_path, "target-first", first)
+    second_target = _target_repo(tmp_path, "target-second", second)
+    missing_target = _target_repo(tmp_path, "target-missing", "9.8.2")
+    assert manager.select_release(runtime_root, first_target)[0].name == first
+    assert manager.select_release(runtime_root, second_target)[0].name == second
+    with pytest.raises(manager.RuntimeBundleError, match="not installed"):
+        manager.select_release(runtime_root, missing_target)
+
+    assert manager.rollback(runtime_root, skill_target, None) == first
     assert (runtime_root / "current").resolve().name == first
+    active_verifier = (
+        runtime_root
+        / "releases"
+        / first
+        / "artifact"
+        / "runtime"
+        / "runtime_verifier.py"
+    )
+    with active_verifier.open("ab") as stream:
+        stream.write(b"\ntampered active release\n")
+    with pytest.raises(manager.RuntimeBundleError, match="checksum mismatch"):
+        manager.select_release(runtime_root, first_target)
+    assert manager.install(
+        first_bundle,
+        runtime_root,
+        skill_target,
+        force_reinstall=True,
+    ) == first
+    assert manager.select_release(runtime_root, first_target)[0].name == first
+
+    tampered = (
+        runtime_root
+        / "releases"
+        / second
+        / "artifact"
+        / "runtime"
+        / "runtime_verifier.py"
+    )
+    with tampered.open("ab") as stream:
+        stream.write(b"\ntampered\n")
+    with pytest.raises(manager.RuntimeBundleError, match="checksum mismatch"):
+        manager.select_release(runtime_root, second_target)
     assert _run(
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=source,

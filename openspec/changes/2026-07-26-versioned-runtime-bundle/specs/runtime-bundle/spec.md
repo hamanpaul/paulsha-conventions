@@ -15,7 +15,8 @@ bundle。`VERSION`、tag、wheel metadata 與 manifest policy/package version MU
 
 ### Requirement: manifest 與 checksum 必須覆蓋 engine/skill/runtime identity
 Bundle SHALL 原子包含 engine wheel、wheel-only dependency closure、
-`preflight-ci` skill、runtime manager、installer、manifest 與 checksums。
+`preflight-ci` skill、runtime manager、source/manager 共用的 stdlib verifier、
+installer、manifest 與 checksums。
 Manifest MUST 記錄 schema、policy/skill/package version、repo、tag、commit、
 build interpreter/ABI/platform compatibility、prerequisites 與 payload hashes。
 
@@ -35,6 +36,12 @@ Installer SHALL 先驗證 bundle，再於新 staging 建隔離 venv，以
 #### Scenario: install smoke 失敗
 - **WHEN** venv install、policy smoke 或 preflight smoke 任一步失敗
 - **THEN** installer FAIL，原 current/state 不變，staging 不可被標為 VERIFIED
+
+#### Scenario: active release tamper 後重裝
+- **WHEN** active release 驗證失敗，操作者以同版已核對外部 digest 的 bundle
+  明確要求 force reinstall
+- **THEN** installer MUST 先完成新 staging/venv/smoke，再交換 state-owned
+  release；失敗時 MUST 保持原 state/current ownership
 
 #### Scenario: unmanaged skill target
 - **WHEN** agent skill target 是非 installer 管理的真檔、目錄或外部 symlink
@@ -69,3 +76,7 @@ Uninstall MUST 驗證 state ownership/path containment，且不得移除 active 
 #### Scenario: rollback offline
 - **WHEN** current Y、previous X 均 VERIFIED，且 network 不可用
 - **THEN** rollback 原子切回 X，後續 target X preflight 可執行
+
+#### Scenario: rollback target 已是 current
+- **WHEN** 操作者要求 rollback 到目前 active version
+- **THEN** manager MUST 明確拒絕或回報 no-op，且不得把 previous 改成 current

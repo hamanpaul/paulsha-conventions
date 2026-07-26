@@ -66,7 +66,8 @@ Launcher 必須清除 `PYTHONPATH`／`PYTHONHOME`、啟用 safe-path/isolated im
 `install.sh` 是薄 bootstrap：先用 host checksum tool 驗整個 bundle，再執行已
 驗證的 stdlib runtime manager。Manager：
 
-1. 驗 manifest schema、path containment、hash、version 與 wheel closure。
+1. 以 source/manager 共用的 stdlib verifier 驗 manifest schema、path
+   containment、hash、version 與 wheel closure。
 2. 在 runtime root 內建立唯一 staging directory。
 3. 建立 venv，以 `--no-index --find-links` 安裝 wheel closure。
 4. 在暫存 HOME 與 fixture repo 執行 policy/preflight artifact smoke。
@@ -76,6 +77,10 @@ Launcher 必須清除 `PYTHONPATH`／`PYTHONHOME`、啟用 safe-path/isolated im
 失敗不得改變 active state。Rollback 只可切到已安裝且重新驗證通過的 release，
 不下載、不 rebuild。Uninstall 不可移除 active release；移除全部時只處理由
 state/target containment 證明為 installer 管理的產物。
+
+active release 若被竄改，以 `install --force-reinstall` 從已核對外部 digest
+的同版 bundle 修復；新 staging 通過 venv/smoke 後才交換 state-owned release。
+rollback target 已是 current 時明確拒絕，禁止把 previous 汙染成 current。
 
 `~/.agents/skills/preflight-ci` 若是非受管真檔／目錄／外部 symlink，installer
 必須拒絕且保留原內容。所有測試使用暫存 HOME/runtime root，不碰真實 user state。
@@ -103,8 +108,8 @@ template、help updater、drift、skill docs 與 active README 只生成 canonic
 - engine repo/ref path 必須拒絕 dot-segment，cache path 保證 containment；
 - source/bundle import path 與 attested manifest identity 交叉驗證；
 - `-P`/isolated import 升格 canonical spec；
-- full preflight 所有 conditional steps 都 SKIP 時 FAIL；只有明確
-  `--policy-only` 可縮小；
+- full preflight 所有 conditional steps 都 SKIP 時 FAIL；明確 `--skip-tests`
+  可略過 tests，且其他 optional path 不存在時不應產生假性 FAIL；
 - wrapper 在 Python < 3.11 時提供可行動錯誤；
 - config、path resolution、command I/O/encoding 例外收斂為最終 verdict；
 - engine I/O 錯誤提供減敏但可行動的 release/version/path-class 診斷。

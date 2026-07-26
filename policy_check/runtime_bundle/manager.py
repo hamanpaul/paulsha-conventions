@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -12,146 +12,36 @@ import sysconfig
 import tempfile
 import uuid
 import venv
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any, Sequence
 
 
-# This module is deliberately stdlib-only: a verified copy is executed before
-# policy-check and PyYAML exist in the destination venv.
-SCHEMA_VERSION = 1
-CANONICAL_REPOSITORY = "hamanpaul/paulsha-conventions"
-VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:-fix\.\d+)?$")
-SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-
-
-class RuntimeBundleError(RuntimeError):
-    pass
-
-
-def _normalized_package_version(value: str) -> str:
-    return re.sub(r"-fix\.(\d+)$", r".post\1", value)
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _safe_relative(value: object, field: str) -> PurePosixPath:
-    if not isinstance(value, str) or not value or "\\" in value or "\x00" in value:
-        raise RuntimeBundleError(f"{field} is not a safe relative path")
-    if any(part in {"", ".", ".."} for part in value.split("/")):
-        raise RuntimeBundleError(f"{field} contains traversal or dot segments")
-    path = PurePosixPath(value)
-    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
-        raise RuntimeBundleError(f"{field} contains traversal or dot segments")
-    return path
-
-
-def _tree_hash(root: Path) -> str:
-    digest = hashlib.sha256()
-    files: list[Path] = []
-    for path in root.rglob("*"):
-        if path.is_symlink():
-            raise RuntimeBundleError("bundle payload cannot contain symlinks")
-        if path.is_file():
-            files.append(path)
-    for path in sorted(files, key=lambda item: item.relative_to(root).as_posix()):
-        digest.update(path.relative_to(root).as_posix().encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(_sha256(path).encode("ascii"))
-        digest.update(b"\n")
-    return digest.hexdigest()
-
-
-def verify_bundle(root: Path) -> dict[str, Any]:
-    bundle = root.resolve()
-    sums = bundle / "SHA256SUMS"
-    try:
-        lines = sums.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeError) as exc:
-        raise RuntimeBundleError("SHA256SUMS is unreadable") from exc
-    expected: dict[str, str] = {}
-    for number, line in enumerate(lines, start=1):
-        if not line:
-            continue
-        if "  " not in line:
-            raise RuntimeBundleError(f"invalid SHA256SUMS line {number}")
-        digest, raw_name = line.split("  ", 1)
-        name = _safe_relative(raw_name, f"SHA256SUMS line {number}").as_posix()
-        if SHA256_RE.fullmatch(digest) is None or name in expected:
-            raise RuntimeBundleError(f"invalid or duplicate checksum line {number}")
-        expected[name] = digest
-    actual: set[str] = set()
-    for path in bundle.rglob("*"):
-        if path.is_symlink():
-            raise RuntimeBundleError("bundle contains a symlink")
-        if path.is_file() and path != sums:
-            actual.add(path.relative_to(bundle).as_posix())
-    if set(expected) != actual:
-        raise RuntimeBundleError("bundle file set does not match SHA256SUMS")
-    for name, digest in expected.items():
-        if _sha256(bundle / name) != digest:
-            raise RuntimeBundleError(f"checksum mismatch: {name}")
-    try:
-        manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise RuntimeBundleError("manifest.json is invalid") from exc
-    if not isinstance(manifest, dict) or manifest.get("schema_version") != SCHEMA_VERSION:
-        raise RuntimeBundleError("unsupported manifest schema")
-    version = manifest.get("policy_version")
-    package = manifest.get("package")
-    if (
-        not isinstance(version, str)
-        or VERSION_RE.fullmatch(version) is None
-        or manifest.get("skill_version") != version
-        or manifest.get("release_tag") != f"v{version}"
-        or manifest.get("repository") != CANONICAL_REPOSITORY
-        or FULL_SHA_RE.fullmatch(str(manifest.get("release_commit") or "")) is None
-        or not isinstance(package, dict)
-        or package.get("name") != "policy-check"
-        or package.get("version") != _normalized_package_version(version)
-    ):
-        raise RuntimeBundleError("manifest identity is inconsistent")
-    wheels = manifest.get("wheels")
-    if not isinstance(wheels, list) or not wheels:
-        raise RuntimeBundleError("manifest has no wheels")
-    for wheel in wheels:
-        if not isinstance(wheel, dict):
-            raise RuntimeBundleError("invalid wheel entry")
-        name = _safe_relative(wheel.get("path"), "wheel.path").as_posix()
-        if expected.get(name) != wheel.get("sha256"):
-            raise RuntimeBundleError(f"wheel identity mismatch: {name}")
-    skill = manifest.get("skill")
-    runtime = manifest.get("runtime")
-    if not isinstance(skill, dict) or not isinstance(runtime, dict):
-        raise RuntimeBundleError("manifest payload identity is incomplete")
-    skill_root = bundle / _safe_relative(skill.get("path"), "skill.path")
-    runtime_path = bundle / _safe_relative(runtime.get("path"), "runtime.path")
-    if _tree_hash(skill_root) != skill.get("sha256"):
-        raise RuntimeBundleError("skill payload hash mismatch")
-    if _sha256(runtime_path) != runtime.get("sha256"):
-        raise RuntimeBundleError("runtime manager hash mismatch")
-    compatibility = manifest.get("runtime_compatibility")
-    if (
-        not isinstance(compatibility, dict)
-        or re.fullmatch(
-            r"[a-z][a-z0-9_]*",
-            str(compatibility.get("implementation") or ""),
-        )
-        is None
-        or re.fullmatch(r"\d+\.\d+", str(compatibility.get("python") or "")) is None
-        or not isinstance(compatibility.get("abi"), str)
-        or not compatibility["abi"]
-        or not isinstance(compatibility.get("platform"), str)
-        or not compatibility["platform"]
-    ):
-        raise RuntimeBundleError("runtime compatibility metadata is invalid")
-    return manifest
+# The source package and the vendored bootstrap use one stdlib-only verifier.
+# A copied manager loads its checksummed sibling explicitly because Python -P
+# deliberately omits the script directory from sys.path.
+try:
+    from .verification import (
+        VERSION_RE,
+        BundleError as RuntimeBundleError,
+        load_and_verify_bundle as verify_bundle,
+        normalized_package_version as _normalized_package_version,
+        sha256_file as _sha256,
+    )
+except ImportError:
+    _verifier_path = Path(__file__).with_name("runtime_verifier.py")
+    _verifier_spec = importlib.util.spec_from_file_location(
+        "_paulsha_runtime_verifier",
+        _verifier_path,
+    )
+    if _verifier_spec is None or _verifier_spec.loader is None:
+        raise RuntimeError("runtime verifier cannot be loaded")
+    _verifier = importlib.util.module_from_spec(_verifier_spec)
+    _verifier_spec.loader.exec_module(_verifier)
+    VERSION_RE = _verifier.VERSION_RE
+    RuntimeBundleError = _verifier.BundleError
+    verify_bundle = _verifier.load_and_verify_bundle
+    _normalized_package_version = _verifier.normalized_package_version
+    _sha256 = _verifier.sha256_file
 
 
 def _default_root() -> Path:
@@ -376,7 +266,14 @@ def _install_launcher(root: Path) -> None:
         "fi\n"
         'MANAGER="$RUNTIME_ROOT/current/artifact/runtime/runtime_manager.py"\n'
         '[[ -f "$MANAGER" ]] || { echo "ERROR: no active runtime manager" >&2; exit 2; }\n'
-        'exec python3 -P "$MANAGER" exec --root "$RUNTIME_ROOT" --repo "$TARGET_REPO" -- "$@"\n'
+        'PYTHON_BIN="${PYTHON_BIN:-python3}"\n'
+        'command -v "$PYTHON_BIN" >/dev/null 2>&1 || { '
+        'echo "ERROR: Python 3.11+ is required by the runtime bundle" >&2; exit 2; }\n'
+        '"$PYTHON_BIN" -c \'import sys; raise SystemExit(0 if '
+        'sys.version_info >= (3, 11) else 1)\' || { '
+        'echo "ERROR: Python 3.11+ is required by the runtime bundle" >&2; exit 2; }\n'
+        'exec "$PYTHON_BIN" -P "$MANAGER" exec --root "$RUNTIME_ROOT" '
+        '--repo "$TARGET_REPO" -- "$@"\n'
     )
     temporary = launcher.with_name(f".{launcher.name}.tmp-{uuid.uuid4().hex}")
     temporary.write_text(text, encoding="utf-8")
@@ -384,7 +281,13 @@ def _install_launcher(root: Path) -> None:
     os.replace(temporary, launcher)
 
 
-def install(bundle: Path, root: Path, skill_target: Path) -> str:
+def install(
+    bundle: Path,
+    root: Path,
+    skill_target: Path,
+    *,
+    force_reinstall: bool = False,
+) -> str:
     manifest = verify_bundle(bundle)
     compatibility = manifest["runtime_compatibility"]
     current = {
@@ -403,13 +306,43 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
     releases = runtime_root / "releases"
     destination = releases / version
     _ensure_skill_target(skill_target, runtime_root)
-    if destination.exists() or destination.is_symlink():
-        raise RuntimeBundleError(f"release already installed: {version}")
     state_path = runtime_root / "state.json"
     state = _load_state(state_path)
-    previous = state.get("current") if isinstance(state.get("current"), str) else None
+    destination_exists = destination.exists() or destination.is_symlink()
+    if destination_exists and not force_reinstall:
+        raise RuntimeBundleError(f"release already installed: {version}")
+    if force_reinstall:
+        installed = state.get("installed")
+        if (
+            not destination_exists
+            or destination.is_symlink()
+            or not destination.is_dir()
+            or not isinstance(installed, list)
+            or version not in installed
+            or not all(isinstance(item, str) for item in installed)
+        ):
+            raise RuntimeBundleError(
+                "force-reinstall requires a state-owned release directory"
+            )
+        try:
+            destination.resolve().relative_to(releases.resolve())
+        except ValueError as exc:
+            raise RuntimeBundleError(
+                "force-reinstall release escapes runtime root"
+            ) from exc
+    current_version = (
+        state.get("current") if isinstance(state.get("current"), str) else None
+    )
+    previous = (
+        state.get("previous")
+        if current_version == version
+        else current_version
+    )
+    if not isinstance(previous, str):
+        previous = None
     releases.mkdir(parents=True, exist_ok=True)
     staging = releases / f".staging-{version}-{uuid.uuid4().hex}"
+    displaced: Path | None = None
     try:
         (staging / "artifact").parent.mkdir(parents=True)
         shutil.copytree(bundle.resolve(), staging / "artifact")
@@ -440,10 +373,24 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
                 "manifest_sha256": _sha256(staging / "artifact" / "manifest.json"),
             },
         )
-        os.replace(staging, destination)
+        if force_reinstall:
+            displaced = releases / f".replaced-{version}-{uuid.uuid4().hex}"
+            os.replace(destination, displaced)
+            try:
+                os.replace(staging, destination)
+            except BaseException:
+                os.replace(displaced, destination)
+                displaced = None
+                raise
+            shutil.rmtree(displaced)
+            displaced = None
+        else:
+            os.replace(staging, destination)
     except BaseException:
         if staging.exists():
             shutil.rmtree(staging)
+        if displaced is not None and displaced.exists() and not destination.exists():
+            os.replace(displaced, destination)
         raise
 
     _write_json_atomic(
@@ -455,7 +402,7 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
             "installed": sorted(
                 path.name
                 for path in releases.iterdir()
-                if path.is_dir() and not path.name.startswith(".staging-")
+                if path.is_dir() and not path.name.startswith(".")
             ),
         },
     )
@@ -561,7 +508,10 @@ def activate(root: Path, skill_target: Path, version: str) -> None:
     _ensure_skill_target(skill_target, runtime_root)
     state_path = runtime_root / "state.json"
     state = _load_state(state_path)
-    previous = state.get("current") if isinstance(state.get("current"), str) else None
+    current = state.get("current") if isinstance(state.get("current"), str) else None
+    if current == version:
+        return
+    previous = current
     state.update({"schema_version": 1, "current": version, "previous": previous})
     _write_json_atomic(state_path, state)
     _atomic_symlink(release, runtime_root / "current")
@@ -578,6 +528,8 @@ def rollback(root: Path, skill_target: Path, version: str | None) -> str:
     target = version or state.get("previous")
     if not isinstance(target, str):
         raise RuntimeBundleError("no verified previous version is recorded")
+    if state.get("current") == target:
+        raise RuntimeBundleError(f"release is already active: {target}")
     activate(root, skill_target, target)
     return target
 
@@ -627,6 +579,7 @@ def build_parser() -> argparse.ArgumentParser:
     install_parser.add_argument("--bundle", required=True)
     install_parser.add_argument("--root")
     install_parser.add_argument("--skill-target")
+    install_parser.add_argument("--force-reinstall", action="store_true")
     verify_parser = subparsers.add_parser("verify")
     verify_parser.add_argument("--bundle", required=True)
     execute_parser = subparsers.add_parser("exec")
@@ -656,7 +609,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             manifest = verify_bundle(Path(args.bundle))
             print(f"BUNDLE VERIFIED {manifest['policy_version']}")
         elif args.command == "install":
-            version = install(Path(args.bundle), root, skill_target)
+            version = install(
+                Path(args.bundle),
+                root,
+                skill_target,
+                force_reinstall=args.force_reinstall,
+            )
             print(f"INSTALLED {version}")
         elif args.command == "rollback":
             version = rollback(root, skill_target, args.version)
