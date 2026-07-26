@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import base64
 import hashlib
+import re
 import subprocess
 import sys
 import zipfile
@@ -342,38 +343,74 @@ def test_installed_wheel_payload_attests_imported_files(
     prefix = tmp_path / "venv"
     installed_root = prefix / "lib"
     package = installed_root / "policy_check"
-    dist_info = installed_root / "policy_check-1.0.12.dist-info"
     package.mkdir(parents=True)
-    dist_info.mkdir()
-    files = {
-        "policy_check/__init__.py": b"",
-        "policy_check/preflight.py": b"# installed preflight\n",
-        "policy_check-1.0.12.dist-info/METADATA": b"Name: policy-check\nVersion: 1.0.12\n",
-    }
-    for name, content in files.items():
-        path = installed_root / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
 
     def digest(content: bytes) -> str:
         encoded = base64.urlsafe_b64encode(hashlib.sha256(content).digest())
         return encoded.decode("ascii").rstrip("=")
 
-    record_name = "policy_check-1.0.12.dist-info/RECORD"
-    record = "".join(
-        f"{name},sha256={digest(content)},{len(content)}\n"
-        for name, content in files.items()
-    ) + f"{record_name},,\n"
-    wheel = tmp_path / "bundle" / "wheels" / "policy_check-1.0.12-py3-none-any.whl"
-    wheel.parent.mkdir(parents=True)
-    with zipfile.ZipFile(wheel, mode="w") as archive:
-        for name, content in files.items():
-            archive.writestr(name, content)
-        archive.writestr(record_name, record)
+    def write_wheel(
+        wheel_name: str,
+        distribution_name: str,
+        version: str,
+        files: dict[str, bytes],
+    ) -> Path:
+        dist_info = (
+            f"{distribution_name.replace('-', '_')}-{version}.dist-info"
+        )
+        metadata_name = f"{dist_info}/METADATA"
+        metadata = (
+            f"Name: {distribution_name}\nVersion: {version}\n"
+        ).encode()
+        payload = {**files, metadata_name: metadata}
+        for name, content in payload.items():
+            path = installed_root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        record_name = f"{dist_info}/RECORD"
+        record = "".join(
+            f"{name},sha256={digest(content)},{len(content)}\n"
+            for name, content in payload.items()
+        ) + f"{record_name},,\n"
+        wheel = tmp_path / "bundle" / "wheels" / wheel_name
+        wheel.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(wheel, mode="w") as archive:
+            for name, content in payload.items():
+                archive.writestr(name, content)
+            archive.writestr(record_name, record)
+        return wheel
+
+    policy_wheel = write_wheel(
+        "policy_check-1.0.12-py3-none-any.whl",
+        "policy-check",
+        "1.0.12",
+        {
+            "policy_check/__init__.py": b"",
+            "policy_check/preflight.py": b"# installed preflight\n",
+        },
+    )
+    yaml_wheel = write_wheel(
+        "PyYAML-6.0.3-py3-none-any.whl",
+        "PyYAML",
+        "6.0.3",
+        {"yaml/__init__.py": b"# installed yaml\n"},
+    )
 
     class FakeDistribution:
+        def __init__(self, version: str):
+            self.version = version
+
         def locate_file(self, name):
             return installed_root / str(name)
+
+    distributions = {
+        "policy-check": FakeDistribution("1.0.12"),
+        "pyyaml": FakeDistribution("6.0.3"),
+    }
+
+    def distribution(name: str) -> FakeDistribution:
+        normalized = re.sub(r"[-_.]+", "-", name).lower()
+        return distributions[normalized]
 
     monkeypatch.setattr(preflight.sys, "prefix", str(prefix))
     monkeypatch.setattr(
@@ -384,16 +421,20 @@ def test_installed_wheel_payload_attests_imported_files(
     monkeypatch.setattr(
         preflight.importlib.metadata,
         "distribution",
-        lambda _name: FakeDistribution(),
+        distribution,
     )
     manifest = {
         "wheels": [
-            {"path": f"wheels/{wheel.name}", "sha256": "a" * 64}
+            {"path": f"wheels/{policy_wheel.name}", "sha256": "a" * 64},
+            {"path": f"wheels/{yaml_wheel.name}", "sha256": "b" * 64},
         ]
     }
     preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
-    (package / "preflight.py").write_text("tampered\n", encoding="utf-8")
-    with pytest.raises(preflight.PreflightGateError, match="modified"):
+    (installed_root / "yaml" / "__init__.py").write_text(
+        "tampered\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(preflight.PreflightGateError, match="PyYAML"):
         preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
 
 

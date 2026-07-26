@@ -104,7 +104,7 @@ if missing:
     )
     raise SystemExit(2)
 PY
-exec "$PYTHON_BIN" -P "$BUNDLE_ROOT/runtime/runtime_manager.py" \
+exec "$PYTHON_BIN" -I -B "$BUNDLE_ROOT/runtime/runtime_manager.py" \
   install --bundle "$BUNDLE_ROOT" "$@"
 """
 
@@ -281,7 +281,7 @@ def _normalize_distribution_name(value: str) -> str:
     return re.sub(r"[-_.]+", "-", value).lower()
 
 
-def _validate_runtime_constraints(snapshot: Path) -> None:
+def _validate_runtime_constraints(snapshot: Path) -> dict[str, str]:
     pyproject = snapshot / "pyproject.toml"
     constraints = (
         snapshot / "policy_check" / "runtime_bundle" / "constraints.txt"
@@ -307,7 +307,7 @@ def _validate_runtime_constraints(snapshot: Path) -> None:
             raise BundleError(f"cannot parse project dependency: {dependency}")
         required.add(_normalize_distribution_name(match.group(1)))
 
-    locked: set[str] = set()
+    locked: dict[str, str] = {}
     for raw_line in constraint_lines:
         line = raw_line.split("#", 1)[0].strip()
         if not line:
@@ -323,14 +323,55 @@ def _validate_runtime_constraints(snapshot: Path) -> None:
         name = _normalize_distribution_name(match.group(1))
         if name in locked:
             raise BundleError(f"duplicate runtime constraint: {name}")
-        locked.add(name)
+        locked[name] = match.group(2)
 
-    missing = sorted(required - locked)
+    missing = sorted(required - set(locked))
     if missing:
         raise BundleError(
             "runtime constraints do not lock project dependencies: "
             + ", ".join(missing)
         )
+    return locked
+
+
+def _validate_resolved_wheel_constraints(
+    wheels: Path,
+    constraints: dict[str, str],
+) -> None:
+    resolved: dict[str, str] = {}
+    for wheel in sorted(wheels.glob("*.whl")):
+        metadata = _wheel_metadata(wheel)
+        name = metadata.get("Name")
+        version = metadata.get("Version")
+        if not name or not version:
+            raise BundleError(f"wheel metadata lacks Name/Version: {wheel.name}")
+        normalized = _normalize_distribution_name(name)
+        if normalized in resolved:
+            raise BundleError(f"duplicate resolved wheel distribution: {normalized}")
+        resolved[normalized] = version
+
+    dependencies = {
+        name: version
+        for name, version in resolved.items()
+        if name != "policy-check"
+    }
+    unlocked = sorted(set(dependencies) - set(constraints))
+    if unlocked:
+        raise BundleError(
+            "resolved dependency wheels lack exact constraints: "
+            + ", ".join(unlocked)
+        )
+    mismatched = sorted(
+        name
+        for name, version in dependencies.items()
+        if constraints[name] != version
+    )
+    if mismatched:
+        details = ", ".join(
+            f"{name}=={dependencies[name]} (constraint {constraints[name]})"
+            for name in mismatched
+        )
+        raise BundleError(f"resolved dependency wheel violates constraint: {details}")
 
 
 def _prepare_output_directory(source: Path, output_dir: Path) -> Path:
@@ -361,7 +402,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
         temp = Path(temporary)
         snapshot = _tag_snapshot(source, tag, temp)
         _prepare_package_version(snapshot, version)
-        _validate_runtime_constraints(snapshot)
+        constraints = _validate_runtime_constraints(snapshot)
         wheel_build = temp / "wheel-build"
         wheels = temp / "wheels"
         wheel_build.mkdir()
@@ -402,6 +443,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
         )
         if any(path.suffix != ".whl" for path in wheels.iterdir()):
             raise BundleError("dependency closure contains a non-wheel artifact")
+        _validate_resolved_wheel_constraints(wheels, constraints)
         main_wheel = wheels / built[0].name
         metadata = _wheel_metadata(main_wheel)
         if (

@@ -7,6 +7,7 @@ import subprocess
 import sys
 import sysconfig
 import tarfile
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -113,6 +114,18 @@ def test_verify_bundle_accepts_closed_file_set(tmp_path: Path) -> None:
     manifest = integrity.load_and_verify_bundle(bundle)
     assert manifest["policy_version"] == "1.0.13"
     assert manager.verify_bundle(bundle)["skill_version"] == "1.0.13"
+
+
+def test_checksums_include_nested_file_named_sha256sums(tmp_path: Path) -> None:
+    bundle = _fake_bundle(tmp_path)
+    nested = bundle / "payload" / "SHA256SUMS"
+    nested.parent.mkdir()
+    nested.write_text("nested payload\n", encoding="utf-8")
+    integrity.write_checksums(bundle)
+
+    checksums = (bundle / "SHA256SUMS").read_text(encoding="utf-8")
+    assert "payload/SHA256SUMS" in checksums
+    assert integrity.load_and_verify_bundle(bundle)["policy_version"] == "1.0.13"
 
 
 def test_vendored_manager_loads_the_shared_verifier_under_safe_path(
@@ -482,6 +495,36 @@ def test_runtime_constraints_lock_every_direct_project_dependency(
         builder._validate_runtime_constraints(snapshot)
 
 
+def test_resolved_dependency_closure_requires_exact_constraints(
+    tmp_path: Path,
+) -> None:
+    wheels = tmp_path / "wheels"
+    wheels.mkdir()
+
+    def wheel(name: str, version: str) -> None:
+        path = wheels / f"{name}-{version}-py3-none-any.whl"
+        dist_info = f"{name}-{version}.dist-info"
+        with zipfile.ZipFile(path, mode="w") as archive:
+            archive.writestr(
+                f"{dist_info}/METADATA",
+                f"Name: {name}\nVersion: {version}\n",
+            )
+
+    wheel("policy_check", "1.0.13")
+    wheel("PyYAML", "6.0.3")
+    wheel("transitive_dep", "2.4.0")
+
+    with pytest.raises(integrity.BundleError, match="transitive-dep"):
+        builder._validate_resolved_wheel_constraints(
+            wheels,
+            {"pyyaml": "6.0.3"},
+        )
+    builder._validate_resolved_wheel_constraints(
+        wheels,
+        {"pyyaml": "6.0.3", "transitive-dep": "2.4.0"},
+    )
+
+
 def test_bundle_output_must_be_outside_source(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
@@ -766,7 +809,7 @@ def test_force_reinstall_cleanup_failure_is_warning_after_successful_switch(
     assert "cleanup failed" in capsys.readouterr().err
 
 
-def test_rollback_rejects_already_active_target_without_corrupting_previous(
+def test_rollback_repairs_already_active_target_without_corrupting_previous(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -788,8 +831,7 @@ def test_rollback_rejects_already_active_target_without_corrupting_previous(
     )
     monkeypatch.setattr(manager, "_install_launcher", lambda *_a, **_kw: None)
 
-    with pytest.raises(manager.RuntimeBundleError, match="already active"):
-        manager.rollback(runtime_root, skill_target, "1.0.14")
+    assert manager.rollback(runtime_root, skill_target, "1.0.14") == "1.0.14"
     state = json.loads((runtime_root / "state.json").read_text(encoding="utf-8"))
     assert state["previous"] == first.name
     assert skill_target.resolve() == (
@@ -824,6 +866,60 @@ def test_activate_repairs_managed_links_without_rewriting_history(
     ).resolve()
     assert json.loads(state_path.read_text(encoding="utf-8")) == original_state
     assert (runtime_root / "bin" / "policy-preflight").is_file()
+    assert (runtime_root / "bin" / "policy-runtime-bundle").is_file()
+
+
+def test_failed_activation_restores_state_links_launchers_and_release(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = _fake_bundle(tmp_path / "one", "1.0.13")
+    second = _fake_bundle(tmp_path / "two", "1.0.14")
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+
+    class FakeEnvBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, path):
+            python = Path(path) / (
+                "Scripts/python.exe" if os.name == "nt" else "bin/python"
+            )
+            python.parent.mkdir(parents=True)
+            python.write_text("# fake\n", encoding="utf-8")
+
+    monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
+    monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    assert manager.install(first, runtime_root, skill_target) == "1.0.13"
+    before_state = (runtime_root / "state.json").read_bytes()
+    before_current = os.readlink(runtime_root / "current")
+    before_skill = os.readlink(skill_target)
+    before_preflight = (runtime_root / "bin" / "policy-preflight").read_bytes()
+    before_lifecycle = (
+        runtime_root / "bin" / "policy-runtime-bundle"
+    ).read_bytes()
+
+    real_atomic_symlink = manager._atomic_symlink
+
+    def fail_new_skill_link(target: Path, link: Path) -> None:
+        if link == skill_target and "1.0.14" in str(target):
+            raise OSError("simulated skill activation failure")
+        real_atomic_symlink(target, link)
+
+    monkeypatch.setattr(manager, "_atomic_symlink", fail_new_skill_link)
+    with pytest.raises(OSError, match="simulated skill activation"):
+        manager.install(second, runtime_root, skill_target)
+
+    assert (runtime_root / "state.json").read_bytes() == before_state
+    assert os.readlink(runtime_root / "current") == before_current
+    assert os.readlink(skill_target) == before_skill
+    assert (runtime_root / "bin" / "policy-preflight").read_bytes() == before_preflight
+    assert (
+        runtime_root / "bin" / "policy-runtime-bundle"
+    ).read_bytes() == before_lifecycle
+    assert not (runtime_root / "releases" / "1.0.14").exists()
 
 
 def test_public_cli_forwards_force_reinstall(
@@ -850,6 +946,29 @@ def test_public_cli_forwards_force_reinstall(
         "--bundle",
         str(tmp_path / "bundle"),
         "--force-reinstall",
+    ]
+
+
+def test_public_cli_forwards_activate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[str] = []
+    monkeypatch.setattr(
+        cli,
+        "manager_main",
+        lambda argv: received.extend(argv) or 0,
+    )
+
+    assert cli.main(
+        ["activate", "--root", str(tmp_path), "--version", "1.0.13"]
+    ) == 0
+    assert received == [
+        "activate",
+        "--root",
+        str(tmp_path),
+        "--version",
+        "1.0.13",
     ]
 
 
@@ -940,6 +1059,13 @@ def test_launcher_derives_root_and_rejects_forwarded_repo(
     assert str(runtime_root) not in text
     assert 'dirname "${BASH_SOURCE[0]}"' in text
     assert 'TARGET_REPO="$PWD"' in text
+    assert "PSC_CONVENTIONS_ROOT" not in text
+    assert 'exec "$PYTHON_BIN" -I -B "$MANAGER"' in text
+    lifecycle = (
+        runtime_root / "bin" / "policy-runtime-bundle"
+    ).read_text(encoding="utf-8")
+    assert "install|activate|rollback|uninstall" in lifecycle
+    assert 'exec "$PYTHON_BIN" -I -B "$MANAGER"' in lifecycle
     assert manager.main(
         [
             "exec",

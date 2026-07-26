@@ -49,10 +49,11 @@ policy-runtime-bundle build \
 GNU `sha256sum` 與支援 JSON output 的 `universal-ctags`；installer 會依
 manifest prerequisites 在 staging 前驗證命令存在且可用。Python dependency 版本由
 `policy_check/runtime_bundle/constraints.txt` 鎖定；builder 會先檢查每個
-`[project].dependencies` 都有一筆 exact `name==version` constraint，再正規化
-archive mode/mtime/owner/order，並把 build interpreter、ABI 與 platform 寫入
-manifest。constraint 檔也會包含在 wheel package data，避免 source/wheel
-交付內容漂移。
+`[project].dependencies` 都有一筆 exact `name==version` constraint，下載後再要求
+完整 resolved dependency wheel closure 的每一個 distribution/version 都命中該
+constraint，未鎖的 transitive wheel 直接 fail-closed。接著正規化 archive
+mode/mtime/owner/order，並把 build interpreter、ABI 與 platform 寫入 manifest。
+constraint 檔也會包含在 wheel package data，避免 source/wheel 交付內容漂移。
 
 在任何 Python 3.11+ 主機以外部 digest 驗證 archive 與 member，再原子解包：
 
@@ -77,8 +78,9 @@ bundle 內 stdlib manager。Debian/Ubuntu 若顯示 `python3-venv` 診斷，先�
 staging 前重做相同能力檢查。manager
 與 source engine 共用同一份 stdlib verifier；manager 在同一 runtime root 建 staging venv，
 使用 `pip --no-index --find-links` 離線安裝，於暫存 HOME 與獨立 git fixture
-執行完整 `PREFLIGHT PASS`，成功後才 rename 成 immutable release 並原子切換
-`current` 與 `state.json`。 <!-- doc-drift-ignore -->
+執行完整 `PREFLIGHT PASS`，成功後才 rename 成 immutable release。activation
+會把 `state.json`、`current`、兩個 stable launcher 與 managed skill link 視為
+單一 transaction；任一步失敗都回復先前 snapshot。 <!-- doc-drift-ignore -->
 若 host 的 Python major/minor、implementation、ABI 或 platform 不等於 manifest 的
 `runtime_compatibility`，會在建立 staging 前 fail-closed；這避免把建置主機的
 ABI/platform-specific wheel closure 誤當成任意 Python 3.11+ 通用 bundle。
@@ -93,6 +95,7 @@ ABI/platform-specific wheel closure 誤當成任意 Python 3.11+ 通用 bundle�
 │   └── VERIFIED
 ├── current -> releases/<active-version>
 ├── bin/policy-preflight
+├── bin/policy-runtime-bundle
 └── state.json
 ```
 
@@ -133,9 +136,14 @@ scripts/install-preflight-skill.sh --replace-managed-runtime
 
 ## Exact selection
 
-stable launcher 只從目標 repo 的 `.project-policy.yml`（legacy alias 相容）
+stable launcher 以自身實體位置決定 runtime root，不接受 ambient
+`PSC_CONVENTIONS_ROOT` 改寫既有 launcher 的 ownership；deployed skill 會把其已
+定案 root 傳給 launcher。兩者與 source wrapper 都以 Python isolated mode 執行，
+不消費 ambient `PYTHONPATH`/`PYTHONHOME`。selector 只從目標 repo 的
+`.project-policy.yml`（legacy alias 相容）
 讀 exact `policy_version`，要求 `releases/<version>/VERIFIED`、artifact checksum、
-manifest、venv distribution 全部相符。`current` 僅供 agent skill discoverability，
+manifest、每個 installed wheel 的 distribution version/RECORD payload 全部相符。
+`current` 僅供 agent skill discoverability，
 不是 engine version fallback。目標版本未安裝時應安裝該精確 release，不應切換
 到最新版或較舊版。bootstrap launcher 本身由 active release 提供，但它只負責
 載入共用 verifier 與 selector；真正執行的 engine/skill/manifest identity 仍由
@@ -143,17 +151,25 @@ manifest、venv distribution 全部相符。`current` 僅供 agent skill discove
 
 ## Rollback and uninstall
 
+部署主機使用 runtime root 下的 stable lifecycle wrapper，不依賴 venv 內含 staging
+shebang 的 console script。`activate` 可用 exit 0 修復 current/launcher/skill link；
 rollback 不下載、不重建，只 activation 已驗證 release：
 
 ```bash
-policy-runtime-bundle rollback --version X.Y.Z
+~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
+  activate --version X.Y.Z
+~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
+  rollback --version X.Y.Z
 ```
 
-省略 `--version` 時使用 `state.json.previous`。uninstall 必須指定版本，且拒絕 <!-- doc-drift-ignore -->
+rollback target 已是 current 時會重驗並修復 managed links，回報成功且不改寫
+`previous`。省略 `--version` 時使用 `state.json.previous`。uninstall 必須指定版本，
+且拒絕 <!-- doc-drift-ignore -->
 移除 active release：
 
 ```bash
-policy-runtime-bundle uninstall --version X.Y.Z
+~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
+  uninstall --version X.Y.Z
 ```
 
 任何 staging/smoke 失敗都不得改變 `current`。若驗證回報 tamper，可 uninstall

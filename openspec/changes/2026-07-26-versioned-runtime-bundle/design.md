@@ -8,8 +8,9 @@ Bundle 僅能從 clean tagged canonical source 建立。Builder 必須驗證：
 - worktree 無 tracked/untracked/ignored 汙染；
 - `HEAD` 是完整 commit SHA，release tag 指向該 commit；
 - `VERSION`、wheel metadata 與 tag 版號一致；
-- Python dependency closure 依 bundle-owned constraint 鎖版並全部下載成 wheel，
-  不保留 sdist。
+- Python dependency closure 依 bundle-owned constraint 鎖版並全部下載成 wheel；
+  下載後逐一要求 resolved distribution/version 命中 exact constraint，不保留
+  sdist 或未鎖 transitive wheel。
 
 輸出為 deterministic archive：
 
@@ -51,6 +52,7 @@ Bundle 內 checksum 只證明取得後的完整性。能替換 bundle 與 checks
 │   └── VERIFIED
 ├── current -> releases/<version>
 ├── bin/policy-preflight
+├── bin/policy-runtime-bundle
 └── state.json
 ```
 
@@ -61,7 +63,8 @@ manifest/payload 重驗失敗或 installed distribution version 不符時皆 FAI
 
 Launcher 必須清除 `PYTHONPATH`／`PYTHONHOME`、啟用 safe-path/isolated import
 語意，並把 selected manifest 明確傳入 `policy_check.preflight`。Preflight
-驗證 selected manifest、wheel/skill identity 與實際 imported distribution，
+驗證 selected manifest、所有 wheel/skill identity、實際 installed distribution
+version 與 RECORD payload，
 不得 fallback source checkout、workflow cache、default branch 或 `current`。
 
 ## 3. Installer、activation、rollback 與 uninstall
@@ -77,7 +80,8 @@ Launcher 必須清除 `PYTHONPATH`／`PYTHONHOME`、啟用 safe-path/isolated im
    `--no-index --find-links` 安裝 wheel closure。
 4. 在暫存 HOME 與 fixture repo 執行 policy/preflight artifact smoke。
 5. 把完整 staging rename 到新的 immutable `releases/<version>`。
-6. 以 temp file/symlink + `os.replace` 原子更新 state/current/managed skill link。
+6. 以 snapshot + temp file/symlink + `os.replace` transaction 更新
+   state/current/stable launchers/managed skill link；任一步失敗即回復全組。
 
 失敗不得改變 active state。Rollback 只可切到已安裝且重新驗證通過的 release，
 不下載、不 rebuild。Uninstall 不可移除 active release；移除全部時只處理由
@@ -85,8 +89,11 @@ state/target containment 證明為 installer 管理的產物。
 
 active release 若被竄改，以 `install --force-reinstall` 從已核對外部 digest
 的同版 bundle 修復；新 staging 通過 venv/smoke 後才交換 state-owned release，
-並在 state/link 成功後 best-effort 清理 displaced 舊目錄。rollback target 已是
-current 時先修復受管 links 再明確拒絕，禁止把 previous 汙染成 current。
+並在 state/link 成功後 best-effort 清理 displaced 舊目錄。部署 root 的
+`bin/policy-runtime-bundle` 以 isolated Python 啟動 current manager，避免依賴
+rename 後含 staging shebang 的 venv console script。`activate` 提供 exit-0 link
+repair；rollback target 已是 current 時修復受管 links 並回報成功 no-op，禁止把
+previous 汙染成 current。
 
 `~/.agents/skills/preflight-ci` 若是非受管真檔／目錄／外部 symlink，installer
 必須拒絕且保留原內容。所有測試使用暫存 HOME/runtime root，不碰真實 user state。
@@ -117,7 +124,8 @@ template、help updater、drift、skill docs 與 active README 只生成 canonic
 
 - engine repo/ref path 必須拒絕 dot-segment，cache path 保證 containment；
 - source/bundle import path 與 attested manifest identity 交叉驗證；
-- `-P`/isolated import 升格 canonical spec；
+- `-I` isolated import 升格 canonical spec，bootstrap/source/deployed 路徑皆忽略
+  ambient `PYTHONPATH`/`PYTHONHOME`；
 - full preflight 所有 conditional steps 都 SKIP 時 FAIL；明確 `--skip-tests`
   可略過 tests，且其他 optional path 不存在時不應產生假性 FAIL；
 - wrapper 在 Python < 3.11 時提供可行動錯誤；

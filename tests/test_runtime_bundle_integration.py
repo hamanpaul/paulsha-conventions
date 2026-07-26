@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,14 +18,24 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _run(argv: list[str], *, cwd: Path) -> str:
-    return subprocess.run(
+def _run(
+    argv: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+) -> str:
+    result = subprocess.run(
         argv,
         cwd=cwd,
-        check=True,
+        env=env,
+        check=False,
         capture_output=True,
         text=True,
-    ).stdout.strip()
+    )
+    assert result.returncode == 0, (
+        f"command failed: {argv[0]}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    return result.stdout.strip()
 
 
 def _commit_release(repo: Path, previous: str, version: str) -> str:
@@ -98,7 +109,26 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
 
     runtime_root = tmp_path / "runtime"
     skill_target = tmp_path / "home" / ".agents" / "skills" / "preflight-ci"
-    assert manager.install(first_bundle, runtime_root, skill_target) == first
+    evil = tmp_path / "evil-pythonpath"
+    evil.mkdir()
+    (evil / "json.py").write_text(
+        'raise RuntimeError("ambient PYTHONPATH loaded")\n',
+        encoding="utf-8",
+    )
+    install_env = dict(os.environ)
+    install_env["PYTHON_BIN"] = sys.executable
+    install_env["PYTHONPATH"] = str(evil)
+    assert _run(
+        [
+            str(first_bundle / "install.sh"),
+            "--root",
+            str(runtime_root),
+            "--skill-target",
+            str(skill_target),
+        ],
+        cwd=first_bundle,
+        env=install_env,
+    ) == f"INSTALLED {first}"
 
     second = "9.8.1"
     _commit_release(source, first, second)
@@ -114,7 +144,18 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
     with pytest.raises(manager.RuntimeBundleError, match="not installed"):
         manager.select_release(runtime_root, missing_target)
 
-    assert manager.rollback(runtime_root, skill_target, None) == first
+    lifecycle_env = dict(os.environ)
+    lifecycle_env["PYTHON_BIN"] = sys.executable
+    assert _run(
+        [
+            str(runtime_root / "bin" / "policy-runtime-bundle"),
+            "rollback",
+            "--skill-target",
+            str(skill_target),
+        ],
+        cwd=runtime_root,
+        env=lifecycle_env,
+    ) == f"ROLLED BACK {first}"
     assert (runtime_root / "current").resolve().name == first
     active_verifier = (
         runtime_root
@@ -135,6 +176,33 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
         force_reinstall=True,
     ) == first
     assert manager.select_release(runtime_root, first_target)[0].name == first
+
+    yaml_init = next(
+        (runtime_root / "releases" / first / "venv").glob(
+            "lib/python*/site-packages/yaml/__init__.py"
+        )
+    )
+    yaml_init.write_text("tampered dependency\n", encoding="utf-8")
+    attestation = subprocess.run(
+        [
+            str(manager._venv_python(runtime_root / "releases" / first / "venv")),
+            "-I",
+            "-c",
+            (
+                "import json; from pathlib import Path; "
+                "from policy_check import preflight; "
+                f"root=Path({str(first_bundle)!r}); "
+                "manifest=json.loads((root/'manifest.json').read_text()); "
+                "preflight._verify_installed_wheel_payload(root, manifest)"
+            ),
+        ],
+        cwd=runtime_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert attestation.returncode != 0
+    assert "PyYAML" in attestation.stderr
 
     tampered = (
         runtime_root

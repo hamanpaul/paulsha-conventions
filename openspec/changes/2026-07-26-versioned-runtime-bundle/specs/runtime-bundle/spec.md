@@ -3,7 +3,8 @@
 ### Requirement: runtime bundle 必須來自 clean tagged canonical source
 Builder SHALL 只從 canonical、clean、tagged source commit 建立 versioned runtime
 bundle。`VERSION`、tag、wheel metadata 與 manifest policy/package version MUST
-一致；dependency closure MUST 全為 wheels。
+一致；dependency closure MUST 全為 wheels，且每個 resolved dependency
+distribution/version MUST 命中 exact constraint。
 
 #### Scenario: dirty 或 tag/version skew
 - **WHEN** source dirty、HEAD 未被指定 release tag 指向，或版本 identity 任一不一致
@@ -69,8 +70,10 @@ Stable launcher SHALL 讀 target project manifest 的 exact `policy_version`，�
 
 ### Requirement: deployed runtime 不依賴 source checkout 或 network
 Installed-bundle mode MUST 以 manifest、checksums、wheel metadata與 imported
-distribution attestation identity；MUST NOT 要求 `.git`、source checkout，亦
-MUST NOT 讀/執行 GitHub Actions workflow或執行 network resolver。
+distribution attestation identity；attestation MUST 驗證所有 bundled wheel 的
+installed version 與 RECORD payload。Bootstrap/source/deployed launcher MUST 使用
+isolated import，不得採用 ambient `PYTHONPATH`/`PYTHONHOME`。MUST NOT 要求 `.git`、
+source checkout，亦 MUST NOT 讀/執行 GitHub Actions workflow或執行 network resolver。
 
 #### Scenario: fresh offline HOME
 - **WHEN** 全新暫存 HOME 僅有已驗證 bundle且 network/source checkout 不可用
@@ -79,7 +82,8 @@ MUST NOT 讀/執行 GitHub Actions workflow或執行 network resolver。
 ### Requirement: rollback/uninstall 只操作已驗證受管 release
 Rollback SHALL 只切回已安裝且重驗通過的 release，不下載或 rebuild。
 Uninstall MUST 驗證 state ownership/path containment，且不得移除 active release
-或非受管 user data。
+或非受管 user data。Deployed host SHALL 提供不依賴 renamed venv shebang 的 stable
+lifecycle launcher，並暴露 exit-0 `activate` repair。
 
 #### Scenario: rollback offline
 - **WHEN** current Y、previous X 均 VERIFIED，且 network 不可用
@@ -87,4 +91,5 @@ Uninstall MUST 驗證 state ownership/path containment，且不得移除 active 
 
 #### Scenario: rollback target 已是 current
 - **WHEN** 操作者要求 rollback 到目前 active version
-- **THEN** manager MUST 明確拒絕或回報 no-op，且不得把 previous 改成 current
+- **THEN** manager MUST 重驗/修復 managed links 並回報成功 no-op，且不得把
+  previous 改成 current

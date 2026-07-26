@@ -334,8 +334,8 @@ success exits 0.
 stdlib installer manager plus its shared verifier, manifest, and `SHA256SUMS`. Production builds accept
 only a clean canonical checkout at an annotated tag. The build host needs
 Python 3.11+, `build`, and pip; dependency versions are constrained by the
-bundle-owned lock input, and every direct project dependency must have one
-exact constraint:
+bundle-owned lock input, and every resolved dependency wheel (including
+transitive dependencies) must match one exact constraint:
 
 ```bash
 policy-runtime-bundle build \
@@ -357,17 +357,24 @@ policy-runtime-bundle extract \
 
 The stable deployed skill launcher reads the target repository's exact
 `policy_version`, verifies the matching installed release, and invokes that
-release's isolated venv with `-P`. A missing version is a hard failure; it never
+release's isolated venv with Python isolated mode. A missing version is a hard
+failure; it never
 falls back to `current`, a workflow checkout, another installed version, or the
 network. Because dependency wheels can be ABI/platform specific, installation
 also requires the exact Python major/minor, implementation, ABI, and platform
 recorded by the builder. Upgrade activation happens only after offline install
 and full preflight smoke. The install host must also provide `venv/ensurepip`
 (commonly the `python3-venv` package), `git`, GNU `sha256sum`, and
-`universal-ctags` with JSON output. Rollback switches to an already verified release:
+`universal-ctags` with JSON output. All bootstrap/selector paths ignore ambient
+`PYTHONPATH`/`PYTHONHOME`; installed attestation verifies every wheel
+distribution and RECORD payload. The deployed stable lifecycle wrapper repairs
+links or switches to an already verified release:
 
 ```bash
-policy-runtime-bundle rollback --version X.Y.Z
+~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
+  activate --version X.Y.Z
+~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
+  rollback --version X.Y.Z
 ```
 
 An existing unmanaged `preflight-ci` directory or source-checkout symlink must
@@ -475,11 +482,11 @@ options:
 
 <!-- BEGIN: cli-help marker="policy-runtime-bundle-help" -->
 usage: policy-runtime-bundle [-h]
-                             {build,verify,extract,install,rollback,uninstall}
+                             {build,verify,extract,install,rollback,activate,uninstall}
                              ...
 
 positional arguments:
-  {build,verify,extract,install,rollback,uninstall}
+  {build,verify,extract,install,rollback,activate,uninstall}
     build               Build from a clean annotated tag
     verify              Verify an unpacked bundle
     extract             Verify archive digest/members and extract atomically
@@ -840,14 +847,16 @@ policy-runtime-bundle extract \
 ```
 
 部署後的 stable launcher 會讀目標 repo 的 exact `policy_version`，驗證相同
-版本的 installed release，再用該 venv 的 Python `-P` 執行。缺版直接失敗，
+版本的 installed release，再用該 venv 的 Python isolated mode 執行。缺版直接失敗，
 不會 fallback 到 `current`、workflow、其他版本或網路。升級須在離線安裝與
 完整 preflight smoke 都通過後才 activation。相依 wheel 可能綁 ABI/platform，
 因此安裝主機必須符合 manifest 記錄的 Python major/minor、implementation、ABI
 與 platform，並具備 `venv/ensurepip`（Debian/Ubuntu 通常是 `python3-venv`）；
 安裝主機也需有 `git`、GNU `sha256sum` 與支援 JSON output 的
-`universal-ctags`；
-每個 direct project dependency 也必須有 exact constraint。既有未受管
+`universal-ctags`；每個 resolved dependency wheel（含 transitive dependency）
+也必須命中 exact constraint。bootstrap/selector 不採用 ambient
+`PYTHONPATH`/`PYTHONHOME`，installed attestation 會驗證每個 wheel distribution
+與 RECORD payload。既有未受管
 `preflight-ci` 目錄或 source-checkout symlink 須先移到可逆 backup，installer
 不會自動接管；rollback 只切到既有 VERIFIED release。active release 若被竄改，
 可用同一份已核對外部 digest 的 artifact 執行 `install --force-reinstall`；

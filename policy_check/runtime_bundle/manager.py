@@ -17,7 +17,7 @@ from typing import Any, Sequence
 
 
 # The source package and the vendored bootstrap use one stdlib-only verifier.
-# A copied manager loads its checksummed sibling explicitly because Python -P
+# A copied manager loads its checksummed sibling explicitly because Python -I
 # deliberately omits the script directory from sys.path.
 try:
     from .verification import (
@@ -123,6 +123,47 @@ def _atomic_symlink(target: Path, link: Path) -> None:
     temporary = link.with_name(f".{link.name}.tmp-{uuid.uuid4().hex}")
     temporary.symlink_to(target)
     os.replace(temporary, link)
+
+
+def _snapshot_regular_file(path: Path) -> tuple[bytes, int] | None:
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise RuntimeBundleError(f"managed path is not a regular file: {path}")
+    if not path.exists():
+        return None
+    return path.read_bytes(), path.stat().st_mode & 0o777
+
+
+def _restore_regular_file(
+    path: Path,
+    snapshot: tuple[bytes, int] | None,
+) -> None:
+    if snapshot is None:
+        path.unlink(missing_ok=True)
+        return
+    content, mode = snapshot
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.restore-{uuid.uuid4().hex}")
+    temporary.write_bytes(content)
+    temporary.chmod(mode)
+    os.replace(temporary, path)
+
+
+def _snapshot_symlink(path: Path) -> str | None:
+    if path.is_symlink():
+        return os.readlink(path)
+    if path.exists():
+        raise RuntimeBundleError(f"managed path is not a symlink: {path}")
+    return None
+
+
+def _restore_symlink(path: Path, target: str | None) -> None:
+    if target is None:
+        path.unlink(missing_ok=True)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.restore-{uuid.uuid4().hex}")
+    temporary.symlink_to(target)
+    os.replace(temporary, path)
 
 
 def _ensure_skill_target(target: Path, root: Path) -> None:
@@ -290,7 +331,7 @@ def _smoke(staging: Path, manifest: dict[str, Any]) -> None:
         _run(
             [
                 str(python),
-                "-P",
+                "-I",
                 "-m",
                 "policy_check.preflight",
                 "--repo",
@@ -320,8 +361,7 @@ def _install_launcher(root: Path) -> None:
     text = (
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
-        'RUNTIME_ROOT="${PSC_CONVENTIONS_ROOT:-'
-        '$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"\n'
+        'RUNTIME_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"\n'
         'TARGET_REPO="$PWD"\n'
         'if [[ "${1:-}" == "--repo" ]]; then\n'
         '  [[ $# -ge 2 ]] || { echo "ERROR: --repo requires a value" >&2; exit 2; }\n'
@@ -336,16 +376,111 @@ def _install_launcher(root: Path) -> None:
         'PYTHON_BIN="${PYTHON_BIN:-python3}"\n'
         'command -v "$PYTHON_BIN" >/dev/null 2>&1 || { '
         'echo "ERROR: Python 3.11+ is required by the runtime bundle" >&2; exit 2; }\n'
-        '"$PYTHON_BIN" -c \'import sys; raise SystemExit(0 if '
+        '"$PYTHON_BIN" -I -c \'import sys; raise SystemExit(0 if '
         'sys.version_info >= (3, 11) else 1)\' || { '
         'echo "ERROR: Python 3.11+ is required by the runtime bundle" >&2; exit 2; }\n'
-        'exec "$PYTHON_BIN" -P "$MANAGER" exec --root "$RUNTIME_ROOT" '
+        'exec "$PYTHON_BIN" -I -B "$MANAGER" exec --root "$RUNTIME_ROOT" '
         '--repo "$TARGET_REPO" -- "$@"\n'
     )
     temporary = launcher.with_name(f".{launcher.name}.tmp-{uuid.uuid4().hex}")
     temporary.write_text(text, encoding="utf-8")
     temporary.chmod(0o755)
     os.replace(temporary, launcher)
+
+    lifecycle = root / "bin" / "policy-runtime-bundle"
+    lifecycle_text = (
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'RUNTIME_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"\n'
+        'COMMAND="${1:-}"\n'
+        '[[ -n "$COMMAND" ]] || { '
+        'echo "ERROR: expected install, activate, rollback, or uninstall" >&2; exit 2; }\n'
+        "shift\n"
+        'case "$COMMAND" in\n'
+        '  install|activate|rollback|uninstall) ;;\n'
+        '  *) echo "ERROR: unsupported deployed lifecycle command: $COMMAND" >&2; exit 2 ;;\n'
+        "esac\n"
+        'MANAGER="$RUNTIME_ROOT/current/artifact/runtime/runtime_manager.py"\n'
+        '[[ -f "$MANAGER" ]] || { echo "ERROR: no active runtime manager" >&2; exit 2; }\n'
+        'PYTHON_BIN="${PYTHON_BIN:-python3}"\n'
+        'command -v "$PYTHON_BIN" >/dev/null 2>&1 || { '
+        'echo "ERROR: Python 3.11+ is required by the runtime bundle" >&2; exit 2; }\n'
+        '"$PYTHON_BIN" -I -c \'import sys; raise SystemExit(0 if '
+        'sys.version_info >= (3, 11) else 1)\' || { '
+        'echo "ERROR: Python 3.11+ is required by the runtime bundle" >&2; exit 2; }\n'
+        'exec "$PYTHON_BIN" -I -B "$MANAGER" "$COMMAND" --root "$RUNTIME_ROOT" "$@"\n'
+    )
+    temporary = lifecycle.with_name(
+        f".{lifecycle.name}.tmp-{uuid.uuid4().hex}"
+    )
+    temporary.write_text(lifecycle_text, encoding="utf-8")
+    temporary.chmod(0o755)
+    os.replace(temporary, lifecycle)
+
+
+def _switch_active_release(
+    runtime_root: Path,
+    skill_target: Path,
+    release: Path,
+    state: dict[str, Any],
+) -> None:
+    state_path = runtime_root / "state.json"
+    current_link = runtime_root / "current"
+    preflight_launcher = runtime_root / "bin" / "policy-preflight"
+    lifecycle_launcher = runtime_root / "bin" / "policy-runtime-bundle"
+    snapshots = {
+        "state": _snapshot_regular_file(state_path),
+        "current": _snapshot_symlink(current_link),
+        "preflight": _snapshot_regular_file(preflight_launcher),
+        "lifecycle": _snapshot_regular_file(lifecycle_launcher),
+        "skill": _snapshot_symlink(skill_target),
+    }
+    try:
+        _write_json_atomic(state_path, state)
+        _atomic_symlink(release, current_link)
+        _install_launcher(runtime_root)
+        _atomic_symlink(
+            release / "artifact" / "skills" / "preflight-ci",
+            skill_target,
+        )
+    except BaseException as exc:
+        failures: list[str] = []
+        restorations = (
+            ("skill", lambda: _restore_symlink(skill_target, snapshots["skill"])),
+            (
+                "lifecycle launcher",
+                lambda: _restore_regular_file(
+                    lifecycle_launcher,
+                    snapshots["lifecycle"],
+                ),
+            ),
+            (
+                "preflight launcher",
+                lambda: _restore_regular_file(
+                    preflight_launcher,
+                    snapshots["preflight"],
+                ),
+            ),
+            (
+                "current",
+                lambda: _restore_symlink(current_link, snapshots["current"]),
+            ),
+            (
+                "state",
+                lambda: _restore_regular_file(state_path, snapshots["state"]),
+            ),
+        )
+        for label, restore in restorations:
+            try:
+                restore()
+            except (OSError, RuntimeBundleError) as restore_exc:
+                failures.append(f"{label} ({restore_exc.__class__.__name__})")
+        if failures:
+            raise RuntimeBundleError(
+                "activation failed and managed state rollback was incomplete: "
+                + ", ".join(failures)
+            ) from exc
+        raise
 
 
 def install(
@@ -437,6 +572,15 @@ def install(
                 f"policy-check=={package_version}",
             ],
             cwd=staging,
+            env={
+                **{
+                    key: value
+                    for key, value in os.environ.items()
+                    if key not in {"PYTHONPATH", "PYTHONHOME"}
+                },
+                "PYTHONNOUSERSITE": "1",
+                "PYTHONDONTWRITEBYTECODE": "1",
+            },
         )
         _smoke(staging, manifest)
         _write_json_atomic(
@@ -465,29 +609,47 @@ def install(
             os.replace(displaced, destination)
         raise
 
+    new_state = {
+        "schema_version": 1,
+        "current": version,
+        "previous": previous,
+        "installed": sorted(
+            path.name
+            for path in releases.iterdir()
+            if path.is_dir() and not path.name.startswith(".")
+        ),
+    }
     try:
-        _write_json_atomic(
-            state_path,
-            {
-                "schema_version": 1,
-                "current": version,
-                "previous": previous,
-                "installed": sorted(
-                    path.name
-                    for path in releases.iterdir()
-                    if path.is_dir() and not path.name.startswith(".")
-                ),
-            },
-        )
-        _atomic_symlink(destination, runtime_root / "current")
-        _install_launcher(runtime_root)
-        _atomic_symlink(
-            runtime_root / "current" / "artifact" / "skills" / "preflight-ci",
+        _switch_active_release(
+            runtime_root,
             skill_target,
+            destination,
+            new_state,
         )
-    finally:
-        if displaced is not None:
-            _cleanup_displaced_release(displaced)
+    except BaseException:
+        failed = releases / f".failed-{version}-{uuid.uuid4().hex}"
+        if destination.exists():
+            os.replace(destination, failed)
+        if displaced is not None and displaced.exists():
+            try:
+                os.replace(displaced, destination)
+            except BaseException:
+                if failed.exists() and not destination.exists():
+                    os.replace(failed, destination)
+                raise
+            displaced = None
+        if failed.exists():
+            try:
+                shutil.rmtree(failed)
+            except OSError as exc:
+                print(
+                    "WARNING: activation failed and staged release cleanup failed: "
+                    f"{failed} ({exc.__class__.__name__})",
+                    file=sys.stderr,
+                )
+        raise
+    if displaced is not None:
+        _cleanup_displaced_release(displaced)
     return version
 
 
@@ -591,18 +753,17 @@ def activate(root: Path, skill_target: Path, version: str) -> None:
         _symlink_points_to(current_link, release)
         and _symlink_points_to(skill_target, skill_release)
         and (runtime_root / "bin" / "policy-preflight").is_file()
+        and (runtime_root / "bin" / "policy-runtime-bundle").is_file()
     )
     if current == version and links_match:
         return
+    new_state = dict(state)
     if current != version:
         previous = current
-        state.update({"schema_version": 1, "current": version, "previous": previous})
-        _write_json_atomic(state_path, state)
-    if not _symlink_points_to(current_link, release):
-        _atomic_symlink(release, current_link)
-    _install_launcher(runtime_root)
-    if not _symlink_points_to(skill_target, skill_release):
-        _atomic_symlink(skill_release, skill_target)
+        new_state.update(
+            {"schema_version": 1, "current": version, "previous": previous}
+        )
+    _switch_active_release(runtime_root, skill_target, release, new_state)
 
 
 def rollback(root: Path, skill_target: Path, version: str | None) -> str:
@@ -613,9 +774,7 @@ def rollback(root: Path, skill_target: Path, version: str | None) -> str:
         raise RuntimeBundleError("no verified previous version is recorded")
     if state.get("current") == target:
         activate(root, skill_target, target)
-        raise RuntimeBundleError(
-            f"release is already active; managed links verified: {target}"
-        )
+        return target
     activate(root, skill_target, target)
     return target
 
@@ -676,6 +835,10 @@ def build_parser() -> argparse.ArgumentParser:
     rollback_parser.add_argument("--root")
     rollback_parser.add_argument("--skill-target")
     rollback_parser.add_argument("--version")
+    activate_parser = subparsers.add_parser("activate")
+    activate_parser.add_argument("--root")
+    activate_parser.add_argument("--skill-target")
+    activate_parser.add_argument("--version", required=True)
     uninstall_parser = subparsers.add_parser("uninstall")
     uninstall_parser.add_argument("--root")
     uninstall_parser.add_argument("--version", required=True)
@@ -705,6 +868,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "rollback":
             version = rollback(root, skill_target, args.version)
             print(f"ROLLED BACK {version}")
+        elif args.command == "activate":
+            activate(root, skill_target, args.version)
+            print(f"ACTIVATED {args.version}")
         elif args.command == "uninstall":
             uninstall(root, args.version)
             print(f"UNINSTALLED {args.version}")
@@ -727,7 +893,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             python = _venv_python(release / "venv")
             command = [
                 str(python),
-                "-P",
+                "-I",
                 "-m",
                 "policy_check.preflight",
                 "--repo",

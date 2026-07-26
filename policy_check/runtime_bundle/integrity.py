@@ -25,16 +25,17 @@ BUNDLE_ROOT_RE = re.compile(
 
 
 def write_checksums(root: Path) -> None:
+    checksums = root / "SHA256SUMS"
     files = [
         path
         for path in root.rglob("*")
-        if path.is_file() and path.name != "SHA256SUMS"
+        if path.is_file() and path != checksums
     ]
     lines = [
         f"{sha256_file(path)}  {path.relative_to(root).as_posix()}"
         for path in sorted(files, key=lambda item: item.relative_to(root).as_posix())
     ]
-    (root / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    checksums.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def extract_verified_archive(

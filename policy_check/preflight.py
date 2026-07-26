@@ -746,74 +746,144 @@ def _verify_installed_wheel_payload(
         if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
             continue
         wheel = bundle_root / entry["path"]
-        if wheel.name.startswith("policy_check-") and wheel.suffix == ".whl":
+        if wheel.suffix == ".whl":
             candidates.append(wheel)
-    if len(candidates) != 1:
-        raise PreflightGateError("installed manifest must identify one policy-check wheel")
-    wheel = candidates[0]
-    try:
-        with zipfile.ZipFile(wheel) as archive:
-            record_names = [
-                name for name in archive.namelist() if name.endswith(".dist-info/RECORD")
-            ]
-            if len(record_names) != 1:
-                raise PreflightGateError("policy-check wheel has ambiguous RECORD")
-            rows = list(
-                csv.reader(
-                    io.StringIO(
-                        archive.read(record_names[0]).decode("utf-8")
+    if not candidates:
+        raise PreflightGateError("installed manifest identifies no wheel payloads")
+
+    prefix = Path(sys.prefix).resolve()
+    seen_distributions: set[str] = set()
+    saw_policy_check = False
+    for wheel in candidates:
+        try:
+            with zipfile.ZipFile(wheel) as archive:
+                metadata_names = [
+                    name
+                    for name in archive.namelist()
+                    if name.endswith(".dist-info/METADATA")
+                ]
+                record_names = [
+                    name
+                    for name in archive.namelist()
+                    if name.endswith(".dist-info/RECORD")
+                ]
+                if len(metadata_names) != 1 or len(record_names) != 1:
+                    raise PreflightGateError(
+                        f"wheel has ambiguous metadata/RECORD: {wheel.name}"
+                    )
+                metadata_root = metadata_names[0].removesuffix("METADATA")
+                if record_names[0].removesuffix("RECORD") != metadata_root:
+                    raise PreflightGateError(
+                        f"wheel metadata/RECORD disagree: {wheel.name}"
+                    )
+                metadata_text = archive.read(metadata_names[0]).decode("utf-8")
+                rows = list(
+                    csv.reader(
+                        io.StringIO(
+                            archive.read(record_names[0]).decode("utf-8")
+                        )
                     )
                 )
-            )
-    except (OSError, UnicodeError, zipfile.BadZipFile) as exc:
-        raise PreflightGateError("cannot inspect verified policy-check wheel") from exc
-
-    try:
-        distribution = importlib.metadata.distribution("policy-check")
-    except importlib.metadata.PackageNotFoundError as exc:
-        raise PreflightGateError("installed policy-check distribution is missing") from exc
-    prefix = Path(sys.prefix).resolve()
-    expected_preflight = Path(
-        distribution.locate_file("policy_check/preflight.py")
-    ).resolve()
-    if Path(__file__).resolve() != expected_preflight:
-        raise PreflightGateError(
-            "imported preflight module does not belong to the installed distribution"
-        )
-
-    checked = 0
-    for row in rows:
-        if len(row) < 3:
-            raise PreflightGateError("policy-check wheel RECORD is malformed")
-        name, encoded_digest, _size = row[:3]
-        if name == record_names[0]:
-            continue
-        if (
-            name.startswith("/")
-            or "\\" in name
-            or any(part in {"", ".", ".."} for part in name.split("/"))
-        ):
-            raise PreflightGateError("policy-check wheel RECORD path is unsafe")
-        if not encoded_digest.startswith("sha256="):
-            raise PreflightGateError("policy-check wheel RECORD lacks SHA-256")
-        installed_path = Path(distribution.locate_file(name)).resolve()
-        try:
-            installed_path.relative_to(prefix)
-        except ValueError as exc:
+        except (OSError, UnicodeError, zipfile.BadZipFile) as exc:
             raise PreflightGateError(
-                "installed policy-check file escapes selected environment"
+                f"cannot inspect verified wheel: {wheel.name}"
             ) from exc
-        if not installed_path.is_file():
-            raise PreflightGateError(f"installed policy-check file is missing: {name}")
-        actual = base64.urlsafe_b64encode(
-            hashlib.sha256(installed_path.read_bytes()).digest()
-        ).decode("ascii").rstrip("=")
-        expected = encoded_digest[len("sha256="):].rstrip("=")
-        if actual != expected:
-            raise PreflightGateError(f"installed policy-check file was modified: {name}")
-        checked += 1
-    if checked == 0:
-        raise PreflightGateError("policy-check wheel RECORD verified no installed files")
+
+        metadata_fields: dict[str, str] = {}
+        for line in metadata_text.splitlines():
+            if ": " in line:
+                key, value = line.split(": ", 1)
+                metadata_fields.setdefault(key, value)
+        distribution_name = metadata_fields.get("Name")
+        expected_version = metadata_fields.get("Version")
+        if not distribution_name or not expected_version:
+            raise PreflightGateError(f"wheel lacks Name/Version: {wheel.name}")
+        normalized_name = re.sub(
+            r"[-_.]+",
+            "-",
+            distribution_name,
+        ).lower()
+        if normalized_name in seen_distributions:
+            raise PreflightGateError(
+                f"duplicate installed wheel distribution: {normalized_name}"
+            )
+        seen_distributions.add(normalized_name)
+        try:
+            distribution = importlib.metadata.distribution(distribution_name)
+        except importlib.metadata.PackageNotFoundError as exc:
+            raise PreflightGateError(
+                f"installed distribution is missing: {distribution_name}"
+            ) from exc
+        if distribution.version != expected_version:
+            raise PreflightGateError(
+                f"installed distribution version mismatch: {distribution_name}"
+            )
+
+        if normalized_name == "policy-check":
+            saw_policy_check = True
+            expected_preflight = Path(
+                distribution.locate_file("policy_check/preflight.py")
+            ).resolve()
+            if Path(__file__).resolve() != expected_preflight:
+                raise PreflightGateError(
+                    "imported preflight module does not belong to "
+                    "the installed distribution"
+                )
+
+        checked = 0
+        for row in rows:
+            if len(row) < 3:
+                raise PreflightGateError(
+                    f"wheel RECORD is malformed: {distribution_name}"
+                )
+            name, encoded_digest, encoded_size = row[:3]
+            if name == record_names[0]:
+                continue
+            if (
+                name.startswith("/")
+                or "\\" in name
+                or any(part in {"", ".", ".."} for part in name.split("/"))
+            ):
+                raise PreflightGateError(
+                    f"wheel RECORD path is unsafe: {distribution_name}"
+                )
+            if not encoded_digest.startswith("sha256=") or not encoded_size.isdigit():
+                raise PreflightGateError(
+                    f"wheel RECORD lacks SHA-256/size: {distribution_name}"
+                )
+            installed_path = Path(distribution.locate_file(name)).resolve()
+            try:
+                installed_path.relative_to(prefix)
+            except ValueError as exc:
+                raise PreflightGateError(
+                    f"installed file escapes selected environment: {distribution_name}"
+                ) from exc
+            if not installed_path.is_file():
+                raise PreflightGateError(
+                    f"installed file is missing: {distribution_name}: {name}"
+                )
+            content = installed_path.read_bytes()
+            if len(content) != int(encoded_size):
+                raise PreflightGateError(
+                    f"installed file size changed: {distribution_name}: {name}"
+                )
+            actual = base64.urlsafe_b64encode(
+                hashlib.sha256(content).digest()
+            ).decode("ascii").rstrip("=")
+            expected = encoded_digest[len("sha256="):].rstrip("=")
+            if actual != expected:
+                raise PreflightGateError(
+                    f"installed file was modified: {distribution_name}: {name}"
+                )
+            checked += 1
+        if checked == 0:
+            raise PreflightGateError(
+                f"wheel RECORD verified no installed files: {distribution_name}"
+            )
+    if not saw_policy_check:
+        raise PreflightGateError(
+            "installed manifest must identify one policy-check wheel"
+        )
 
 
 def _resolve_engine(

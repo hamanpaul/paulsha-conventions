@@ -32,7 +32,7 @@ if [[ -z "$ENGINE_ROOT" || ! -f "$ENGINE_ROOT/policy_check/preflight.py" ]]; the
     echo "ERROR: deployed policy-preflight launcher not found: $LAUNCHER" >&2
     exit 2
   }
-  exec "$LAUNCHER" --repo "$TARGET_ROOT" "$@"
+  PSC_CONVENTIONS_ROOT="$RUNTIME_ROOT" exec "$LAUNCHER" --repo "$TARGET_ROOT" "$@"
 fi
 
 PYTHON_BIN="${PSC_PREFLIGHT_PYTHON:-python3}"
@@ -56,8 +56,9 @@ esac
 }
 
 exec env PYTHONDONTWRITEBYTECODE=1 \
-  PYTHONPATH="$ENGINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
-  "$PYTHON_BIN" -P -m policy_check.preflight \
+  "$PYTHON_BIN" -I -B -c \
+  'import runpy, sys; root = sys.argv.pop(1); sys.path.insert(0, root); runpy.run_module("policy_check.preflight", run_name="__main__")' \
+  "$ENGINE_ROOT" \
   "$@" \
   --repo "$TARGET_ROOT" \
   --engine-source "$ENGINE_ROOT"
