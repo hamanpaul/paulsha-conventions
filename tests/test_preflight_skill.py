@@ -150,12 +150,16 @@ def test_deployed_skill_derives_custom_runtime_root_from_physical_location(
     runtime_root = tmp_path / "custom-runtime"
     deployed_skill = (
         runtime_root
-        / "current"
+        / "releases"
+        / "1.0.14"
         / "artifact"
         / "skills"
         / "preflight-ci"
     )
     shutil.copytree(SKILL, deployed_skill)
+    (runtime_root / "current").symlink_to(
+        runtime_root / "releases" / "1.0.14"
+    )
     launcher = runtime_root / "bin" / "policy-preflight"
     launcher.parent.mkdir(parents=True)
     launcher.write_text(

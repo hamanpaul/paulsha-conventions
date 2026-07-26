@@ -9,7 +9,15 @@ TARGET_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 
 ENGINE_ROOT="$(git -C "$SKILL_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -z "$ENGINE_ROOT" || ! -f "$ENGINE_ROOT/policy_check/preflight.py" ]]; then
-  PHYSICAL_RUNTIME_ROOT="$(cd -P "$SKILL_DIR/../../../.." 2>/dev/null && pwd || true)"
+  PHYSICAL_RUNTIME_ROOT=""
+  case "$SKILL_DIR" in
+    */releases/*/artifact/skills/preflight-ci)
+      PHYSICAL_RUNTIME_ROOT="${SKILL_DIR%/releases/*/artifact/skills/preflight-ci}"
+      ;;
+    */current/artifact/skills/preflight-ci)
+      PHYSICAL_RUNTIME_ROOT="${SKILL_DIR%/current/artifact/skills/preflight-ci}"
+      ;;
+  esac
   if [[ -n "$PHYSICAL_RUNTIME_ROOT" && -x "$PHYSICAL_RUNTIME_ROOT/bin/policy-preflight" ]]; then
     RUNTIME_ROOT="$PHYSICAL_RUNTIME_ROOT"
   elif [[ -n "${PSC_CONVENTIONS_ROOT:-}" ]]; then
