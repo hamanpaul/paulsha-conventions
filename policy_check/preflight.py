@@ -120,9 +120,11 @@ def _run_or_error(
 ) -> subprocess.CompletedProcess[str]:
     try:
         result = _run_command(argv, cwd=cwd, timeout=timeout)
-    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+    except (OSError, UnicodeError, subprocess.TimeoutExpired) as exc:
         error_type = PreflightGateError if gate else PreflightUsageError
-        raise error_type(f"command unavailable or timed out: {argv[0]}") from exc
+        raise error_type(
+            f"command unavailable, unreadable, or timed out: {argv[0]}"
+        ) from exc
     if result.returncode != 0:
         error_type = PreflightGateError if gate else PreflightUsageError
         raise error_type(f"command failed ({result.returncode}): {argv[0]}")
@@ -180,7 +182,7 @@ def _default_base(repo_root: Path) -> str:
             cwd=repo_root,
             timeout=30,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+    except (OSError, UnicodeError, subprocess.TimeoutExpired) as exc:
         raise PreflightUsageError("cannot derive base; git is unavailable") from exc
     if symbolic.returncode == 0 and symbolic.stdout.strip().startswith("origin/"):
         return _safe_ref(symbolic.stdout.strip()[len("origin/"):], field="base")
@@ -190,7 +192,7 @@ def _default_base(repo_root: Path) -> str:
             cwd=repo_root,
             timeout=30,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+    except (OSError, UnicodeError, subprocess.TimeoutExpired) as exc:
         raise PreflightUsageError("cannot derive base; git is unavailable") from exc
     if main_ref.returncode == 0:
         return "main"
@@ -215,9 +217,9 @@ def _json_command(
 ) -> dict[str, Any]:
     try:
         result = _run_command(argv, cwd=cwd, timeout=60, env=env)
-    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+    except (OSError, UnicodeError, subprocess.TimeoutExpired) as exc:
         raise PreflightUsageError(
-            f"command unavailable or timed out: {argv[0]}"
+            f"command unavailable, unreadable, or timed out: {argv[0]}"
         ) from exc
     if result.returncode != 0:
         raise PreflightUsageError(f"command failed ({result.returncode}): {argv[0]}")
@@ -238,7 +240,7 @@ def _manual_context(args: argparse.Namespace, repo_root: Path) -> PullRequestCon
     body_path = Path(args.pr_body_file).expanduser()
     try:
         body = body_path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         raise PreflightUsageError(f"cannot read --pr-body-file: {body_path}") from exc
     return PullRequestContext(
         title=args.pr_title.strip(),
@@ -422,7 +424,7 @@ def _is_canonical_checkout(repo_root: Path) -> bool:
             cwd=repo_root,
             timeout=30,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, UnicodeError, subprocess.TimeoutExpired):
         return False
     normalized_remote = remote.stdout.strip().removesuffix(".git")
     canonical_remotes = {
@@ -502,7 +504,7 @@ def _workflow_pin(repo_root: Path, config: Mapping[str, Any]) -> tuple[str, str]
         raise PreflightGateError("missing .github/workflows/policy-check.yml")
     try:
         payload = yaml.safe_load(workflow.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError) as exc:
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
         raise PreflightGateError("cannot parse policy-check workflow") from exc
     jobs = payload.get("jobs") if isinstance(payload, dict) else None
     if not isinstance(jobs, dict):
@@ -561,7 +563,7 @@ def _verify_cache(artifact: Path, engine_repo: str, sha: str) -> Path | None:
         return None
     try:
         envelope = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
     if not isinstance(envelope, dict):
         return None
@@ -747,8 +749,13 @@ def _run_policy(
                 timeout=POLICY_TIMEOUT,
                 env=_sanitized_env(extra),
             )
-    except (OSError, subprocess.TimeoutExpired):
-        _gate_result("policy", "FAIL", started, "command unavailable or timeout")
+    except (OSError, UnicodeError, subprocess.TimeoutExpired):
+        _gate_result(
+            "policy",
+            "FAIL",
+            started,
+            "command unavailable, invalid output, or timeout",
+        )
         return False
     ok = result.returncode == 0
     _gate_result("policy", "PASS" if ok else "FAIL", started, f"exit={result.returncode}")
@@ -785,8 +792,17 @@ def _run_steps(
                 cwd=cwd,
                 timeout=step.timeout_seconds,
             )
-        except FileNotFoundError:
-            _gate_result(step.name, "FAIL", started, "command unavailable")
+        except OSError:
+            _gate_result(
+                step.name,
+                "FAIL",
+                started,
+                "command unavailable or not executable",
+            )
+            all_passed = False
+            continue
+        except UnicodeError:
+            _gate_result(step.name, "FAIL", started, "invalid output encoding")
             all_passed = False
             continue
         except subprocess.TimeoutExpired:
@@ -881,6 +897,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     except PreflightGateError as exc:
         _gate_result("engine", "FAIL", engine_started, str(exc))
+        print("PREFLIGHT FAIL")
+        return 1
+    except (OSError, UnicodeError) as exc:
+        _gate_result(
+            "engine",
+            "FAIL",
+            engine_started,
+            f"engine I/O failure: {exc.__class__.__name__}",
+        )
         print("PREFLIGHT FAIL")
         return 1
 

@@ -613,6 +613,69 @@ def test_run_steps_timeout_is_failure(monkeypatch, tmp_path) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "raised",
+    [
+        PermissionError("not executable"),
+        UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("gate", "expected"),
+    [
+        (True, preflight.PreflightGateError),
+        (False, preflight.PreflightUsageError),
+    ],
+)
+def test_run_or_error_normalizes_execution_errors(
+    monkeypatch,
+    tmp_path,
+    raised: Exception,
+    gate: bool,
+    expected: type[Exception],
+) -> None:
+    def fail(*_args, **_kwargs):
+        raise raised
+
+    monkeypatch.setattr(preflight, "_run_command", fail)
+    with pytest.raises(
+        expected,
+        match="command unavailable, unreadable, or timed out",
+    ):
+        preflight._run_or_error(["verify"], cwd=tmp_path, gate=gate)
+
+
+def test_run_steps_execution_error_fails_and_continues(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(argv, **_kwargs):
+        command = tuple(argv)
+        calls.append(command)
+        if command == ("broken",):
+            raise PermissionError("not executable")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(preflight, "_run_command", fake_run)
+    steps = [
+        preflight.PreflightStep("broken", "validation", ("broken",), ".", None, 10),
+        preflight.PreflightStep("after", "validation", ("after",), ".", None, 10),
+    ]
+    assert not preflight._run_steps(
+        tmp_path,
+        steps,
+        skip_tests=False,
+        policy_only=False,
+    )
+    output = capsys.readouterr().out
+    assert calls == [("broken",), ("after",)]
+    assert "broken: FAIL" in output
+    assert "after: PASS" in output
+
+
 def test_run_policy_passes_complete_context_and_source_root(monkeypatch, tmp_path) -> None:
     captured: dict = {}
 
@@ -817,7 +880,20 @@ def test_main_skill_mode_allows_empty_steps_when_policy_only(monkeypatch, tmp_pa
     assert rc == 0
 
 
-def test_main_engine_resolve_failure_still_prints_final_fail(monkeypatch, tmp_path, capsys) -> None:
+@pytest.mark.parametrize(
+    "resolver_error",
+    [
+        preflight.PreflightGateError("engine failed"),
+        PermissionError("cache is read-only"),
+        UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid"),
+    ],
+)
+def test_main_engine_resolve_failure_still_prints_final_fail(
+    monkeypatch,
+    tmp_path,
+    capsys,
+    resolver_error: Exception,
+) -> None:
     body = tmp_path / "body.md"
     body.write_text("Fixes #46\n", encoding="utf-8")
     monkeypatch.setattr(
@@ -828,7 +904,7 @@ def test_main_engine_resolve_failure_still_prints_final_fail(monkeypatch, tmp_pa
     monkeypatch.setattr(preflight, "_validate_git_context", lambda *_a: None)
 
     def fail_resolve(*_args, **_kwargs) -> preflight.EngineIdentity:
-        raise preflight.PreflightGateError("engine failed")
+        raise resolver_error
 
     monkeypatch.setattr(preflight, "_resolve_engine", fail_resolve)
     rc = preflight.main(
