@@ -326,6 +326,15 @@ def test_prepare_package_version_rejects_mismatched_snapshot(tmp_path: Path) -> 
         builder._prepare_package_version(snapshot, "1.0.13-fix.2")
 
 
+def test_bundle_output_must_be_outside_source(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    with pytest.raises(integrity.BundleError, match="outside"):
+        builder._prepare_output_directory(source, source / "dist")
+    outside = builder._prepare_output_directory(source, tmp_path / "dist")
+    assert outside == (tmp_path / "dist").resolve()
+
+
 def test_selector_chooses_exact_version_and_never_current(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

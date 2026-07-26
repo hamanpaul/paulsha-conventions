@@ -202,11 +202,22 @@ def _prepare_package_version(snapshot: Path, policy_version: str) -> None:
         raise BundleError("cannot prepare package version in tag snapshot") from exc
 
 
+def _prepare_output_directory(source: Path, output_dir: Path) -> Path:
+    destination = output_dir.resolve()
+    try:
+        destination.relative_to(source.resolve())
+    except ValueError:
+        pass
+    else:
+        raise BundleError("output directory must be outside the source repository")
+    destination.mkdir(parents=True, exist_ok=True)
+    return destination
+
+
 def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
     source = repo.resolve()
     version, commit, epoch = attest_clean_tag(source, tag)
-    destination = output_dir.resolve()
-    destination.mkdir(parents=True, exist_ok=True)
+    destination = _prepare_output_directory(source, output_dir)
     archive = destination / f"paulsha-conventions-v{version}.tar.gz"
     digest_file = archive.with_suffix(archive.suffix + ".sha256")
     if archive.exists() or digest_file.exists():
@@ -327,7 +338,9 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
         )
         write_checksums(bundle)
         load_and_verify_bundle(bundle)
-        _deterministic_archive(bundle, archive, epoch=epoch)
+        temporary_archive = temp / archive.name
+        _deterministic_archive(bundle, temporary_archive, epoch=epoch)
+        os.replace(temporary_archive, archive)
 
     digest = sha256_file(archive)
     digest_file.write_text(f"{digest}  {archive.name}\n", encoding="utf-8")
