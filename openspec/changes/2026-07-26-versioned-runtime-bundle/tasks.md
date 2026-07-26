@@ -16,9 +16,9 @@
    config/path/encoding error 與 canonical spec。
 8. [x] 更新 active README、skill、bootstrap/help/drift/template consumers，新產物只
    生成 `.project-policy.yml`；歷史 provenance 保留。
-9. [ ] 補 bundle/config/preflight unit tests、tamper negative tests、synthetic
+9. [x] 補 bundle/config/preflight unit tests、tamper negative tests、synthetic
    clean-tag integration、offline install/upgrade/rollback/uninstall smoke。
-10. [ ] 主整合者執行 full pytest、policy、OpenSpec、PR-aware canonical preflight
+10. [x] 主整合者執行 full pytest、policy、OpenSpec、PR-aware canonical preflight
     與 artifact-level evidence review。
 11. [ ] Claude Opus 5 對 exact candidate head 對抗審查；未處置缺陷/驗收缺口 FAIL，
     有界且明文列管 residual 不單獨 FAIL。

@@ -762,6 +762,25 @@ def test_run_steps_fails_when_every_declared_step_is_conditionally_skipped(
     assert "no declared preflight step executed" in capsys.readouterr().out
 
 
+def test_run_steps_requires_policy_only_when_no_steps_are_declared(
+    tmp_path,
+    capsys,
+) -> None:
+    assert not preflight._run_steps(
+        tmp_path,
+        [],
+        skip_tests=False,
+        policy_only=False,
+    )
+    assert "no declared preflight step executed" in capsys.readouterr().out
+    assert preflight._run_steps(
+        tmp_path,
+        [],
+        skip_tests=False,
+        policy_only=True,
+    )
+
+
 def test_run_steps_timeout_is_failure(monkeypatch, tmp_path) -> None:
     def timeout(*_args, **_kwargs):
         raise subprocess.TimeoutExpired(["pytest"], 1)

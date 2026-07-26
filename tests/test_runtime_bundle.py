@@ -227,6 +227,18 @@ def test_installer_checksums_before_runtime_code() -> None:
     assert "--no-index" in Path(manager.__file__).read_text(encoding="utf-8")
 
 
+def test_runtime_command_failure_includes_bounded_diagnostic(tmp_path: Path) -> None:
+    with pytest.raises(manager.RuntimeBundleError, match="useful failure"):
+        manager._run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; print('useful failure', file=sys.stderr); raise SystemExit(7)",
+            ],
+            cwd=tmp_path,
+        )
+
+
 def test_attest_clean_annotated_tag_and_rejects_dirty(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
