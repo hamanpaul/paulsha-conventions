@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "policy-check"
-version = "1.0.13"
+version = "1.0.14"
 description = "Cross-repo policy checker for hamanpaul/*"
 requires-python = ">=3.11"
 dependencies = [

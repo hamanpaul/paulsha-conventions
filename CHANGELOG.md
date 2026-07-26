@@ -5,6 +5,11 @@
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
 本專案遵循 hamanpaul project policy v1.0.4。
 
+## [1.0.14] - 2026-07-26
+
+### Added
+- 新增 versioned runtime bundle、exact-version installed selector、offline atomic installer/rollback，並將 `.project-policy.yml` 定義為 canonical public manifest、legacy alias 衝突 fail-closed。
+
 ## [1.0.13] - 2026-07-26
 
 ### Added
