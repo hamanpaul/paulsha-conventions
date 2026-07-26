@@ -77,3 +77,8 @@ R-21 必須掃描所有 tier；`tier` 不再決定「要不要掃」，只參與
 - `python3 -m policy_check --repo .` 全綠。
 - report 無任何測試 secret 明文。
 - Foreign reviewer 無未處置 critical/important finding。
+
+## 對抗審查判定
+
+- 未處置的實作缺陷或驗收缺口 ⇒ FAIL。
+- 已明文承認、影響分析有界且在文件列管的殘餘風險，不單獨構成 FAIL；reviewer 若不接受，必須具體反駁其影響分析。

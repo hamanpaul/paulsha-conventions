@@ -142,3 +142,8 @@ engine release 後，在 `hamanpaul/custom-skills` 獨立 branch：
 - online/cached/offline/version-skew/context/gate-failure情境全部機械化。
 - `python3 -m policy_check --repo .` 全綠。
 - Foreign reviewer 無未處置 critical/important finding。
+
+## 對抗審查判定
+
+- 未處置的實作缺陷或驗收缺口 ⇒ FAIL。
+- 已明文承認、影響分析有界且在文件列管的殘餘風險，不單獨構成 FAIL；reviewer 若不接受，必須具體反駁其影響分析。

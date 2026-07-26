@@ -50,3 +50,8 @@
 - `python3 -m policy_check --repo . --pr-title "fix(release): 修正 release ledger tag SHA" --pr-body "Fixes #42" --pr-base-ref feature/42-46-open-issues-batch --pr-head-ref feature/42-release-ledger`
 - `RELEASES.md` 每個 tagged row 的 SHA、tag 與 tag 內 `VERSION` 三者一致。
 - Foreign reviewer 無未處置 critical/important finding。
+
+## 對抗審查判定
+
+- 未處置的實作缺陷或驗收缺口 ⇒ FAIL。
+- 已明文承認、影響分析有界且在文件列管的殘餘風險，不單獨構成 FAIL；reviewer 若不接受，必須具體反駁其影響分析。
