@@ -83,7 +83,7 @@ This repository **dog-foods its own policy** (`profile: flat`; `policy_version` 
 | R-18 | docs / README track code changes | code_paths changed but `README.md` / `docs/**` was not updated (**WARN**, does not block merge) | `policy-exempt:docs-sync` |
 | R-19 | repo has tests ⇒ CI runs them | a `tests/` dir exists (with `test_*.py` / `*_test.py`) but no `.github/workflows/**` runs any test command | `policy-exempt:ci-tests` |
 | R-20 | workflow policy_version in sync | the literal `policy_version` / `POLICY_VERSION` declared in a workflow disagrees with `.paul-project.yml` | — |
-| R-21 | tier = shareable secret scan | a repo declaring `tier: shareable` contains employer markers / personal absolute paths / credential patterns not covered by `secret_scan.allow` or self-exemption | `policy-exempt:secret-scan` |
+| R-21 | visibility-aware secret scan | all tiers are scanned; `shareable` hits **FAIL**; for other tiers, public/unknown structural or credential hits **FAIL**, while marker-only and private/internal hits **WARN**; reports expose only relative `path:line`, detector class, and counts | `policy-exempt:secret-scan` |
 | R-22 | docs have no dangling code references | a path / internal link / backtick symbol referenced inside the canonical doc scope (`doc_paths`) does not exist; symbols use a language-agnostic scoped identity (ctags `(language, kind, scope, name)` diff); newly introduced breakage **FAIL**, pre-existing dangling **WARN** | `policy-exempt:doc-reference` |
 | R-23 | engine pin matches policy_version | a workflow `uses:` pointing at `conventions_engine.repo` pins an engine version (tag `@vX.Y.Z`, or SHA `@<sha>` + trailing `# vX.Y.Z`) that disagrees with `.paul-project.yml`'s `policy_version` | `policy-exempt:engine-pin` |
 | R-24 | MOC aligned with this change | when a repo declares `moc`: `moc.static` out of sync (**WARN**) / `moc.map` has a dangling link (new breakage **FAIL**, pre-existing **WARN**) / an active openspec change・plan・spec is unlinked (**WARN**) | `policy-exempt:moc-alignment` |
@@ -279,6 +279,7 @@ gh repo create hamanpaul/<new-project> --template hamanpaul/new-project-template
 usage: policy-check [-h] [--repo REPO] [--pr-title PR_TITLE]
                     [--pr-body PR_BODY] [--pr-labels PR_LABELS]
                     [--pr-base-ref PR_BASE_REF] [--pr-head-ref PR_HEAD_REF]
+                    [--repo-visibility {public,private,internal,unknown}]
                     [--only ONLY]
 
 options:
@@ -290,6 +291,7 @@ options:
                         Comma-separated
   --pr-base-ref PR_BASE_REF
   --pr-head-ref PR_HEAD_REF
+  --repo-visibility {public,private,internal,unknown}
   --only ONLY           Comma-separated rule IDs (e.g. R-01,R-09)
 <!-- END: cli-help marker="policy-check-help" -->
 
@@ -357,7 +359,7 @@ The license follows the repository owner's preference; see the `LICENSE` file at
 | R-18 | docs/README 對齊 code 變動 | code_paths 有變動但 `README.md` / `docs/**` 未同步（**WARN**，不擋 merge） | `policy-exempt:docs-sync` |
 | R-19 | repo 有測試則 CI 必須執行 | 存在 `tests/`（含 `test_*.py` / `*_test.py`）但 `.github/workflows/**` 無任何測試執行指令（pytest / unittest / npm test 等） | `policy-exempt:ci-tests` |
 | R-20 | Workflow policy_version 與 config 同步 | workflow 內宣告的 `policy_version` / `POLICY_VERSION` 字面值與 `.paul-project.yml` 的 `policy_version` 不一致 | — |
-| R-21 | tier=shareable repo 機密掃描 | 宣告 `tier: shareable` 的 repo 含雇主標記（內部代號、裝置型號等）／個人絕對路徑／憑證模式，且不在 `secret_scan.allow` 或自我豁免範圍 | `policy-exempt:secret-scan` |
+| R-21 | visibility-aware 機密掃描 | 所有 tier 都掃描；`shareable` 命中一律 **FAIL**；其他 tier 的 public/unknown 結構或憑證命中 **FAIL**，僅 marker 及 private/internal 命中 **WARN**；報告只揭露相對 `path:line`、detector 類別與筆數 | `policy-exempt:secret-scan` |
 | R-22 | docs 對 code 產物引用無懸空 | canonical doc scope（`doc_paths`，預設 `README.md` / `docs/**`）引用的路徑／內部連結／反引號 symbol 在 repo 不存在；symbol 改用**語言無關 scoped identity**（ctags `(language, kind, scope, name)` 差集，限定式 token 精準命中、結構化裸名 snake/Camel 多 scope 同名只 WARN、純單字不偵測以避免常見字誤報）；本次變更新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）降 WARN；`openspec/**`・`docs/superpowers/**`・fixtures 內建排除 | `policy-exempt:doc-reference` |
 | R-23 | 引擎 pin 版本與 policy_version 對齊 | workflow `uses:` 指向 `conventions_engine.repo` 的引擎版本（tag `@vX.Y.Z` 或 SHA `@<sha>` + 尾註 `# vX.Y.Z`）與 `.paul-project.yml` 的 `policy_version` 不一致 **FAIL**；純 SHA 無註解 **WARN**；`./` 在地引用或未設 `conventions_engine.repo` 則 NA | `policy-exempt:engine-pin` |
 | R-24 | MOC 與本次變更對齊 | repo 宣告 `moc` 時：`moc.triggers` 命中但 `moc.static` 未同步（**WARN**）／`moc.map` 連結懸空（本次新破壞 **FAIL**、陳年 **WARN**）／active openspec change・plan・spec 未被連結（**WARN**，永不 FAIL）；orphan/freshness 改呼叫共用核心，受治理前綴**參數化**（預設沿用既有前綴）；未宣告 `moc` 則 NA | `policy-exempt:moc-alignment` |
