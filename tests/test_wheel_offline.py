@@ -18,6 +18,15 @@ def test_venv_console_script_path_uses_entrypoint_name():
     assert script == expected
 
 
+def test_venv_preflight_console_script_path_uses_entrypoint_name():
+    venv_dir = Path("offline-venv")
+    script = _venv_console_script(venv_dir, "policy-preflight")
+    expected = venv_dir / ("Scripts" if os.name == "nt" else "bin") / (
+        "policy-preflight.exe" if os.name == "nt" else "policy-preflight"
+    )
+    assert script == expected
+
+
 def test_offline_run_env_sanitizes_python_import_env():
     env = _offline_run_env(
         {
@@ -47,9 +56,9 @@ def test_packaging_gate_applies_only_to_offline_smoke():
     assert any(mark.name == "skipif" for mark in smoke_marks)
 
 
-def _venv_console_script(venv_dir: Path) -> Path:
+def _venv_console_script(venv_dir: Path, name: str = "policy-check") -> Path:
     scripts_dir = venv_dir / ("Scripts" if os.name == "nt" else "bin")
-    script_name = "policy-check.exe" if os.name == "nt" else "policy-check"
+    script_name = f"{name}.exe" if os.name == "nt" else name
     return scripts_dir / script_name
 
 
@@ -114,3 +123,12 @@ def test_wheel_builds_installs_offline_and_runs(tmp_path):
 
     # R-08 對缺欄位的最小 config 可能 FAIL，但「能離線執行並產報告」才是本測試重點
     assert "Policy Check Report" in proc.stdout, proc.stderr
+
+    # 5) 新增的 canonical preflight console entrypoint 也必須存在且可載入。
+    preflight = _venv_console_script(venv_dir, "policy-preflight")
+    help_proc = _run(
+        [str(preflight), "--help"],
+        cwd=str(fixture),
+        env=_offline_run_env(),
+    )
+    assert help_proc.stdout.startswith("usage: policy-preflight")

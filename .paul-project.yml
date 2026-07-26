@@ -14,6 +14,21 @@ cli:
     help_args: ["--help"]
     reflected_in: "README.md"
     marker: "policy-check-help"
+  - command: "python3 -m policy_check.preflight"
+    help_args: ["--help"]
+    reflected_in: "README.md"
+    marker: "policy-preflight-help"
+preflight:
+  steps:
+    - name: openspec
+      kind: validation
+      argv: ["openspec", "validate", "--all"]
+      when_path_exists: "openspec"
+      timeout_seconds: 300
+    - name: tests
+      kind: tests
+      argv: ["python3", "-m", "pytest", "-q"]
+      timeout_seconds: 1200
 tier: shareable
 secret_scan:
   allow:

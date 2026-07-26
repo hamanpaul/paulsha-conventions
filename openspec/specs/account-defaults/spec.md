@@ -1,4 +1,10 @@
-## ADDED Requirements
+# account-defaults Specification
+
+## Purpose
+Define the account-level GitHub community-health defaults that downstream
+`hamanpaul/*` repositories inherit when they do not provide local overrides.
+
+## Requirements
 
 ### Requirement: Account-level community defaults repository
 The system SHALL provide a public `hamanpaul/.github` repository that acts as the account-level source for supported GitHub community health defaults.

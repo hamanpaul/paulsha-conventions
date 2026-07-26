@@ -41,6 +41,7 @@ policy_version: 1.0.12
 - [ ] `.github/pull_request_template.md` checklist 全勾
 - [ ] 測試全綠（本 repo: `python3 -m pytest -q`）
 - [ ] `python3 -m policy_check --repo .` 無任何 failure
+- [ ] repo 若宣告 `preflight`，已執行 canonical `policy-preflight`（或 `python3 -m policy_check.preflight`）且全部 selected gates 通過
 - [ ] R-17：PR body 若引用 issue（`#N`），必須是 closing-keyword 形式（`Closes/Fixes/Resolves #N`）；只引用不關閉時上 `policy-exempt:issue-link`
 - [ ] R-18：code 有變動時已評估並（如需要）同步 `README.md` / `docs/**`，或上 `policy-exempt:docs-sync`
 - [ ] R-19：repo 有 `tests/` 時，CI workflow 有實際執行測試（pytest 等）；新增測試套件而 CI 未涵蓋時同步補上

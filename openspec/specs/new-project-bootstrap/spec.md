@@ -1,4 +1,10 @@
-## ADDED Requirements
+# new-project-bootstrap Specification
+
+## Purpose
+Define the canonical GitHub template and pinned policy-engine wiring used to
+bootstrap new `hamanpaul/*` repositories with a verifiable policy baseline.
+
+## Requirements
 
 ### Requirement: New project template repository
 The system SHALL provide a public `hamanpaul/new-project-template` repository that can be used as the standard bootstrap source for new repositories.
