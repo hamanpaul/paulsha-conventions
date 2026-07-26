@@ -66,6 +66,16 @@ def test_parser_rejects_pr_with_offline() -> None:
     assert exc.value.code == 2
 
 
+def test_github_auth_tokens_are_scoped_to_github_cli(monkeypatch) -> None:
+    monkeypatch.setenv("GH_TOKEN", "test-gh-token")
+    monkeypatch.setenv("GITHUB_TOKEN", "test-github-token")
+
+    assert "GH_TOKEN" not in preflight._sanitized_env()
+    assert "GITHUB_TOKEN" not in preflight._sanitized_env()
+    assert preflight._github_cli_env()["GH_TOKEN"] == "test-gh-token"
+    assert preflight._github_cli_env()["GITHUB_TOKEN"] == "test-github-token"
+
+
 def test_manual_context_requires_body_file(tmp_path) -> None:
     args = _args(tmp_path, tmp_path / "missing", pr_body_file=None)
     with pytest.raises(preflight.PreflightUsageError, match="pr-body-file"):
@@ -81,6 +91,9 @@ def test_manual_context_allows_explicit_empty_labels(tmp_path) -> None:
 
 
 def test_github_context_uses_live_metadata(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("GH_TOKEN", "test-gh-token")
+    monkeypatch.setenv("GITHUB_TOKEN", "test-github-token")
+    monkeypatch.setenv("UNRELATED_SECRET", "must-not-reach-gh")
     replies = iter(
         [
             {
@@ -93,7 +106,13 @@ def test_github_context_uses_live_metadata(monkeypatch, tmp_path) -> None:
             {"visibility": "PRIVATE"},
         ]
     )
-    monkeypatch.setattr(preflight, "_json_command", lambda *_a, **_kw: next(replies))
+    seen_envs = []
+
+    def fake_json(*_args, **kwargs):
+        seen_envs.append(kwargs["env"])
+        return next(replies)
+
+    monkeypatch.setattr(preflight, "_json_command", fake_json)
     args = _args(
         tmp_path,
         tmp_path / "unused",
@@ -114,6 +133,10 @@ def test_github_context_uses_live_metadata(monkeypatch, tmp_path) -> None:
         head="feature/live",
         visibility="private",
     )
+    assert len(seen_envs) == 2
+    assert all(env["GH_TOKEN"] == "test-gh-token" for env in seen_envs)
+    assert all(env["GITHUB_TOKEN"] == "test-github-token" for env in seen_envs)
+    assert all("UNRELATED_SECRET" not in env for env in seen_envs)
 
 
 def test_github_context_rejects_manual_visibility_override(tmp_path) -> None:

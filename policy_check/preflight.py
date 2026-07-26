@@ -84,6 +84,15 @@ def _sanitized_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
     return env
 
 
+def _github_cli_env() -> dict[str, str]:
+    auth = {
+        key: os.environ[key]
+        for key in ("GH_TOKEN", "GITHUB_TOKEN")
+        if key in os.environ
+    }
+    return _sanitized_env(auth)
+
+
 def _run_command(
     argv: Sequence[str],
     *,
@@ -198,8 +207,20 @@ def _default_head(repo_root: Path) -> str:
     return _safe_ref(result.stdout.strip(), field="head")
 
 
-def _json_command(argv: Sequence[str], *, cwd: Path) -> dict[str, Any]:
-    result = _run_or_error(argv, cwd=cwd, timeout=60, gate=False)
+def _json_command(
+    argv: Sequence[str],
+    *,
+    cwd: Path,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    try:
+        result = _run_command(argv, cwd=cwd, timeout=60, env=env)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        raise PreflightUsageError(
+            f"command unavailable or timed out: {argv[0]}"
+        ) from exc
+    if result.returncode != 0:
+        raise PreflightUsageError(f"command failed ({result.returncode}): {argv[0]}")
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -252,10 +273,12 @@ def _github_context(args: argparse.Namespace, repo_root: Path) -> PullRequestCon
             "title,body,labels,baseRefName,headRefName",
         ],
         cwd=repo_root,
+        env=_github_cli_env(),
     )
     repo = _json_command(
         ["gh", "repo", "view", "--json", "visibility"],
         cwd=repo_root,
+        env=_github_cli_env(),
     )
     labels = pr.get("labels")
     if not isinstance(labels, list):
