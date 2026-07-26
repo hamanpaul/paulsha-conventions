@@ -339,11 +339,15 @@ policy-runtime-bundle build \
   --output-dir /path/outside/the/repo
 ```
 
-Verify and install an unpacked bundle without a source checkout:
+Verify the external archive digest and member safety, then install without a
+source checkout:
 
 ```bash
-policy-runtime-bundle verify --bundle /path/paulsha-conventions-vX.Y.Z
-/path/paulsha-conventions-vX.Y.Z/install.sh
+policy-runtime-bundle extract \
+  --archive /path/paulsha-conventions-vX.Y.Z.tar.gz \
+  --sha256 <published-archive-sha256> \
+  --output-dir /safe/staging
+/safe/staging/paulsha-conventions-vX.Y.Z/install.sh
 ```
 
 The stable deployed skill launcher reads the target repository's exact
@@ -456,12 +460,14 @@ options:
 
 <!-- BEGIN: cli-help marker="policy-runtime-bundle-help" -->
 usage: policy-runtime-bundle [-h]
-                             {build,verify,install,rollback,uninstall} ...
+                             {build,verify,extract,install,rollback,uninstall}
+                             ...
 
 positional arguments:
-  {build,verify,install,rollback,uninstall}
+  {build,verify,extract,install,rollback,uninstall}
     build               Build from a clean annotated tag
     verify              Verify an unpacked bundle
+    extract             Verify archive digest/members and extract atomically
 
 options:
   -h, --help            show this help message and exit
@@ -806,11 +812,14 @@ policy-runtime-bundle build \
   --output-dir /repo/外的輸出目錄
 ```
 
-解包後可先驗證再離線安裝：
+先驗外部 archive digest 與 member safety，再離線安裝：
 
 ```bash
-policy-runtime-bundle verify --bundle /path/paulsha-conventions-vX.Y.Z
-/path/paulsha-conventions-vX.Y.Z/install.sh
+policy-runtime-bundle extract \
+  --archive /path/paulsha-conventions-vX.Y.Z.tar.gz \
+  --sha256 <published-archive-sha256> \
+  --output-dir /safe/staging
+/safe/staging/paulsha-conventions-vX.Y.Z/install.sh
 ```
 
 部署後的 stable launcher 會讀目標 repo 的 exact `policy_version`，驗證相同

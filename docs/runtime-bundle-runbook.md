@@ -44,12 +44,19 @@ policy-runtime-bundle build \
   --output-dir /path/release-output
 ```
 
-解包後可在任何 Python 3.11+ 主機驗證：
+在任何 Python 3.11+ 主機以外部 digest 驗證 archive 與 member，再原子解包：
 
 ```bash
-policy-runtime-bundle verify \
-  --bundle /path/paulsha-conventions-vX.Y.Z
+policy-runtime-bundle extract \
+  --archive /path/paulsha-conventions-vX.Y.Z.tar.gz \
+  --sha256 <published-archive-sha256> \
+  --output-dir /safe/staging
 ```
+
+`extract` 拒絕 digest mismatch、duplicate/traversal/dot-segment member、
+symlink/hardlink/device、多重 root 與已存在 destination；解包後再次執行完整
+bundle payload 驗證。已安全解包的目錄仍可另跑
+`policy-runtime-bundle verify --bundle <dir>`。
 
 ## Install and state
 

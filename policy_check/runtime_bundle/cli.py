@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import Sequence
 
 from .builder import build_bundle
-from .integrity import BundleError, load_and_verify_bundle
+from .integrity import (
+    BundleError,
+    extract_verified_archive,
+    load_and_verify_bundle,
+)
 from .manager import main as manager_main
 
 
@@ -20,6 +24,13 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--tag", required=True)
     verify = subparsers.add_parser("verify", help="Verify an unpacked bundle")
     verify.add_argument("--bundle", required=True)
+    extract = subparsers.add_parser(
+        "extract",
+        help="Verify archive digest/members and extract atomically",
+    )
+    extract.add_argument("--archive", required=True)
+    extract.add_argument("--sha256", required=True)
+    extract.add_argument("--output-dir", required=True)
     install = subparsers.add_parser("install")
     install.add_argument("--bundle", required=True)
     install.add_argument("--root")
@@ -49,6 +60,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "verify":
             manifest = load_and_verify_bundle(Path(args.bundle))
             print(json.dumps(manifest, ensure_ascii=False, sort_keys=True))
+        elif args.command == "extract":
+            extracted = extract_verified_archive(
+                Path(args.archive),
+                Path(args.output_dir),
+                args.sha256,
+            )
+            print(f"EXTRACTED {extracted}")
         else:
             forwarded: list[str] = []
             if args.command == "install":
@@ -62,6 +80,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             return manager_main([args.command, *forwarded])
     except BundleError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, UnicodeError) as exc:
+        print(
+            f"ERROR: bundle I/O failure: {exc.__class__.__name__}",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

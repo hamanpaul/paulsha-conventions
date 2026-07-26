@@ -316,7 +316,7 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
     releases = runtime_root / "releases"
     destination = releases / version
     _ensure_skill_target(skill_target, runtime_root)
-    if destination.exists():
+    if destination.exists() or destination.is_symlink():
         raise RuntimeBundleError(f"release already installed: {version}")
     releases.mkdir(parents=True, exist_ok=True)
     staging = releases / f".staging-{version}-{uuid.uuid4().hex}"
@@ -389,7 +389,15 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
 def _verified_release(root: Path, version: str) -> Path:
     if VERSION_RE.fullmatch(version) is None:
         raise RuntimeBundleError("invalid release version")
-    release = root.resolve() / "releases" / version
+    releases = root.resolve() / "releases"
+    release_path = releases / version
+    if release_path.is_symlink():
+        raise RuntimeBundleError("installed release must not be a symlink")
+    release = release_path.resolve()
+    try:
+        release.relative_to(releases.resolve())
+    except ValueError as exc:
+        raise RuntimeBundleError("installed release escapes runtime root") from exc
     verified = release / "VERIFIED"
     if not release.is_dir() or not verified.is_file():
         raise RuntimeBundleError(f"verified release is not installed: {version}")
@@ -589,6 +597,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             os.execvpe(command[0], command, env)
     except RuntimeBundleError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, UnicodeError) as exc:
+        print(
+            f"ERROR: runtime I/O failure: {exc.__class__.__name__}",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -120,6 +122,52 @@ def test_verify_bundle_rejects_unlisted_file_and_symlink(tmp_path: Path) -> None
     (bundle / "escape").symlink_to("../outside")
     with pytest.raises(integrity.BundleError, match="symlink"):
         integrity.load_and_verify_bundle(bundle)
+
+
+def test_extract_archive_verifies_digest_members_and_payload(tmp_path: Path) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    archive = tmp_path / "bundle.tar.gz"
+    builder._deterministic_archive(bundle, archive, epoch=1_700_000_000)
+    digest = integrity.sha256_file(archive)
+    extracted = integrity.extract_verified_archive(
+        archive,
+        tmp_path / "output",
+        digest,
+    )
+    assert extracted.name == "paulsha-conventions-v1.0.13"
+    assert integrity.load_and_verify_bundle(extracted)["policy_version"] == "1.0.13"
+    with pytest.raises(integrity.BundleError, match="already exists"):
+        integrity.extract_verified_archive(archive, tmp_path / "output", digest)
+
+
+@pytest.mark.parametrize("kind", ["duplicate", "traversal", "symlink"])
+def test_extract_archive_rejects_unsafe_members(tmp_path: Path, kind: str) -> None:
+    archive = tmp_path / f"{kind}.tar.gz"
+    root = "paulsha-conventions-v1.0.13"
+    with tarfile.open(archive, mode="w:gz") as bundle_tar:
+        directory = tarfile.TarInfo(root)
+        directory.type = tarfile.DIRTYPE
+        bundle_tar.addfile(directory)
+        if kind == "duplicate":
+            for _ in range(2):
+                member = tarfile.TarInfo(f"{root}/manifest.json")
+                member.size = 2
+                bundle_tar.addfile(member, io.BytesIO(b"{}"))
+        elif kind == "traversal":
+            member = tarfile.TarInfo(f"{root}/../escape")
+            member.size = 1
+            bundle_tar.addfile(member, io.BytesIO(b"x"))
+        else:
+            member = tarfile.TarInfo(f"{root}/escape")
+            member.type = tarfile.SYMTYPE
+            member.linkname = "../../outside"
+            bundle_tar.addfile(member)
+    with pytest.raises(integrity.BundleError):
+        integrity.extract_verified_archive(
+            archive,
+            tmp_path / "output",
+            integrity.sha256_file(archive),
+        )
 
 
 def test_safe_relative_path_rejects_dot_segments() -> None:
