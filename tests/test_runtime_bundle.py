@@ -95,18 +95,43 @@ def _install_fake_release(root: Path, version: str) -> Path:
     import shutil
 
     shutil.copytree(bundle, artifact)
-    (release / "venv" / ("Scripts" if os.name == "nt" else "bin")).mkdir(parents=True)
+    python = release / "venv" / (
+        "Scripts/python.exe" if os.name == "nt" else "bin/python"
+    )
+    python.parent.mkdir(parents=True)
+    python.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    python.chmod(0o755)
+    pyvenv_cfg = release / "venv" / "pyvenv.cfg"
+    pyvenv_cfg.write_text(
+        "include-system-site-packages = false\n",
+        encoding="utf-8",
+    )
     (release / "VERIFIED").write_text(
         json.dumps(
             {
                 "schema_version": 1,
                 "policy_version": version,
                 "manifest_sha256": integrity.sha256_file(artifact / "manifest.json"),
+                "python_sha256": integrity.sha256_file(python),
+                "pyvenv_cfg_sha256": integrity.sha256_file(pyvenv_cfg),
             }
         ),
         encoding="utf-8",
     )
     return release
+
+
+def _write_fake_venv(path: Path) -> None:
+    python = path / (
+        "Scripts/python.exe" if os.name == "nt" else "bin/python"
+    )
+    python.parent.mkdir(parents=True)
+    python.write_text("# fake\n", encoding="utf-8")
+    python.chmod(0o755)
+    (path / "pyvenv.cfg").write_text(
+        "include-system-site-packages = false\n",
+        encoding="utf-8",
+    )
 
 
 def test_verify_bundle_accepts_closed_file_set(tmp_path: Path) -> None:
@@ -608,6 +633,25 @@ def test_selector_accepts_inline_policy_version_comment(
     assert selected == expected
 
 
+@pytest.mark.parametrize(
+    "relative",
+    [
+        Path("venv") / ("Scripts/python.exe" if os.name == "nt" else "bin/python"),
+        Path("venv") / "pyvenv.cfg",
+    ],
+)
+def test_verified_release_rejects_venv_runtime_identity_tamper(
+    tmp_path: Path,
+    relative: Path,
+) -> None:
+    release = _install_fake_release(tmp_path, "1.0.13")
+    with (release / relative).open("ab") as stream:
+        stream.write(b"tampered\n")
+
+    with pytest.raises(manager.RuntimeBundleError, match="marker does not match"):
+        manager._verified_release(tmp_path / "runtime", "1.0.13")
+
+
 def test_install_rejects_incompatible_runtime_before_staging(tmp_path: Path) -> None:
     bundle = _fake_bundle(tmp_path / "source")
     manifest_path = bundle / "manifest.json"
@@ -711,12 +755,7 @@ def test_install_upgrade_rollback_and_uninstall_are_scoped(
             pass
 
         def create(self, path):
-            _venv = Path(path) / ("Scripts" if os.name == "nt" else "bin")
-            _venv.mkdir(parents=True)
-            (_venv / ("python.exe" if os.name == "nt" else "python")).write_text(
-                "# fake\n",
-                encoding="utf-8",
-            )
+            _write_fake_venv(Path(path))
 
     monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
     monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
@@ -750,11 +789,7 @@ def test_force_reinstall_recovers_tampered_active_release(
             pass
 
         def create(self, path):
-            python = Path(path) / (
-                "Scripts/python.exe" if os.name == "nt" else "bin/python"
-            )
-            python.parent.mkdir(parents=True)
-            python.write_text("# fake\n", encoding="utf-8")
+            _write_fake_venv(Path(path))
 
     monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
     monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
@@ -799,11 +834,7 @@ def test_force_reinstall_cleanup_failure_is_warning_after_successful_switch(
             pass
 
         def create(self, path):
-            python = Path(path) / (
-                "Scripts/python.exe" if os.name == "nt" else "bin/python"
-            )
-            python.parent.mkdir(parents=True)
-            python.write_text("# fake\n", encoding="utf-8")
+            _write_fake_venv(Path(path))
 
     monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
     monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
@@ -907,11 +938,7 @@ def test_failed_activation_restores_state_links_launchers_and_release(
             pass
 
         def create(self, path):
-            python = Path(path) / (
-                "Scripts/python.exe" if os.name == "nt" else "bin/python"
-            )
-            python.parent.mkdir(parents=True)
-            python.write_text("# fake\n", encoding="utf-8")
+            _write_fake_venv(Path(path))
 
     monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
     monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
@@ -1015,9 +1042,7 @@ def test_install_records_state_before_switching_current(
             pass
 
         def create(self, path):
-            python = Path(path) / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-            python.parent.mkdir(parents=True)
-            python.write_text("# fake\n", encoding="utf-8")
+            _write_fake_venv(Path(path))
 
     real_write = manager._write_json_atomic
     real_link = manager._atomic_symlink

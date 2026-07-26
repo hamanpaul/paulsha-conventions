@@ -76,8 +76,8 @@ isolated import，不得採用 ambient `PYTHONPATH`/`PYTHONHOME`。MUST NOT 要�
 source checkout，亦 MUST NOT 讀/執行 GitHub Actions workflow或執行 network resolver。
 
 #### Scenario: installed dependency 或 startup path 被竄改
-- **WHEN** bundled dependency payload 被修改，或 site-packages 新增 `.pth`、
-  site/user customization、同名 module shadow
+- **WHEN** venv interpreter/`pyvenv.cfg` 或 bundled dependency payload 被修改，
+  或 site-packages 新增 `.pth`、site/user customization、同名 module shadow
 - **THEN** stdlib selector MUST 在啟動 selected venv/import 第三方 code 前 FAIL
 
 #### Scenario: active bootstrap manager 被竄改

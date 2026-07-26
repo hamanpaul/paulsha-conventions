@@ -662,6 +662,10 @@ def install(
                 "schema_version": 1,
                 "policy_version": version,
                 "manifest_sha256": _sha256(staging / "artifact" / "manifest.json"),
+                "python_sha256": _sha256(python.resolve()),
+                "pyvenv_cfg_sha256": _sha256(
+                    staging / "venv" / "pyvenv.cfg"
+                ),
             },
         )
         if force_reinstall:
@@ -746,11 +750,24 @@ def _verified_release(root: Path, version: str) -> Path:
         marker = json.loads(verified.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise RuntimeBundleError("VERIFIED marker is invalid") from exc
+    venv_python = _venv_python(release / "venv")
+    pyvenv_cfg = release / "venv" / "pyvenv.cfg"
+    if (
+        not venv_python.is_file()
+        or not os.access(venv_python, os.X_OK)
+        or not pyvenv_cfg.is_file()
+        or pyvenv_cfg.is_symlink()
+    ):
+        raise RuntimeBundleError("verified venv runtime identity is missing")
     if (
         not isinstance(marker, dict)
         or marker.get("policy_version") != version
         or manifest.get("policy_version") != version
         or marker.get("manifest_sha256") != _sha256(release / "artifact" / "manifest.json")
+        or marker.get("python_sha256")
+        != _sha256(venv_python.resolve())
+        or marker.get("pyvenv_cfg_sha256")
+        != _sha256(pyvenv_cfg)
     ):
         raise RuntimeBundleError("release verification marker does not match artifact")
     return release

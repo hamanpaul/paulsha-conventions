@@ -49,7 +49,7 @@ Bundle 內 checksum 只證明取得後的完整性。能替換 bundle 與 checks
 │   │   ├── manifest.json
 │   │   └── SHA256SUMS
 │   ├── venv/
-│   └── VERIFIED
+│   └── VERIFIED  # manifest + venv interpreter + pyvenv.cfg hashes
 ├── current -> releases/<version>
 ├── bin/policy-preflight
 ├── bin/policy-runtime-bundle
@@ -83,7 +83,8 @@ manager，防止 bootstrap manager 先執行後自驗。
    `--no-index --find-links` 安裝 wheel closure。
 4. 移除只供 bootstrap 的 pip/setuptools；由 host/current manager 內的 stdlib
    verifier 直接驗 site-packages 的每個 wheel RECORD，並拒絕 `.pth`、
-   site/user customization 與同名 module shadow，因此不先執行 selected venv code。
+   site/user customization 與同名 module shadow；`VERIFIED` 另錨定 venv
+   interpreter 與 `pyvenv.cfg`，因此不先執行未驗 selected venv code。
 5. 在暫存 HOME 與 fixture repo 執行 policy/preflight artifact smoke。
 6. 把完整 staging rename 到新的 immutable `releases/<version>`。
 7. 以 snapshot + temp file/symlink + `os.replace` transaction 更新
