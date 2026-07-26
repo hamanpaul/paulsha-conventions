@@ -153,6 +153,9 @@ def verify_bundle(root: Path) -> dict[str, Any]:
 
 
 def _default_root() -> Path:
+    configured = os.environ.get("PSC_CONVENTIONS_ROOT")
+    if configured:
+        return Path(configured).expanduser()
     data_home = os.environ.get("XDG_DATA_HOME")
     if data_home:
         return Path(data_home).expanduser() / "paulsha-conventions"

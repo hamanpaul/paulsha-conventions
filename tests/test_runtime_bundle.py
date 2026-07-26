@@ -239,6 +239,16 @@ def test_runtime_command_failure_includes_bounded_diagnostic(tmp_path: Path) -> 
         )
 
 
+def test_default_root_prefers_explicit_runtime_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configured = tmp_path / "configured"
+    monkeypatch.setenv("PSC_CONVENTIONS_ROOT", str(configured))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
+    assert manager._default_root() == configured
+
+
 def test_attest_clean_annotated_tag_and_rejects_dirty(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
