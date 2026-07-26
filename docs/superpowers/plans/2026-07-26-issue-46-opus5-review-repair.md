@@ -2,7 +2,7 @@
 
 ## 目標
 
-目前狀態：Opus 5 第二輪發現 2 項 MAJOR，窄幅修復中
+目前狀態：第三輪 Opus 5 覆審 `PASS / NONE`，主整合驗收通過
 
 修正 PR #47（`feature/42-46-open-issues-batch`）在 exact head `b13da64`
 接受 Claude Opus 5 對抗審查時發現的 authority 完整性缺陷與驗收缺口。
@@ -138,3 +138,21 @@ target regular package（含 `__init__.py`）重現。第二輪 reviewer 必須�
 
 這些不影響 wrapper 的實際 `-P` authority 修補或本輪兩個 verdict escape，
 後續由 #48 的 installed-bundle／selector contract 一併重裁決。
+
+## 第三輪覆審與最終驗收
+
+- Cortex job：`issue-46-opus5-adversarial-review-v3-10`
+- model：`claude-opus-5`
+- exact reviewed code head：`4bb4f7920b12015fefb3bdd737730d5b0ca75da1`
+- verdict：`PASS / NONE`
+- targeted `tests/test_preflight.py`：41 passed
+- full suite：477 passed、1 skipped
+- policy：26 pass、0 fail、0 warn
+- OpenSpec strict：18 passed、0 failed
+- canonical `preflight-ci --pr 47`：`PREFLIGHT PASS`
+- GitHub PR #47：5 checks PASS、CLEAN、唯一 review thread 已 resolved
+
+reviewer persona 無 pytest 執行權限，因此覆審報告的判定是靜態 call-chain
+複驗；上述動態 gate 均由主整合者於同一 code head 獨立重跑。reviewer 列出的
+config／selector／diagnostic LOW observations 轉入 #48 的 installed-bundle
+contract 重裁決，不構成本輪未處置 merge blocker。
