@@ -781,6 +781,25 @@ def test_run_steps_requires_policy_only_when_no_steps_are_declared(
     )
 
 
+def test_run_steps_allows_explicit_skip_tests_for_tests_only_config(
+    tmp_path,
+) -> None:
+    step = preflight.PreflightStep(
+        "tests",
+        "tests",
+        ("pytest",),
+        ".",
+        None,
+        10,
+    )
+    assert preflight._run_steps(
+        tmp_path,
+        [step],
+        skip_tests=True,
+        policy_only=False,
+    )
+
+
 def test_run_steps_timeout_is_failure(monkeypatch, tmp_path) -> None:
     def timeout(*_args, **_kwargs):
         raise subprocess.TimeoutExpired(["pytest"], 1)

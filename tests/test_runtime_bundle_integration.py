@@ -43,7 +43,7 @@ def _commit_release(repo: Path, previous: str, version: str) -> str:
     return _run(["git", "rev-parse", "HEAD"], cwd=repo)
 
 
-def _build_and_extract(repo: Path, root: Path, version: str) -> Path:
+def _build_and_extract(repo: Path, root: Path, version: str) -> tuple[Path, str]:
     output = root / f"output-{version}"
     archive, digest = builder.build_bundle(repo, output, f"v{version}")
     extracted = integrity.extract_verified_archive(
@@ -54,7 +54,7 @@ def _build_and_extract(repo: Path, root: Path, version: str) -> Path:
     manifest = integrity.load_and_verify_bundle(extracted)
     assert manifest["policy_version"] == version
     assert manifest["release_commit"] == _run(["git", "rev-parse", "HEAD"], cwd=repo)
-    return extracted
+    return extracted, digest
 
 
 def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
@@ -77,7 +77,13 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
 
     first = "9.8.0"
     _commit_release(source, "1.0.13", first)
-    first_bundle = _build_and_extract(source, tmp_path, first)
+    first_bundle, first_digest = _build_and_extract(source, tmp_path, first)
+    _repeat_archive, repeat_digest = builder.build_bundle(
+        source,
+        tmp_path / f"repeat-{first}",
+        f"v{first}",
+    )
+    assert repeat_digest == first_digest
 
     runtime_root = tmp_path / "runtime"
     skill_target = tmp_path / "home" / ".agents" / "skills" / "preflight-ci"
@@ -85,7 +91,7 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
 
     second = "9.8.1"
     _commit_release(source, first, second)
-    second_bundle = _build_and_extract(source, tmp_path, second)
+    second_bundle, _second_digest = _build_and_extract(source, tmp_path, second)
     assert manager.install(second_bundle, runtime_root, skill_target) == second
     assert (runtime_root / "current").resolve().name == second
 

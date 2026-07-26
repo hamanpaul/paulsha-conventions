@@ -97,10 +97,12 @@ def resolve(repo_root: Path) -> ConfigResolution:
     data.setdefault("doc_paths", list(DEFAULT_DOC_PATHS))
     data.setdefault("cli", [])
     agent_files = data.get("agent_files")
-    if not isinstance(agent_files, dict):
+    if agent_files is None:
         agent_files = {}
-    agent_files.setdefault("mode", "copy")
-    data["agent_files"] = agent_files
+        agent_files["mode"] = "copy"
+        data["agent_files"] = agent_files
+    elif isinstance(agent_files, dict):
+        agent_files.setdefault("mode", "copy")
     return ConfigResolution(
         path=path,
         data=data,

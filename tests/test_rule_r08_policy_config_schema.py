@@ -86,6 +86,16 @@ def test_r08_warns_on_legacy_only_manifest(tmp_path):
     assert "deprecated legacy alias" in result.message
 
 
+def test_r08_rejects_non_mapping_agent_files(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.4\nagent_files: symlink\n",
+    )
+    result = get_rule("R-08").check(make_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "agent_files must be a mapping" in result.message
+
+
 def test_r08_accepts_secret_scan_marker_lists(tmp_path):
     cfg = ("policy_profile: flat\npolicy_version: \"1.0.4\"\ntier: shareable\n"
            "secret_scan:\n  markers: [\"FOO123\"]\n  public_names: [\"broadcom\"]\n")

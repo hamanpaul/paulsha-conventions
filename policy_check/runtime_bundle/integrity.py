@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import tarfile
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -265,7 +266,12 @@ def extract_verified_archive(
                 dir=destination,
             ) as temporary:
                 stage = Path(temporary)
-                bundle_tar.extractall(stage, filter="data")
+                if sys.version_info >= (3, 11, 4):
+                    bundle_tar.extractall(stage, filter="data")
+                else:
+                    # Members were already restricted to safe relative
+                    # regular-file or directory entries.
+                    bundle_tar.extractall(stage)
                 extracted = stage / root_name
                 load_and_verify_bundle(extracted)
                 os.replace(extracted, target)

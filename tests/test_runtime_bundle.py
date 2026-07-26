@@ -454,6 +454,46 @@ def test_install_upgrade_rollback_and_uninstall_are_scoped(
     assert not (runtime_root / "releases" / "1.0.14").exists()
 
 
+def test_install_records_state_before_switching_current(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+    events: list[str] = []
+
+    class FakeEnvBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, path):
+            python = Path(path) / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+            python.parent.mkdir(parents=True)
+            python.write_text("# fake\n", encoding="utf-8")
+
+    real_write = manager._write_json_atomic
+    real_link = manager._atomic_symlink
+
+    def record_write(path, value):
+        if Path(path).name == "state.json":
+            events.append("state")
+        return real_write(path, value)
+
+    def record_link(target, link):
+        if Path(link).name == "current":
+            events.append("current")
+        return real_link(target, link)
+
+    monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
+    monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(manager, "_write_json_atomic", record_write)
+    monkeypatch.setattr(manager, "_atomic_symlink", record_link)
+    manager.install(bundle, runtime_root, skill_target)
+    assert events.index("state") < events.index("current")
+
+
 def test_install_preserves_unmanaged_skill_target(tmp_path: Path) -> None:
     bundle = _fake_bundle(tmp_path / "source")
     runtime_root = tmp_path / "runtime"
@@ -514,3 +554,73 @@ def test_launcher_derives_root_and_rejects_forwarded_repo(
         ]
     ) == 1
     assert "conflicts" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "option",
+    ["--repo", "--installed-manifest", "--engine-source"],
+)
+def test_exec_rejects_forwarded_engine_authority_options(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    option: str,
+) -> None:
+    assert manager.main(
+        [
+            "exec",
+            "--root",
+            str(tmp_path / "runtime"),
+            "--repo",
+            str(tmp_path),
+            "--",
+            option,
+            str(tmp_path / "override"),
+        ]
+    ) == 1
+    assert "authority option" in capsys.readouterr().err
+
+
+def test_smoke_repo_ignores_ambient_git_signing_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    global_config = tmp_path / "gitconfig"
+    global_config.write_text(
+        "[commit]\n\tgpgsign = true\n"
+        "[gpg]\n\tprogram = /nonexistent/gpg-binary\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    fixture_root = tmp_path / "fixture-root"
+    fixture_root.mkdir()
+    repo, _body = manager._make_smoke_repo(fixture_root, "1.0.13")
+    assert (
+        subprocess.check_output(
+            ["git", "log", "-1", "--format=%s"],
+            cwd=repo,
+            text=True,
+        ).strip()
+        == "chore: runtime smoke baseline"
+    )
+
+
+def test_uninstall_removes_tampered_but_state_owned_inactive_release(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "runtime"
+    release = runtime_root / "releases" / "1.0.13"
+    release.mkdir(parents=True)
+    (release / "tampered").write_text("broken\n", encoding="utf-8")
+    (runtime_root / "state.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "current": "1.0.14",
+                "previous": "1.0.13",
+                "installed": ["1.0.13", "1.0.14"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    manager.uninstall(runtime_root, "1.0.13")
+    assert not release.exists()

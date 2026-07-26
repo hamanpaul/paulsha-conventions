@@ -280,14 +280,39 @@ def _make_smoke_repo(root: Path, version: str) -> tuple[Path, Path]:
     copilot.write_text(canonical.read_text(encoding="utf-8"), encoding="utf-8")
     body = repo / "pr-body.md"
     body.write_text("Runtime bundle artifact smoke.\n", encoding="utf-8")
-    _run(["git", "init", "-q", "-b", "main"], cwd=repo)
-    _run(["git", "config", "user.email", "runtime@example.invalid"], cwd=repo)
-    _run(["git", "config", "user.name", "Runtime Bundle"], cwd=repo)
-    _run(["git", "add", "."], cwd=repo)
-    _run(["git", "commit", "-qm", "chore: runtime smoke baseline"], cwd=repo)
-    _run(["git", "tag", "-a", f"v{version}", "-m", f"v{version}"], cwd=repo)
-    _run(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], cwd=repo)
-    _run(["git", "switch", "-qc", "feature/runtime-smoke"], cwd=repo)
+    git_env = dict(os.environ)
+    git_env["GIT_CONFIG_GLOBAL"] = os.devnull
+    git_env["GIT_CONFIG_SYSTEM"] = os.devnull
+    git_env["GIT_CONFIG_NOSYSTEM"] = "1"
+    git_env["HOME"] = str(root)
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo, env=git_env)
+    _run(
+        ["git", "config", "user.email", "runtime@example.invalid"],
+        cwd=repo,
+        env=git_env,
+    )
+    _run(["git", "config", "user.name", "Runtime Bundle"], cwd=repo, env=git_env)
+    _run(["git", "add", "."], cwd=repo, env=git_env)
+    _run(
+        ["git", "commit", "-qm", "chore: runtime smoke baseline"],
+        cwd=repo,
+        env=git_env,
+    )
+    _run(
+        ["git", "tag", "-a", f"v{version}", "-m", f"v{version}"],
+        cwd=repo,
+        env=git_env,
+    )
+    _run(
+        ["git", "update-ref", "refs/remotes/origin/main", "HEAD"],
+        cwd=repo,
+        env=git_env,
+    )
+    _run(
+        ["git", "switch", "-qc", "feature/runtime-smoke"],
+        cwd=repo,
+        env=git_env,
+    )
     return repo, body
 
 
@@ -421,7 +446,6 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
             shutil.rmtree(staging)
         raise
 
-    _atomic_symlink(destination, runtime_root / "current")
     _write_json_atomic(
         state_path,
         {
@@ -435,6 +459,7 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
             ),
         },
     )
+    _atomic_symlink(destination, runtime_root / "current")
     _install_launcher(runtime_root)
     _atomic_symlink(
         runtime_root / "current" / "artifact" / "skills" / "preflight-ci",
@@ -513,10 +538,16 @@ def select_release(root: Path, repo: Path) -> tuple[Path, dict[str, Any]]:
         [
             str(python),
             "-P",
+            "-I",
             "-c",
             "import importlib.metadata; print(importlib.metadata.version('policy-check'))",
         ],
         cwd=repo,
+        env={
+            key: value
+            for key, value in os.environ.items()
+            if key not in {"PYTHONPATH", "PYTHONHOME"}
+        },
     )
     if _normalized_package_version(installed) != _normalized_package_version(version):
         raise RuntimeBundleError("installed distribution does not match selected release")
@@ -531,9 +562,9 @@ def activate(root: Path, skill_target: Path, version: str) -> None:
     state_path = runtime_root / "state.json"
     state = _load_state(state_path)
     previous = state.get("current") if isinstance(state.get("current"), str) else None
-    _atomic_symlink(release, runtime_root / "current")
     state.update({"schema_version": 1, "current": version, "previous": previous})
     _write_json_atomic(state_path, state)
+    _atomic_symlink(release, runtime_root / "current")
     _install_launcher(runtime_root)
     _atomic_symlink(
         runtime_root / "current" / "artifact" / "skills" / "preflight-ci",
@@ -557,18 +588,33 @@ def uninstall(root: Path, version: str) -> None:
     state = _load_state(state_path, required=True)
     if state.get("current") == version:
         raise RuntimeBundleError("refusing to uninstall the active release")
-    release = _verified_release(runtime_root, version)
+    installed = state.get("installed")
+    if (
+        not isinstance(installed, list)
+        or version not in installed
+        or not all(isinstance(item, str) for item in installed)
+    ):
+        raise RuntimeBundleError("release is not owned by install state")
+    if VERSION_RE.fullmatch(version) is None:
+        raise RuntimeBundleError("invalid release version")
+    releases = runtime_root / "releases"
+    release_path = releases / version
+    if release_path.is_symlink():
+        raise RuntimeBundleError("installed release must not be a symlink")
+    release = release_path.resolve()
     try:
-        release.relative_to(runtime_root / "releases")
+        release.relative_to(releases.resolve())
     except ValueError as exc:
         raise RuntimeBundleError("release path escapes runtime root") from exc
+    if not release.is_dir():
+        raise RuntimeBundleError("state-owned release directory is missing")
     shutil.rmtree(release)
-    installed = [
+    remaining = [
         item
-        for item in state.get("installed", [])
+        for item in installed
         if isinstance(item, str) and item != version
     ]
-    state["installed"] = installed
+    state["installed"] = remaining
     if state.get("previous") == version:
         state["previous"] = None
     _write_json_atomic(state_path, state)
@@ -624,11 +670,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             if forwarded and forwarded[0] == "--":
                 forwarded = forwarded[1:]
             if any(
-                value == "--repo" or value.startswith("--repo=")
+                value in {"--repo", "--installed-manifest", "--engine-source"}
+                or value.startswith(
+                    ("--repo=", "--installed-manifest=", "--engine-source=")
+                )
                 for value in forwarded
             ):
                 raise RuntimeBundleError(
-                    "forwarded --repo conflicts with exact-version selection"
+                    "forwarded engine authority option conflicts with exact-version selection"
                 )
             release, _manifest = select_release(root, repo)
             python = _venv_python(release / "venv")

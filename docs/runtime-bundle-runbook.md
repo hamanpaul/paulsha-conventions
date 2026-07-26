@@ -112,9 +112,9 @@ policy-runtime-bundle rollback --version X.Y.Z
 policy-runtime-bundle uninstall --version X.Y.Z
 ```
 
-任何 staging/smoke 失敗都不得改變 `current`。若驗證回報 tamper，隔離該精確
-release 或 bundle，從已核對外部 SHA-256 的 artifact 重裝；不要刪除整個
-runtime root。
+任何 staging/smoke 失敗都不得改變 `current`。若驗證回報 tamper，可 uninstall
+由 `state.json` 明確列管且非 active 的精確 release，<!-- doc-drift-ignore --> 再從已核對外部 SHA-256
+的 artifact 重裝；不要刪除整個 runtime root。
 
 ## Publication boundary
 
