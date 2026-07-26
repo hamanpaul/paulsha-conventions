@@ -29,6 +29,10 @@ traversal、symlink 或任何 payload hash 不一致都 fail-closed。`manifest.
 發行來源真實性由外部 archive digest 與 #39 未來選定的 artifact authority
 承擔；checksum 不等於 registry authentication。
 
+上述 legacy alias 與 bundle root 的 `install.sh`、`manifest.json`、`state.json`
+是相容／artifact contract 名稱，不是 source repo root 檔案，因此在本 repo 的
+`doc_reference.allow` 明文列管；allowlist 不涵蓋其他任意懸空路徑。
+
 ## Build and verify
 
 輸出目錄應位於 source repo 外，且不得預先存在同名 archive：

@@ -49,7 +49,11 @@ def _run(argv: Sequence[str], *, cwd: Path, env: dict[str, str] | None = None) -
     except (OSError, UnicodeError) as exc:
         raise BundleError(f"command unavailable: {argv[0]}") from exc
     if result.returncode != 0:
-        raise BundleError(f"command failed ({result.returncode}): {' '.join(argv)}")
+        detail = (result.stderr or result.stdout).strip().splitlines()
+        suffix = f": {detail[-1]}" if detail else ""
+        raise BundleError(
+            f"command failed ({result.returncode}): {' '.join(argv)}{suffix}"
+        )
     return result.stdout.strip()
 
 

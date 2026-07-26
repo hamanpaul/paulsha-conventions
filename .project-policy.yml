@@ -42,7 +42,13 @@ secret_scan:
     - "openspec/**"
     - "docs/**"
 doc_reference:
-  allow: []
+  # #48 compatibility/artifact contract names are documented but intentionally
+  # are not tracked files at the source repo root.
+  allow:
+    - ".paul-project.yml"
+    - "install.sh"
+    - "manifest.json"
+    - "state.json"
 agent_files:
   mode: symlink
 conventions_engine:
