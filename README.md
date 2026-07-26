@@ -239,7 +239,7 @@ steps declared in `.project-policy.yml`. Manual mode requires an explicit PR tit
 and body file so PR-only rules are evaluated with complete context:
 
 `.project-policy.yml` is the public canonical name. The engine continues to
-accept legacy-only `.paul-project.yml` with a deprecation warning. If both files
+accept legacy-only `.paul-project.yml` with a deprecation warning. If both files <!-- doc-drift-ignore -->
 exist, identical parsed YAML is allowed with a warning; any semantic difference
 fails before policy execution.
 
@@ -712,7 +712,7 @@ python3 -m policy_check --repo . --only R-01,R-02,R-03
 body file，確保 PR-only 規則拿到完整脈絡：
 
 `.project-policy.yml` 是公開 canonical 名稱；相容期仍接受 legacy-only
-`.paul-project.yml`，但會發出 deprecation warning。兩檔同時存在時，解析後
+`.paul-project.yml`，但會發出 deprecation warning。兩檔同時存在時，解析後 <!-- doc-drift-ignore -->
 語意相同可帶 warning 繼續，任何語意差異一律先 FAIL。
 
 Agent-facing canonical 入口是由本 repo 擁有的 `preflight-ci` skill。從

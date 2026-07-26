@@ -24,14 +24,14 @@ paulsha-conventions-vX.Y.Z/
 ```
 
 `SHA256SUMS` 是封閉檔案集合：缺檔、多檔、duplicate name、dot segment、
-traversal、symlink 或任何 payload hash 不一致都 fail-closed。`manifest.json`
+traversal、symlink 或任何 payload hash 不一致都 fail-closed。`manifest.json` <!-- doc-drift-ignore -->
 再交叉驗證 policy/package/skill/tag/commit/wheel/skill/runtime identity。
 發行來源真實性由外部 archive digest 與 #39 未來選定的 artifact authority
 承擔；checksum 不等於 registry authentication。
 
-上述 legacy alias 與 bundle root 的 `install.sh`、`manifest.json`、`state.json`
-是相容／artifact contract 名稱，不是 source repo root 檔案，因此在本 repo 的
-`doc_reference.allow` 明文列管；allowlist 不涵蓋其他任意懸空路徑。
+上述 legacy alias 與 bundle root 的 `install.sh`、`manifest.json`、`state.json` <!-- doc-drift-ignore -->
+是相容／artifact contract 名稱，不是 source repo root 檔案；同一行使用既有
+`doc-drift-ignore` marker 做局部列管，不涵蓋其他任意懸空路徑。
 
 ## Build and verify
 
@@ -53,11 +53,11 @@ policy-runtime-bundle verify \
 
 ## Install and state
 
-`install.sh` 先以 `sha256sum --check --strict` 驗證所有 payload，之後才執行
+`install.sh` 先以 `sha256sum --check --strict` 驗證所有 payload，之後才執行 <!-- doc-drift-ignore -->
 bundle 內 stdlib manager。manager 在同一 runtime root 建 staging venv，
 使用 `pip --no-index --find-links` 離線安裝，於暫存 HOME 與獨立 git fixture
 執行完整 `PREFLIGHT PASS`，成功後才 rename 成 immutable release 並原子切換
-`current` 與 `state.json`。
+`current` 與 `state.json`。 <!-- doc-drift-ignore -->
 
 預設版型：
 
@@ -91,7 +91,7 @@ rollback 不下載、不重建，只 activation 已驗證 release：
 policy-runtime-bundle rollback --version X.Y.Z
 ```
 
-省略 `--version` 時使用 `state.json.previous`。uninstall 必須指定版本，且拒絕
+省略 `--version` 時使用 `state.json.previous`。uninstall 必須指定版本，且拒絕 <!-- doc-drift-ignore -->
 移除 active release：
 
 ```bash
