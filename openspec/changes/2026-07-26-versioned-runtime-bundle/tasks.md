@@ -20,8 +20,8 @@
    clean-tag integration、offline install/upgrade/rollback/uninstall smoke。
 10. [x] 主整合者執行 full pytest、policy、OpenSpec、PR-aware canonical preflight
     與 artifact-level evidence review。
-11. [ ] Claude Opus 5 對 exact candidate head 對抗審查；未處置缺陷/驗收缺口 FAIL，
-    有界且明文列管 residual 不單獨 FAIL。
+11. [x] 依使用者最終指示改由主整合者對 exact candidate head 對抗審查；
+    兩項 MAJOR 已以 RED→GREEN 修正，斷電級 availability residual 明文列管 #52。
 12. [ ] merge 後發布 patch/tag，從正式 clean tag 建 bundle並在全新暫存 HOME
     完成 offline lifecycle smoke。
 13. [ ] 對 10 個下游 legacy repo 分別開遷移 PR，驗證後 merge。

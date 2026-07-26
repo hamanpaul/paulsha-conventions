@@ -652,6 +652,30 @@ def test_verified_release_rejects_venv_runtime_identity_tamper(
         manager._verified_release(tmp_path / "runtime", "1.0.13")
 
 
+def test_activate_rejects_release_that_fails_installed_attestation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_release(tmp_path, "1.0.13")
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+
+    def reject_tampered_release(_release: Path) -> None:
+        raise manager.RuntimeBundleError("installed wheel was modified")
+
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        reject_tampered_release,
+    )
+    with pytest.raises(manager.RuntimeBundleError, match="installed wheel"):
+        manager.activate(runtime_root, skill_target, "1.0.13")
+
+    assert not (runtime_root / "current").exists()
+    assert not skill_target.exists()
+    assert not (runtime_root / "state.json").exists()
+
+
 def test_install_rejects_incompatible_runtime_before_staging(tmp_path: Path) -> None:
     bundle = _fake_bundle(tmp_path / "source")
     manifest_path = bundle / "manifest.json"
@@ -885,6 +909,11 @@ def test_rollback_repairs_already_active_target_without_corrupting_previous(
         encoding="utf-8",
     )
     monkeypatch.setattr(manager, "_install_launcher", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
 
     assert manager.rollback(runtime_root, skill_target, "1.0.14") == "1.0.14"
     state = json.loads((runtime_root / "state.json").read_text(encoding="utf-8"))
@@ -896,6 +925,7 @@ def test_rollback_repairs_already_active_target_without_corrupting_previous(
 
 def test_activate_repairs_managed_links_without_rewriting_history(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     first = _install_fake_release(tmp_path, "1.0.13")
     second = _install_fake_release(tmp_path, "1.0.14")
@@ -912,6 +942,11 @@ def test_activate_repairs_managed_links_without_rewriting_history(
         "installed": ["1.0.13", "1.0.14"],
     }
     state_path.write_text(json.dumps(original_state), encoding="utf-8")
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
 
     manager.activate(runtime_root, skill_target, "1.0.14")
 

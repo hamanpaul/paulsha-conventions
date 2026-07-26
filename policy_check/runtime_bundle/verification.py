@@ -394,13 +394,12 @@ def verify_installed_wheel_payload(
 
     if not saw_policy_check:
         raise BundleError("installed wheels do not contain policy-check")
-    forbidden_startup = [
-        *installed_root.glob("*.pth"),
-        installed_root / "sitecustomize.py",
-        installed_root / "sitecustomize.pyc",
-        installed_root / "usercustomize.py",
-        installed_root / "usercustomize.pyc",
-    ]
+    forbidden_startup = list(installed_root.glob("*.pth"))
+    for startup_module in ("sitecustomize", "usercustomize"):
+        forbidden_startup.append(installed_root / startup_module)
+        forbidden_startup.extend(
+            installed_root.glob(f"{startup_module}.*")
+        )
     if any(path.exists() or path.is_symlink() for path in forbidden_startup):
         raise BundleError(
             "installed environment contains unverified startup customization"

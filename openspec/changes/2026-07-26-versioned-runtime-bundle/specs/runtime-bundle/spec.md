@@ -37,6 +37,10 @@ Installer SHALL 在 staging 前消費 manifest prerequisites，驗證 `git`、
 `sha256sum`、JSON-capable `universal-ctags` 與 `venv/ensurepip` 可用，失敗訊息
 MUST 指出缺少的能力。Policy smoke 失敗 MUST 保留 bounded gate diagnostic。
 
+本 change 的 mechanized guarantee 涵蓋 manager 可捕捉的 step failure；程序
+遭 `SIGKILL`／主機斷電時，identity/digest 仍 MUST fail-closed，但跨多個
+filesystem replace 的自動收斂列為 #52 的 bounded availability residual。
+
 #### Scenario: install smoke 失敗
 - **WHEN** venv install、policy smoke 或 preflight smoke 任一步失敗
 - **THEN** installer FAIL，原 current/state 不變，staging 不可被標為 VERIFIED

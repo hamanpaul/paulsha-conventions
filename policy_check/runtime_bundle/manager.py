@@ -770,6 +770,7 @@ def _verified_release(root: Path, version: str) -> Path:
         != _sha256(pyvenv_cfg)
     ):
         raise RuntimeBundleError("release verification marker does not match artifact")
+    _attest_installed_release(release)
     return release
 
 
@@ -808,7 +809,6 @@ def select_release(root: Path, repo: Path) -> tuple[Path, dict[str, Any]]:
     else:
         raise RuntimeBundleError("target repository has no project policy manifest")
     release = _verified_release(root, version)
-    _attest_installed_release(release)
     python = _venv_python(release / "venv")
     installed = _run(
         [

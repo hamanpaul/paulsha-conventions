@@ -88,7 +88,10 @@ manager，防止 bootstrap manager 先執行後自驗。
 5. 在暫存 HOME 與 fixture repo 執行 policy/preflight artifact smoke。
 6. 把完整 staging rename 到新的 immutable `releases/<version>`。
 7. 以 snapshot + temp file/symlink + `os.replace` transaction 更新
-   state/current/stable launchers/managed skill link；任一步失敗即回復全組。
+   state/current/stable launchers/managed skill link；任一可捕捉的 step failure
+   即回復全組。`SIGKILL`／power-loss 跨多個 replace 的自動 crash recovery
+   是明文列管的 availability residual（#52）；immutable releases 保留且
+   digest anchor fail-closed。
 
 失敗不得改變 active state。Rollback 只可切到已安裝且重新驗證通過的 release，
 不下載、不 rebuild。Uninstall 不可移除 active release；移除全部時只處理由

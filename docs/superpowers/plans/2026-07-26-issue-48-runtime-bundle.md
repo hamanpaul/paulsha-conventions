@@ -94,6 +94,8 @@ PACKAGING=1 python3 -m pytest -q tests/test_wheel_offline.py \
 
 - builder executor/model：`codex` / `gpt-5.3-codex-spark`。
 - reviewer executor/model：`claude` / `claude-opus-5`。
+- 2026-07-26 最終執行 override：使用者指示取消 Claude gate，改由主整合者
+  對 exact head 執行相同判定契約的對抗審查與驗收。
 - 主整合者逐項 trace builder diff與測試證據，不因模型回報成功直接接受。
 - 首輪 reviewer 契約：未處置缺陷或驗收缺口為 FAIL；已明文承認、影響分析
   有界且列管的 residual 不單獨構成 FAIL，reviewer 若反對必須具體反駁影響分析。

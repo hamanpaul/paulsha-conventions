@@ -455,6 +455,18 @@ def test_installed_wheel_payload_attests_imported_files(
         match="startup customization",
     ):
         preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
+    (installed_root / "execute-before-attestation.pth").unlink()
+    startup_package = installed_root / "sitecustomize"
+    startup_package.mkdir()
+    (startup_package / "__init__.py").write_text(
+        "raise RuntimeError('executed before attestation')\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        preflight.PreflightGateError,
+        match="startup customization",
+    ):
+        preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
 
 
 def test_resolve_engine_offline_missing_artifact_fails_without_network(

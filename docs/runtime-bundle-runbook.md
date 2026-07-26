@@ -83,7 +83,14 @@ pip/setuptools。接著由尚未執行 selected venv site-packages 的 stdlib ma
 module shadow；通過後才於暫存 HOME 與獨立 git fixture 執行完整
 `PREFLIGHT PASS`。成功後才 rename 成 immutable release。activation
 會把 `state.json`、`current`、兩個 stable launcher 與 managed skill link 視為
-單一 transaction；任一步失敗都回復先前 snapshot。 <!-- doc-drift-ignore -->
+單一 in-process transaction；任一可捕捉的 step failure 都回復先前 snapshot。
+<!-- doc-drift-ignore -->
+
+此保證不宣稱涵蓋 `SIGKILL`、主機斷電或 filesystem/kernel 在多個
+`os.replace` 之間終止。這類中斷仍保留新舊 immutable release，digest anchor
+會 fail-closed，但可能需要用已核對 bundle 的 manager 人工修復混合世代；
+斷電後自動收斂與 fault-injection 由
+[#52](https://github.com/hamanpaul/paulsha-conventions/issues/52) 列管。
 若 host 的 Python major/minor、implementation、ABI 或 platform 不等於 manifest 的
 `runtime_compatibility`，會在建立 staging 前 fail-closed；這避免把建置主機的
 ABI/platform-specific wheel closure 誤當成任意 Python 3.11+ 通用 bundle。
