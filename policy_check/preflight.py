@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import csv
 import hashlib
+import io
 import importlib.metadata
 import json
 import os
@@ -10,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
@@ -722,6 +726,7 @@ def _installed_manifest_engine(
     }
     if not wheel_hashes or any(len(digest) != 64 for digest in wheel_hashes):
         raise PreflightGateError("installed manifest wheel identity is incomplete")
+    _verify_installed_wheel_payload(path.parent, manifest)
     return EngineIdentity(
         "installed-bundle",
         (
@@ -730,6 +735,85 @@ def _installed_manifest_engine(
         ),
         None,
     )
+
+
+def _verify_installed_wheel_payload(
+    bundle_root: Path,
+    manifest: Mapping[str, Any],
+) -> None:
+    candidates: list[Path] = []
+    for entry in manifest.get("wheels", []):
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            continue
+        wheel = bundle_root / entry["path"]
+        if wheel.name.startswith("policy_check-") and wheel.suffix == ".whl":
+            candidates.append(wheel)
+    if len(candidates) != 1:
+        raise PreflightGateError("installed manifest must identify one policy-check wheel")
+    wheel = candidates[0]
+    try:
+        with zipfile.ZipFile(wheel) as archive:
+            record_names = [
+                name for name in archive.namelist() if name.endswith(".dist-info/RECORD")
+            ]
+            if len(record_names) != 1:
+                raise PreflightGateError("policy-check wheel has ambiguous RECORD")
+            rows = list(
+                csv.reader(
+                    io.StringIO(
+                        archive.read(record_names[0]).decode("utf-8")
+                    )
+                )
+            )
+    except (OSError, UnicodeError, zipfile.BadZipFile) as exc:
+        raise PreflightGateError("cannot inspect verified policy-check wheel") from exc
+
+    try:
+        distribution = importlib.metadata.distribution("policy-check")
+    except importlib.metadata.PackageNotFoundError as exc:
+        raise PreflightGateError("installed policy-check distribution is missing") from exc
+    prefix = Path(sys.prefix).resolve()
+    expected_preflight = Path(
+        distribution.locate_file("policy_check/preflight.py")
+    ).resolve()
+    if Path(__file__).resolve() != expected_preflight:
+        raise PreflightGateError(
+            "imported preflight module does not belong to the installed distribution"
+        )
+
+    checked = 0
+    for row in rows:
+        if len(row) < 3:
+            raise PreflightGateError("policy-check wheel RECORD is malformed")
+        name, encoded_digest, _size = row[:3]
+        if name == record_names[0]:
+            continue
+        if (
+            name.startswith("/")
+            or "\\" in name
+            or any(part in {"", ".", ".."} for part in name.split("/"))
+        ):
+            raise PreflightGateError("policy-check wheel RECORD path is unsafe")
+        if not encoded_digest.startswith("sha256="):
+            raise PreflightGateError("policy-check wheel RECORD lacks SHA-256")
+        installed_path = Path(distribution.locate_file(name)).resolve()
+        try:
+            installed_path.relative_to(prefix)
+        except ValueError as exc:
+            raise PreflightGateError(
+                "installed policy-check file escapes selected environment"
+            ) from exc
+        if not installed_path.is_file():
+            raise PreflightGateError(f"installed policy-check file is missing: {name}")
+        actual = base64.urlsafe_b64encode(
+            hashlib.sha256(installed_path.read_bytes()).digest()
+        ).decode("ascii").rstrip("=")
+        expected = encoded_digest[len("sha256="):].rstrip("=")
+        if actual != expected:
+            raise PreflightGateError(f"installed policy-check file was modified: {name}")
+        checked += 1
+    if checked == 0:
+        raise PreflightGateError("policy-check wheel RECORD verified no installed files")
 
 
 def _resolve_engine(

@@ -29,6 +29,10 @@ class RuntimeBundleError(RuntimeError):
     pass
 
 
+def _normalized_package_version(value: str) -> str:
+    return re.sub(r"-fix\.(\d+)$", r".post\1", value)
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -110,7 +114,7 @@ def verify_bundle(root: Path) -> dict[str, Any]:
         or FULL_SHA_RE.fullmatch(str(manifest.get("release_commit") or "")) is None
         or not isinstance(package, dict)
         or package.get("name") != "policy-check"
-        or package.get("version") != version
+        or package.get("version") != _normalized_package_version(version)
     ):
         raise RuntimeBundleError("manifest identity is inconsistent")
     wheels = manifest.get("wheels")
@@ -327,6 +331,7 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
         venv.EnvBuilder(with_pip=True, clear=False).create(staging / "venv")
         python = _venv_python(staging / "venv")
         wheel_dir = staging / "artifact" / "wheels"
+        package_version = manifest["package"]["version"]
         _run(
             [
                 str(python),
@@ -336,7 +341,7 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
                 "--no-index",
                 "--find-links",
                 str(wheel_dir),
-                f"policy-check=={version}",
+                f"policy-check=={package_version}",
             ],
             cwd=staging,
         )
@@ -458,8 +463,7 @@ def select_release(root: Path, repo: Path) -> tuple[Path, dict[str, Any]]:
         ],
         cwd=repo,
     )
-    normalized = lambda value: re.sub(r"-fix\.(\d+)$", r".post\1", value)
-    if normalized(installed) != normalized(version):
+    if _normalized_package_version(installed) != _normalized_package_version(version):
         raise RuntimeBundleError("installed distribution does not match selected release")
     manifest = json.loads((release / "artifact" / "manifest.json").read_text(encoding="utf-8"))
     return release, manifest

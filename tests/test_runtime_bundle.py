@@ -14,7 +14,8 @@ from policy_check.runtime_bundle import builder, integrity, manager
 
 def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
     bundle = root / f"paulsha-conventions-v{version}"
-    wheel = bundle / "wheels" / f"policy_check-{version}-py3-none-any.whl"
+    package_version = integrity.normalized_package_version(version)
+    wheel = bundle / "wheels" / f"policy_check-{package_version}-py3-none-any.whl"
     wheel.parent.mkdir(parents=True)
     wheel.write_bytes(f"wheel-{version}".encode())
     skill = bundle / "skills" / "preflight-ci"
@@ -35,7 +36,7 @@ def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
         "skill_version": version,
         "package": {
             "name": "policy-check",
-            "version": version,
+            "version": package_version,
             "requires_python": ">=3.11",
         },
         "repository": integrity.CANONICAL_REPOSITORY,
@@ -92,6 +93,16 @@ def test_verify_bundle_accepts_closed_file_set(tmp_path: Path) -> None:
     manifest = integrity.load_and_verify_bundle(bundle)
     assert manifest["policy_version"] == "1.0.13"
     assert manager.verify_bundle(bundle)["skill_version"] == "1.0.13"
+
+
+def test_verify_bundle_accepts_fix_suffix_as_post_package_version(
+    tmp_path: Path,
+) -> None:
+    bundle = _fake_bundle(tmp_path, "1.0.13-fix.2")
+    manifest = integrity.load_and_verify_bundle(bundle)
+    assert manifest["policy_version"] == "1.0.13-fix.2"
+    assert manifest["package"]["version"] == "1.0.13.post2"
+    assert manager.verify_bundle(bundle)["package"]["version"] == "1.0.13.post2"
 
 
 @pytest.mark.parametrize(

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import base64
+import hashlib
 import subprocess
 import sys
+import zipfile
 from argparse import Namespace
 from pathlib import Path
 from typing import Sequence
@@ -303,6 +306,11 @@ def test_installed_manifest_engine_is_exact_and_does_not_resolve_source(
     monkeypatch.setattr(preflight, "_installed_version", lambda: "1.0.12")
     monkeypatch.setattr(
         preflight,
+        "_verify_installed_wheel_payload",
+        lambda *_a: None,
+    )
+    monkeypatch.setattr(
+        preflight,
         "__file__",
         str(Path(sys.prefix) / "lib" / "policy_check" / "preflight.py"),
     )
@@ -325,6 +333,68 @@ def test_installed_manifest_engine_is_exact_and_does_not_resolve_source(
     )
     assert identity.kind == "installed-bundle"
     assert "v1.0.12@" in identity.display
+
+
+def test_installed_wheel_payload_attests_imported_files(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    prefix = tmp_path / "venv"
+    installed_root = prefix / "lib"
+    package = installed_root / "policy_check"
+    dist_info = installed_root / "policy_check-1.0.12.dist-info"
+    package.mkdir(parents=True)
+    dist_info.mkdir()
+    files = {
+        "policy_check/__init__.py": b"",
+        "policy_check/preflight.py": b"# installed preflight\n",
+        "policy_check-1.0.12.dist-info/METADATA": b"Name: policy-check\nVersion: 1.0.12\n",
+    }
+    for name, content in files.items():
+        path = installed_root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+
+    def digest(content: bytes) -> str:
+        encoded = base64.urlsafe_b64encode(hashlib.sha256(content).digest())
+        return encoded.decode("ascii").rstrip("=")
+
+    record_name = "policy_check-1.0.12.dist-info/RECORD"
+    record = "".join(
+        f"{name},sha256={digest(content)},{len(content)}\n"
+        for name, content in files.items()
+    ) + f"{record_name},,\n"
+    wheel = tmp_path / "bundle" / "wheels" / "policy_check-1.0.12-py3-none-any.whl"
+    wheel.parent.mkdir(parents=True)
+    with zipfile.ZipFile(wheel, mode="w") as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+        archive.writestr(record_name, record)
+
+    class FakeDistribution:
+        def locate_file(self, name):
+            return installed_root / str(name)
+
+    monkeypatch.setattr(preflight.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        preflight,
+        "__file__",
+        str(package / "preflight.py"),
+    )
+    monkeypatch.setattr(
+        preflight.importlib.metadata,
+        "distribution",
+        lambda _name: FakeDistribution(),
+    )
+    manifest = {
+        "wheels": [
+            {"path": f"wheels/{wheel.name}", "sha256": "a" * 64}
+        ]
+    }
+    preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
+    (package / "preflight.py").write_text("tampered\n", encoding="utf-8")
+    with pytest.raises(preflight.PreflightGateError, match="modified"):
+        preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
 
 
 def test_resolve_engine_offline_missing_artifact_fails_without_network(

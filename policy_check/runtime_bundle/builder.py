@@ -16,6 +16,7 @@ from .integrity import (
     BundleError,
     CANONICAL_REPOSITORY,
     load_and_verify_bundle,
+    normalized_package_version,
     sha256_file,
     tree_sha256,
     write_checksums,
@@ -214,7 +215,10 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
             raise BundleError("dependency closure contains a non-wheel artifact")
         main_wheel = wheels / built[0].name
         metadata = _wheel_metadata(main_wheel)
-        if metadata.get("Name") != "policy-check" or metadata.get("Version") != version:
+        if (
+            metadata.get("Name") != "policy-check"
+            or metadata.get("Version") != normalized_package_version(version)
+        ):
             raise BundleError("wheel metadata does not match VERSION")
 
         bundle = temp / f"paulsha-conventions-v{version}"
@@ -246,7 +250,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
             "skill_version": version,
             "package": {
                 "name": "policy-check",
-                "version": version,
+                "version": metadata["Version"],
                 "requires_python": metadata.get("Requires-Python", ">=3.11"),
             },
             "repository": CANONICAL_REPOSITORY,

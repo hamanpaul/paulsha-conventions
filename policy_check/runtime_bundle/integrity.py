@@ -24,6 +24,10 @@ class BundleError(RuntimeError):
     """The bundle is unsafe, incomplete, or inconsistent."""
 
 
+def normalized_package_version(value: str) -> str:
+    return re.sub(r"-fix\.(\d+)$", r".post\1", value)
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -114,7 +118,7 @@ def _require_manifest_shape(manifest: dict[str, Any]) -> None:
     if (
         not isinstance(package, dict)
         or package.get("name") != "policy-check"
-        or package.get("version") != version
+        or package.get("version") != normalized_package_version(version)
         or not isinstance(package.get("requires_python"), str)
     ):
         raise BundleError("package identity does not match policy_version")
