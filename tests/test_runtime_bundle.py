@@ -242,6 +242,35 @@ def test_attest_clean_annotated_tag_and_rejects_dirty(tmp_path: Path) -> None:
         builder.attest_clean_tag(repo, "v1.0.13")
 
 
+def test_prepare_package_version_normalizes_fix_suffix_in_snapshot(
+    tmp_path: Path,
+) -> None:
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    pyproject = snapshot / "pyproject.toml"
+    pyproject.write_text(
+        '[build-system]\nrequires = ["setuptools"]\n\n'
+        '[project]\nname = "policy-check"\nversion = "1.0.13-fix.2"\n',
+        encoding="utf-8",
+    )
+
+    builder._prepare_package_version(snapshot, "1.0.13-fix.2")
+
+    assert 'version = "1.0.13.post2"' in pyproject.read_text(encoding="utf-8")
+
+
+def test_prepare_package_version_rejects_mismatched_snapshot(tmp_path: Path) -> None:
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    (snapshot / "pyproject.toml").write_text(
+        '[project]\nversion = "1.0.13"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(integrity.BundleError, match="does not match"):
+        builder._prepare_package_version(snapshot, "1.0.13-fix.2")
+
+
 def test_selector_chooses_exact_version_and_never_current(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

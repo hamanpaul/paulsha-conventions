@@ -162,6 +162,38 @@ def _tag_snapshot(repo: Path, tag: str, destination: Path) -> Path:
     return snapshot
 
 
+def _prepare_package_version(snapshot: Path, policy_version: str) -> None:
+    package_version = normalized_package_version(policy_version)
+    if package_version == policy_version:
+        return
+    pyproject = snapshot / "pyproject.toml"
+    try:
+        lines = pyproject.read_text(encoding="utf-8").splitlines(keepends=True)
+    except (OSError, UnicodeError) as exc:
+        raise BundleError("tag snapshot pyproject.toml is unreadable") from exc
+    in_project = False
+    matches = 0
+    expected = f'version = "{policy_version}"'
+    replacement = f'version = "{package_version}"'
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_project = stripped == "[project]"
+            continue
+        if in_project and stripped == expected:
+            newline = "\n" if line.endswith("\n") else ""
+            lines[index] = replacement + newline
+            matches += 1
+    if matches != 1:
+        raise BundleError(
+            "tag snapshot [project] version does not match policy VERSION"
+        )
+    try:
+        pyproject.write_text("".join(lines), encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise BundleError("cannot prepare package version in tag snapshot") from exc
+
+
 def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
     source = repo.resolve()
     version, commit, epoch = attest_clean_tag(source, tag)
@@ -175,6 +207,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
     with tempfile.TemporaryDirectory(prefix="runtime-bundle-") as temporary:
         temp = Path(temporary)
         snapshot = _tag_snapshot(source, tag, temp)
+        _prepare_package_version(snapshot, version)
         wheel_build = temp / "wheel-build"
         wheels = temp / "wheels"
         wheel_build.mkdir()
