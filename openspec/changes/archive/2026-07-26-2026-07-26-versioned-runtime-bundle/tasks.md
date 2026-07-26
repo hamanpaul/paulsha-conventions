@@ -22,7 +22,22 @@
     與 artifact-level evidence review。
 11. [x] 依使用者最終指示改由主整合者對 exact candidate head 對抗審查；
     兩項 MAJOR 已以 RED→GREEN 修正，斷電級 availability residual 明文列管 #52。
-12. [ ] merge 後發布 patch/tag，從正式 clean tag 建 bundle並在全新暫存 HOME
-    完成 offline lifecycle smoke。
-13. [ ] 對 10 個下游 legacy repo 分別開遷移 PR，驗證後 merge。
-14. [ ] 更新/關閉 issue 48；更新 issue 39，明確保留 artifact authority 決策。
+12. [x] merge 後發布 v1.0.14 annotated tag；從 release commit
+    `451c2680fb3a1f977fcbc8007baaa7dbe415cf03` 建正式 clean-tag bundle，
+    並在全新暫存 HOME 完成 offline lifecycle smoke。正式 archive SHA-256：
+    `2bb24fdd47cbce8162a0094ab95922e7b838f447978cf5cda83dfd27af3e0703`。
+13. [x] 10 個下游 legacy repo 均由獨立 PR 遷移、通過 exact local preflight、
+    remote checks 與 thread-aware review後以 merge commit 合併：
+    [labu #3](https://github.com/hamanpaul/paulsha-labu/pull/3)、
+    [paulshaclaw #269](https://github.com/hamanpaul/paulshaclaw/pull/269)、
+    [hippo #61](https://github.com/hamanpaul/paulsha-hippo/pull/61)、
+    [homeclaw #57](https://github.com/hamanpaul/homeclaw-builder/pull/57)、
+    [custom-skills #33](https://github.com/hamanpaul/custom-skills/pull/33)、
+    [serialwrap #151](https://github.com/hamanpaul/serialwrap/pull/151)、
+    [IntelliDbgKit #14](https://github.com/hamanpaul/IntelliDbgKit/pull/14)、
+    [cortex #207](https://github.com/hamanpaul/paulsha-cortex/pull/207)、
+    [PatchMUD #10](https://github.com/hamanpaul/paulsha-patchmud/pull/10)、
+    [health-integrator #46](https://github.com/hamanpaul/health-integrator/pull/46)。
+14. [x] issue #39 已更新為 `[needs_human] OPEN`，保留公司 artifact authority、
+    owner、權限、audit/retention 與 rollout/rollback 決策；本 archive closeout
+    合併後關閉 issue #48。
