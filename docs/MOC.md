@@ -1,9 +1,14 @@
 # paulsha-conventions — MOC（Map of Content）
 
-專案層地圖：連結 active openspec changes 與 superpowers plans/specs，並標其 stage 狀態。
+專案層地圖：連結 canonical capabilities、active/archived OpenSpec changes 與
+superpowers plans/specs，並標其 stage 狀態。
 本 repo 以 `moc.map: docs/MOC.md` 宣告，由 R-24（moc-alignment）盯其與本次變更同步。
 
 ## Active openspec changes
+
+目前無 active change。
+
+## Canonical capabilities / archived changes
 
 - [runtime bundle specification](../openspec/specs/runtime-bundle/spec.md) — v1.0.14 正式 bundle、offline lifecycle 與 fleet rollout 已完成；斷電級 hardening 見 #52
 - [project-policy manifest specification](../openspec/specs/project-policy-manifest/spec.md) — canonical manifest 與 10-repo migration 已完成
