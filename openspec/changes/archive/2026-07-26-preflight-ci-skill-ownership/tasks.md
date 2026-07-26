@@ -8,7 +8,7 @@
 
 ## 2. Migration and validation
 
-- [ ] 2.1 Run unit/full policy, OpenSpec, and skill smokes.
-- [ ] 2.2 Switch the user-level skill symlink and verify the resolved source.
-- [ ] 2.3 Remove the old source authority in an isolated dependent PR.
-- [ ] 2.4 Re-run adversarial review and update PR 47.
+- [x] 2.1 Run unit/full policy, OpenSpec, and skill smokes.
+- [x] 2.2 Switch the user-level skill symlink and verify the resolved source.
+- [x] 2.3 Remove the old source authority in an isolated dependent PR.
+- [x] 2.4 Re-run adversarial review and update PR 47.
