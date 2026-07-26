@@ -2,7 +2,7 @@
 
 ## 目標
 
-目前狀態：實作與主驗收完成，等待 Opus 5 第二輪對抗覆審
+目前狀態：Opus 5 第二輪發現 2 項 MAJOR，窄幅修復中
 
 修正 PR #47（`feature/42-46-open-issues-batch`）在 exact head `b13da64`
 接受 Claude Opus 5 對抗審查時發現的 authority 完整性缺陷與驗收缺口。
@@ -100,3 +100,41 @@ target regular package（含 `__init__.py`）重現。第二輪 reviewer 必須�
 第二輪判定契約：未處置的缺陷／驗收缺口為 FAIL；已明文承認、影響分析有界且
 列管的殘餘風險不單獨構成 FAIL。輸出最多 10 項 BLOCKER／MAJOR，每項須含
 `path:line`、失敗情境與必要修正；若沒有則輸出 `VERDICT: PASS / NONE`。
+
+## 第二輪 findings 與第三輪窄幅修復
+
+第二輪 Opus 5 判定 `FAIL / 2 MAJOR`。主整合者已用直接呼叫分別重現：
+
+- `_run_steps()` 遇不可執行 command 時逸出 `PermissionError`；
+- `_populate_cache()` 遇不可寫／不存在的 cache parent 時逸出裸
+  `OSError`，若由 `main()` resolver 路徑觸發便沒有最終 verdict。
+
+本輪只允許修改：
+
+- `policy_check/preflight.py`
+- `tests/test_preflight.py`
+- `docs/superpowers/plans/2026-07-26-issue-46-opus5-review-repair.md`
+- `docs/MOC.md`
+
+必要行為：
+
+1. `_run_steps()` 捕捉 `OSError` 與輸出解碼錯誤，該 step 記為 FAIL，
+   但仍繼續後續 steps，最後由 `main()` 輸出 `PREFLIGHT FAIL`。
+2. `_run_or_error()` 將 `OSError` 與輸出解碼錯誤正規化成既有的
+   `PreflightGateError`／`PreflightUsageError`。
+3. `main()` engine resolver 邊界收斂 resolver 內 filesystem／encoding
+   例外，輸出 `engine: FAIL` 與 `PREFLIGHT FAIL`，return 1，不得印 traceback。
+4. 補測試證明 `PermissionError` step 不會中斷後續 step，以及
+   `_resolve_engine` 拋 `PermissionError`／`UnicodeError` 時 final verdict
+   與 exit code 正確。
+
+以下第二輪非阻擋觀察列為有界 residual，不在本窄修復擴張：
+
+- engine repo regex 的 dot-segment/path containment 強化；
+- 直接 `--engine-source` 與 orchestrator import path 的額外交叉證明；
+- `-P` 安全不變式升格為獨立 OpenSpec requirement；
+- 所有 conditional steps 都 SKIP 時的 policy 語意；
+- wrapper 的 Python 3.11 最低版本提示。
+
+這些不影響 wrapper 的實際 `-P` authority 修補或本輪兩個 verdict escape，
+後續由 #48 的 installed-bundle／selector contract 一併重裁決。

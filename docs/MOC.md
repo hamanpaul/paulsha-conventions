@@ -11,10 +11,10 @@
 
 ## Plans（docs/superpowers/plans）
 - [內部發行管道決策（#39）](superpowers/plans/2026-07-26-issue-39-internal-release-channel.md) — needs_human（待公司選定 package authority）
-- [#46 Opus 5 對抗審查修復](superpowers/plans/2026-07-26-issue-46-opus5-review-repair.md) — 實作與主驗收完成，待第二輪覆審
+- [#46 Opus 5 對抗審查修復](superpowers/plans/2026-07-26-issue-46-opus5-review-repair.md) — 第二輪 2 項 MAJOR 窄幅修復中
 - [release ledger tag SHA（#42）](superpowers/plans/2026-07-26-issue-42-release-ledger-tag-sha.md) — 已實作、對抗審查通過並整合
 - [R-21 visibility coupling（#45）](superpowers/plans/2026-07-26-issue-45-r21-visibility-coupling.md) — 已實作、對抗審查通過並 archive
-- [canonical local preflight（#46）](superpowers/plans/2026-07-26-issue-46-local-preflight.md) — 已實作並 archive，Opus 5 覆審修復中
+- [canonical local preflight（#46）](superpowers/plans/2026-07-26-issue-46-local-preflight.md) — 已實作並 archive，第二輪覆審修復中
 - [preflight-ci ownership migration summary](migrations/preflight-ci/merge-summary.md) — governed 遷移中
 - [preflight-ci ownership migration risks](migrations/preflight-ci/merge-risks.md) — rollback 與殘餘風險
 - [auto-build-block（#30 提案 A）](superpowers/plans/2026-07-02-auto-build-block.md) — 已完成（#30 提案 A，change 已 archive）
