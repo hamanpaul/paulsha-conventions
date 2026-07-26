@@ -2,7 +2,7 @@
 Tests for scripts/update-cli-help.sh self-dogfood capability.
 
 Verifies that update-cli-help.sh can actually process the current repo's
-.paul-project.yml and update markers correctly.
+.project-policy.yml and update markers correctly.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ def test_update_cli_help_dry_run_on_self_repo():
     Self-dogfood test: update-cli-help.sh should work on this repo.
     
     Runs in dry-run mode and verifies:
-    1. It can parse .paul-project.yml cli entries
+    1. It can parse .project-policy.yml cli entries
     2. It can execute the CLI commands
     3. It can locate marker blocks in README.md
     4. Exit code is 0 (no failures)
@@ -76,5 +76,5 @@ def test_update_cli_help_recognizes_cli_entries():
     # The output should indicate it processed at least one CLI entry
     # Either by showing "UPDATE" or "UNCHANGED" for a file, or by not reporting 0 entries
     assert "CLI entries: 0" not in result.stdout, (
-        "Should find CLI entries in .paul-project.yml"
+        "Should find CLI entries in .project-policy.yml"
     )

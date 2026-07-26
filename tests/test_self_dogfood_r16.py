@@ -2,7 +2,7 @@
 Test R-16 self-dogfood requirement.
 
 Spec reference: §4.2 R-16 CLI help sync
-- paulsha-conventions repo must have cli: entries in .paul-project.yml
+- paulsha-conventions repo must have cli: entries in .project-policy.yml
 - README.md must have corresponding marker blocks
 - R-16 should NOT show "No CLI entries declared"
 """
@@ -15,16 +15,16 @@ import pytest
 import yaml
 
 
-def test_paul_project_yml_has_cli_entries():
-    """Self-dogfood: .paul-project.yml must declare cli: entries."""
-    config_path = Path(__file__).parent.parent / ".paul-project.yml"
-    assert config_path.exists(), "Missing .paul-project.yml"
+def test_project_policy_yml_has_cli_entries():
+    """Self-dogfood: .project-policy.yml must declare cli: entries."""
+    config_path = Path(__file__).parent.parent / ".project-policy.yml"
+    assert config_path.exists(), "Missing .project-policy.yml"
 
     content = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     cli_entries = content.get("cli")
 
     assert cli_entries is not None, (
-        "Self-dogfood requirement: .paul-project.yml must have 'cli:' declaration"
+        "Self-dogfood requirement: .project-policy.yml must have 'cli:' declaration"
     )
     assert isinstance(cli_entries, list), "cli: must be a list"
     assert len(cli_entries) > 0, (
@@ -34,7 +34,7 @@ def test_paul_project_yml_has_cli_entries():
 
 def test_cli_entry_points_to_policy_check_module():
     """Self-dogfood: at least one cli entry should point to 'python3 -m policy_check'."""
-    config_path = Path(__file__).parent.parent / ".paul-project.yml"
+    config_path = Path(__file__).parent.parent / ".project-policy.yml"
     content = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     cli_entries = content.get("cli", [])
 
@@ -51,7 +51,7 @@ def test_cli_entry_points_to_policy_check_module():
 
 def test_readme_has_cli_help_marker():
     """Self-dogfood: README.md must have cli-help marker block for policy_check."""
-    config_path = Path(__file__).parent.parent / ".paul-project.yml"
+    config_path = Path(__file__).parent.parent / ".project-policy.yml"
     content = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     cli_entries = content.get("cli", [])
 

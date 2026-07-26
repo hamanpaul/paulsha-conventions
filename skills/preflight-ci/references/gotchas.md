@@ -3,7 +3,8 @@
 ## Missing repo-owned gates
 
 - **Symptom:** skill-driven full preflight exits 2 before running gates.
-- **Why:** the target repo does not declare `.paul-project.yml.preflight.steps`.
+- **Why:** the target repo does not declare `.project-policy.yml.preflight.steps`
+  (or its deprecated legacy alias).
 - **Fix:** declare typed validation/test commands. Use `--policy-only` only
   when policy-only execution is intentional.
 
@@ -12,7 +13,7 @@
 - **Symptom:** preflight reports `<step>: FAIL ... (exit=N)` without the command's
   captured stdout/stderr.
 - **Why:** the step output is intentionally not echoed; its executable contract
-  remains the typed `argv`, `cwd`, and timeout in `.paul-project.yml`.
+  remains the typed `argv`, `cwd`, and timeout in the project policy manifest.
 - **Fix:** from the same checkout and environment, change to the declared `cwd`
   and rerun that step's exact `argv`. Do not reinterpret it through a shell or
   add PR metadata flags that are not part of the declared command.
@@ -49,7 +50,7 @@
 
 - **Symptom:** engine gate reports a VERSION mismatch.
 - **Why:** the installed skill's adjacent `paulsha-conventions/VERSION` does
-  not match the target repo's `.paul-project.yml.policy_version`.
+  not match the target repo's `.project-policy.yml.policy_version`.
 - **Fix:** update the deployed conventions checkout and target policy version
   through the normal release/rollout process. Never fall back silently.
 

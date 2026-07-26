@@ -55,7 +55,7 @@ jobs:
   freshness:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4               # 下游 repo（含其 .paul-project.yml）
+      - uses: actions/checkout@v4               # 下游 repo（含其 .project-policy.yml）
       - uses: actions/checkout@v4               # canonical engine（最新）
         with:
           repository: hamanpaul/paulsha-conventions
@@ -70,8 +70,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 ```
 
-> `drift check` 讀下游 repo 的 `.paul-project.yml` 對 live canonical 最高 tag 比對；
-> `behind` → exit≠0 → required check 失敗。非政策管轄（無 `.paul-project.yml`）的 repo 判 `unmanaged`、exit 0，不誤傷。
+> `drift check` 讀下游 repo 的 `.project-policy.yml` 對 live canonical 最高 tag 比對；
+> `behind` → exit≠0 → required check 失敗。非政策管轄（無 `.project-policy.yml`）的 repo 判 `unmanaged`、exit 0，不誤傷。
 
 ## Step 3 — 驗證（下游落後實驗）
 

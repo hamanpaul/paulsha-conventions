@@ -2,14 +2,27 @@
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENGINE_ROOT="$(git -C "$SKILL_DIR" rev-parse --show-toplevel 2>/dev/null)" || {
-  echo "ERROR: preflight-ci is not inside a paulsha-conventions checkout" >&2
-  exit 2
-}
 TARGET_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "ERROR: run preflight-ci from a target git repository" >&2
   exit 2
 }
+
+ENGINE_ROOT="$(git -C "$SKILL_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "$ENGINE_ROOT" || ! -f "$ENGINE_ROOT/policy_check/preflight.py" ]]; then
+  if [[ -n "${PSC_CONVENTIONS_ROOT:-}" ]]; then
+    RUNTIME_ROOT="$PSC_CONVENTIONS_ROOT"
+  elif [[ -n "${XDG_DATA_HOME:-}" ]]; then
+    RUNTIME_ROOT="$XDG_DATA_HOME/paulsha-conventions"
+  else
+    RUNTIME_ROOT="$HOME/.local/share/paulsha-conventions"
+  fi
+  LAUNCHER="$RUNTIME_ROOT/bin/policy-preflight"
+  [[ -x "$LAUNCHER" ]] || {
+    echo "ERROR: deployed policy-preflight launcher not found: $LAUNCHER" >&2
+    exit 2
+  }
+  exec "$LAUNCHER" "$@"
+fi
 
 PYTHON_BIN="${PSC_PREFLIGHT_PYTHON:-python3}"
 case "$PYTHON_BIN" in

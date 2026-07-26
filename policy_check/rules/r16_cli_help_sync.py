@@ -26,7 +26,7 @@ class R16CliHelpSync:
             return RuleResult(
                 rule_id=self.rule_id,
                 status=Status.PASS,
-                message="No CLI entries declared in .paul-project.yml.",
+                message="No CLI entries declared in the project policy manifest.",
             )
 
         failures: list[str] = []

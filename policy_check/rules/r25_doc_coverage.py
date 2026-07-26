@@ -1,6 +1,6 @@
 """R-25 — deterministic doc coverage (omission) gate.
 
-Opt-in: when ``.paul-project.yml`` does not declare ``doc_coverage`` the rule is
+Opt-in: when the project policy does not declare ``doc_coverage`` the rule is
 not-applicable and PASSes. When declared, it checks that the repo's declared
 public facts are each mentioned at least once in the configured target docs.
 

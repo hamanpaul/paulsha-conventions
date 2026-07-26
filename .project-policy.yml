@@ -18,6 +18,10 @@ cli:
     help_args: ["--help"]
     reflected_in: "README.md"
     marker: "policy-preflight-help"
+  - command: "python3 -m policy_check.runtime_bundle.cli"
+    help_args: ["--help"]
+    reflected_in: "README.md"
+    marker: "policy-runtime-bundle-help"
 preflight:
   steps:
     - name: openspec

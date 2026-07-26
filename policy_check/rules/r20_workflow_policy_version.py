@@ -49,7 +49,7 @@ class R20WorkflowPolicyVersionSync:
         ]
         if mismatched:
             detail = "\n".join(
-                f"{name}: declares {version}, .paul-project.yml has {ctx.policy_version}"
+                f"{name}: declares {version}, project policy has {ctx.policy_version}"
                 for name, version in mismatched
             )
             return RuleResult(

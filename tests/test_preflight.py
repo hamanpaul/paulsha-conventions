@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from argparse import Namespace
 from pathlib import Path
 from typing import Sequence
@@ -173,6 +174,24 @@ def test_parse_steps_rejects_path_traversal(tmp_path) -> None:
         preflight._parse_steps(config, tmp_path)
 
 
+@pytest.mark.parametrize("value", ["a/./b", "a//b", "./subdir"])
+def test_parse_steps_rejects_dot_segments(tmp_path, value: str) -> None:
+    config = {
+        "preflight": {
+            "steps": [
+                {
+                    "name": "unsafe",
+                    "kind": "tests",
+                    "argv": ["pytest"],
+                    "cwd": value,
+                }
+            ]
+        }
+    }
+    with pytest.raises(preflight.PreflightUsageError, match="unsafe"):
+        preflight._parse_steps(config, tmp_path)
+
+
 def test_parse_steps_rejects_duplicate_names(tmp_path) -> None:
     config = {
         "preflight": {
@@ -259,6 +278,53 @@ def test_resolve_engine_uses_verified_cached_offline(monkeypatch, tmp_path) -> N
         cache_dir=tmp_path / "cache",
     )
     assert identity.root == checkout
+
+
+def test_cache_artifact_rejects_dot_segment_repo(tmp_path) -> None:
+    with pytest.raises(preflight.PreflightGateError, match="unsafe"):
+        preflight._cache_artifact(tmp_path, ".hidden/repo", "a" * 40)
+    with pytest.raises(preflight.PreflightGateError, match="unsafe"):
+        preflight._cache_artifact(tmp_path, "owner/..", "a" * 40)
+
+
+def test_installed_manifest_engine_is_exact_and_does_not_resolve_source(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}\n", encoding="utf-8")
+    manifest = {
+        "policy_version": "1.0.12",
+        "release_tag": "v1.0.12",
+        "release_commit": "a" * 40,
+        "wheels": [{"sha256": "b" * 64}],
+    }
+    monkeypatch.setattr(preflight, "load_and_verify_bundle", lambda _root: manifest)
+    monkeypatch.setattr(preflight, "_installed_version", lambda: "1.0.12")
+    monkeypatch.setattr(
+        preflight,
+        "__file__",
+        str(Path(sys.prefix) / "lib" / "policy_check" / "preflight.py"),
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_self_engine",
+        lambda *_a: pytest.fail("installed mode must not inspect source checkout"),
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_workflow_pin",
+        lambda *_a: pytest.fail("installed mode must not inspect workflow"),
+    )
+    identity = preflight._resolve_engine(
+        tmp_path,
+        _config(),
+        offline=True,
+        cache_dir=tmp_path / "cache",
+        installed_manifest=manifest_path,
+    )
+    assert identity.kind == "installed-bundle"
+    assert "v1.0.12@" in identity.display
 
 
 def test_resolve_engine_offline_missing_artifact_fails_without_network(
@@ -599,6 +665,33 @@ def test_run_steps_honors_skip_tests_and_policy_only(monkeypatch, tmp_path) -> N
     assert calls == []
 
 
+def test_run_steps_fails_when_every_declared_step_is_conditionally_skipped(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    step = preflight.PreflightStep(
+        "optional",
+        "validation",
+        ("check",),
+        ".",
+        "missing-path",
+        10,
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_run_command",
+        lambda *_a, **_kw: pytest.fail("skipped step must not execute"),
+    )
+    assert not preflight._run_steps(
+        tmp_path,
+        [step],
+        skip_tests=False,
+        policy_only=False,
+    )
+    assert "no declared preflight step executed" in capsys.readouterr().out
+
+
 def test_run_steps_timeout_is_failure(monkeypatch, tmp_path) -> None:
     def timeout(*_args, **_kwargs):
         raise subprocess.TimeoutExpired(["pytest"], 1)
@@ -737,7 +830,7 @@ def test_run_policy_isolates_installed_engine_from_repo_shadowing(
         context,
         preflight.EngineIdentity("installed", "test", None),
     )
-    assert captured["argv"][1] == "-I"
+    assert captured["argv"][1:3] == ["-P", "-I"]
 
 
 def test_main_returns_one_when_any_gate_fails(monkeypatch, tmp_path) -> None:

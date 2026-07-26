@@ -3,10 +3,10 @@ description: Run policy_check from local repository source
 
 inputs:
   profile:
-    description: Policy profile (must match .paul-project.yml)
+    description: Policy profile (must match .project-policy.yml)
     required: true
   version:
-    description: Policy version (must match .paul-project.yml)
+    description: Policy version (must match .project-policy.yml)
     required: true
 
 runs:

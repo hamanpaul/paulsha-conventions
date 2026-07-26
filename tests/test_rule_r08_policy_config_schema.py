@@ -579,3 +579,26 @@ def test_r08_allows_unknown_preflight_subkeys(tmp_path):
         "      future_field: value\n",
     )
     assert _r08().check(_ctx(repo)).status == Status.PASS
+
+
+def test_r08_warns_when_config_semantics_match_between_names(tmp_path):
+    content = "policy_profile: flat\npolicy_version: 1.0.13\n"
+    (tmp_path / ".project-policy.yml").write_text(content, encoding="utf-8")
+    (tmp_path / ".paul-project.yml").write_text(content, encoding="utf-8")
+    result = _r08().check(_ctx(tmp_path))
+    assert result.status == Status.WARN
+    assert "identical semantics" in result.message
+
+
+def test_r08_fails_when_config_contents_conflict(tmp_path):
+    (tmp_path / ".project-policy.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.13\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.12\n",
+        encoding="utf-8",
+    )
+    result = _r08().check(_ctx(tmp_path))
+    assert result.status == Status.FAIL
+    assert "config conflict" in result.message

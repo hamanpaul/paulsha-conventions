@@ -17,6 +17,7 @@ test = ["pytest>=7.0"]
 [project.scripts]
 policy-check = "policy_check.cli:main"
 policy-preflight = "policy_check.preflight:main"
+policy-runtime-bundle = "policy_check.runtime_bundle.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["policy_check*"]

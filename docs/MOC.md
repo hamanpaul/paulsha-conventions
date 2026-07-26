@@ -5,12 +5,13 @@
 
 ## Active openspec changes
 
-- [versioned runtime bundle（#48）](../openspec/changes/2026-07-26-versioned-runtime-bundle/proposal.md) — plan 完成，等待 Cortex Codex Spark 實作
+- [versioned runtime bundle（#48）](../openspec/changes/2026-07-26-versioned-runtime-bundle/proposal.md) — 中央實作與驗收進行中
 
 （已落地者見 `openspec/changes/archive/`。[#46 canonical local preflight](../openspec/changes/archive/2026-07-26-canonical-local-preflight/proposal.md) 已 archive，canonical spec 見 `openspec/specs/preflight/`。[#45 R-21 visibility coupling](../openspec/changes/archive/2026-07-26-r21-visibility-coupling/proposal.md) 已 archive，canonical spec 見 `openspec/specs/secret-scan/`。[#30 提案 A auto-build-block](../openspec/changes/archive/2026-07-02-auto-build-block/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/auto-build-config/`。[#20 gitlab-internalization](../openspec/changes/archive/2026-07-01-gitlab-internalization/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/gitlab-ci-gate/`。#25 doc-drift-action 已於本批落地並 archive，canonical specs 見 `openspec/specs/doc-drift-core/`・`openspec/specs/doc-drift-action/`（`doc-reference`／`moc-alignment` 規格亦同步更新）。#23 cross-repo-drift-governance 已於本批落地並 archive，canonical spec 見 `openspec/specs/cross-repo-drift-governance/`。Runbook：[`docs/org-ruleset-runbook.md`](org-ruleset-runbook.md)。）
 
 ## Plans（docs/superpowers/plans）
-- [versioned runtime bundle（#48）](superpowers/plans/2026-07-26-issue-48-runtime-bundle.md) — plan 完成，等待 Cortex Codex Spark 實作
+- [versioned runtime bundle（#48）](superpowers/plans/2026-07-26-issue-48-runtime-bundle.md) — Spark 候選已派工，主整合補齊實作與驗收
+- [runtime bundle runbook](runtime-bundle-runbook.md) — build/install/exact selection/rollback 與 #39 authority 邊界
 - [內部發行管道決策（#39）](superpowers/plans/2026-07-26-issue-39-internal-release-channel.md) — needs_human（待公司選定 package authority）
 - [#46 Opus 5 對抗審查修復](superpowers/plans/2026-07-26-issue-46-opus5-review-repair.md) — 第三輪 `PASS / NONE`，主整合驗收通過
 - [release ledger tag SHA（#42）](superpowers/plans/2026-07-26-issue-42-release-ledger-tag-sha.md) — 已實作、對抗審查通過並整合

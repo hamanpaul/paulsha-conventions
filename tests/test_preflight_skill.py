@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -104,6 +105,36 @@ def test_preflight_skill_wrapper_keeps_target_as_working_directory(
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == str(target)
+
+
+def test_deployed_skill_delegates_to_stable_runtime_launcher(tmp_path: Path) -> None:
+    deployed_skill = tmp_path / "deployed" / "skills" / "preflight-ci"
+    shutil.copytree(SKILL, deployed_skill)
+    runtime_root = tmp_path / "runtime"
+    launcher = runtime_root / "bin" / "policy-preflight"
+    launcher.parent.mkdir(parents=True)
+    launcher.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf "%s\\n" "$PWD" "$@"\n',
+        encoding="utf-8",
+    )
+    launcher.chmod(0o755)
+    target = tmp_path / "target"
+    target.mkdir()
+    subprocess.run(["git", "init", "-q", str(target)], check=True)
+    env = dict(os.environ)
+    env["PSC_CONVENTIONS_ROOT"] = str(runtime_root)
+    result = subprocess.run(
+        [str(deployed_skill / "scripts" / "preflight.sh"), "--offline"],
+        cwd=target,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [str(target), "--offline"]
 
 
 def test_installer_rejects_non_symlink_target(tmp_path) -> None:

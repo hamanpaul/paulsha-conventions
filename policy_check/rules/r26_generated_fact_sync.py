@@ -1,7 +1,7 @@
 """R-26 — generic generated-fact marker sync.
 
 Generalizes R-16's CLI-help marker-sync to any structured generated fact.
-Opt-in: when ``.paul-project.yml`` does not declare ``generated_facts`` the rule
+Opt-in: when the project policy does not declare ``generated_facts`` the rule
 is not-applicable and PASSes. When declared, each entry's command is executed
 deterministically and its normalized stdout MUST match the ``generated-fact``
 marker block in the entry's ``reflected_in`` document.

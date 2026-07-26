@@ -18,12 +18,15 @@ This skill and `policy_check.preflight` are both owned by
 - `policy-preflight` owns PR context, engine identity, gate orchestration, and
   the final verdict.
 - The target repository owns validation/test commands through
-  `.paul-project.yml.preflight.steps`.
+  `.project-policy.yml.preflight.steps` (the deprecated `.paul-project.yml`
+  alias remains accepted during the compatibility window).
 - GitHub or GitLab CI remains a remote merge gate, but it is not the primary
   place where avoidable policy/test failures are discovered.
 
-Do not copy resolver or gate logic into this skill. The wrapper must delegate
-to the adjacent canonical engine checkout.
+Do not copy resolver or gate logic into this skill. In developer source mode
+the wrapper delegates to the adjacent canonical checkout. In deployed mode it
+delegates to the stable runtime launcher, which selects the exact installed
+release requested by the target manifest and never falls back to `current`.
 
 ## Workflow
 
@@ -72,6 +75,8 @@ to the adjacent canonical engine checkout.
 - `--skip-tests`: skip only steps declared with `kind: tests`.
 - `PSC_PREFLIGHT_PYTHON`: optional Python interpreter used to start the
   canonical engine. Project test interpreters belong in each step's `argv`.
+- `PSC_CONVENTIONS_ROOT`: optional deployed runtime root override. It is used
+  only when the skill is not inside a source checkout.
 
 ## Failure handling
 
