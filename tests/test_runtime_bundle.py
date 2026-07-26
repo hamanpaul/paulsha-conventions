@@ -978,6 +978,58 @@ def test_failed_activation_restores_state_links_launchers_and_release(
     assert not (runtime_root / "releases" / "1.0.14").exists()
 
 
+def test_failed_force_reinstall_restores_displaced_release(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source", "1.0.13")
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+
+    class FakeEnvBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, path):
+            _write_fake_venv(Path(path))
+
+    monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
+    monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
+    assert manager.install(bundle, runtime_root, skill_target) == "1.0.13"
+    old_release = runtime_root / "releases" / "1.0.13"
+    sentinel = old_release / "old-release-sentinel"
+    sentinel.write_text("preserve old release\n", encoding="utf-8")
+    before_state = (runtime_root / "state.json").read_bytes()
+
+    real_atomic_symlink = manager._atomic_symlink
+
+    def fail_skill_link(target: Path, link: Path) -> None:
+        if link == skill_target:
+            raise OSError("simulated force activation failure")
+        real_atomic_symlink(target, link)
+
+    monkeypatch.setattr(manager, "_atomic_symlink", fail_skill_link)
+    with pytest.raises(OSError, match="simulated force activation"):
+        manager.install(
+            bundle,
+            runtime_root,
+            skill_target,
+            force_reinstall=True,
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "preserve old release\n"
+    assert (runtime_root / "state.json").read_bytes() == before_state
+    assert (runtime_root / "current").resolve() == old_release.resolve()
+    assert not list((runtime_root / "releases").glob(".failed-*"))
+    assert not list((runtime_root / "releases").glob(".replaced-*"))
+
+
 def test_public_cli_forwards_force_reinstall(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
