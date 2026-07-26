@@ -26,6 +26,7 @@ try:
         load_and_verify_bundle as verify_bundle,
         normalized_package_version as _normalized_package_version,
         sha256_file as _sha256,
+        verify_installed_wheel_payload as _verify_installed_wheels,
     )
 except ImportError:
     _verifier_path = Path(__file__).with_name("runtime_verifier.py")
@@ -42,6 +43,7 @@ except ImportError:
     verify_bundle = _verifier.load_and_verify_bundle
     _normalized_package_version = _verifier.normalized_package_version
     _sha256 = _verifier.sha256_file
+    _verify_installed_wheels = _verifier.verify_installed_wheel_payload
 
 
 def _default_root() -> Path:
@@ -60,6 +62,29 @@ def _default_skill_target() -> Path:
 
 def _venv_python(root: Path) -> Path:
     return root / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+
+def _venv_site_packages(root: Path) -> Path:
+    if os.name == "nt":
+        return root / "Lib" / "site-packages"
+    return (
+        root
+        / "lib"
+        / f"python{sys.version_info.major}.{sys.version_info.minor}"
+        / "site-packages"
+    )
+
+
+def _isolated_subprocess_env() -> dict[str, str]:
+    return {
+        **{
+            key: value
+            for key, value in os.environ.items()
+            if key not in {"PYTHONPATH", "PYTHONHOME"}
+        },
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
 
 
 def _run(argv: Sequence[str], *, cwd: Path, env: dict[str, str] | None = None) -> str:
@@ -355,6 +380,13 @@ def _smoke(staging: Path, manifest: dict[str, Any]) -> None:
         )
 
 
+def _attest_installed_release(release: Path) -> None:
+    _verify_installed_wheels(
+        release / "artifact",
+        _venv_site_packages(release / "venv"),
+    )
+
+
 def _install_launcher(root: Path) -> None:
     launcher = root / "bin" / "policy-preflight"
     launcher.parent.mkdir(parents=True, exist_ok=True)
@@ -563,6 +595,8 @@ def install(
         _run(
             [
                 str(python),
+                "-I",
+                "-B",
                 "-m",
                 "pip",
                 "install",
@@ -572,16 +606,24 @@ def install(
                 f"policy-check=={package_version}",
             ],
             cwd=staging,
-            env={
-                **{
-                    key: value
-                    for key, value in os.environ.items()
-                    if key not in {"PYTHONPATH", "PYTHONHOME"}
-                },
-                "PYTHONNOUSERSITE": "1",
-                "PYTHONDONTWRITEBYTECODE": "1",
-            },
+            env=_isolated_subprocess_env(),
         )
+        _run(
+            [
+                str(python),
+                "-I",
+                "-B",
+                "-m",
+                "pip",
+                "uninstall",
+                "--yes",
+                "pip",
+                "setuptools",
+            ],
+            cwd=staging,
+            env=_isolated_subprocess_env(),
+        )
+        _attest_installed_release(staging)
         _smoke(staging, manifest)
         _write_json_atomic(
             staging / "VERIFIED",
@@ -718,6 +760,7 @@ def select_release(root: Path, repo: Path) -> tuple[Path, dict[str, Any]]:
     else:
         raise RuntimeBundleError("target repository has no project policy manifest")
     release = _verified_release(root, version)
+    _attest_installed_release(release)
     python = _venv_python(release / "venv")
     installed = _run(
         [

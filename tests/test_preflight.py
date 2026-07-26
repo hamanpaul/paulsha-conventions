@@ -436,6 +436,25 @@ def test_installed_wheel_payload_attests_imported_files(
     )
     with pytest.raises(preflight.PreflightGateError, match="PyYAML"):
         preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
+    (installed_root / "yaml" / "__init__.py").write_bytes(
+        b"# installed yaml\n"
+    )
+    (installed_root / "yaml.py").write_text(
+        "raise RuntimeError('shadow loaded')\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(preflight.PreflightGateError, match="shadows verified module"):
+        preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
+    (installed_root / "yaml.py").unlink()
+    (installed_root / "execute-before-attestation.pth").write_text(
+        "import sys\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        preflight.PreflightGateError,
+        match="startup customization",
+    ):
+        preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
 
 
 def test_resolve_engine_offline_missing_artifact_fails_without_network(

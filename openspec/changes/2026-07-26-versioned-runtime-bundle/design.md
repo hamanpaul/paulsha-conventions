@@ -78,9 +78,12 @@ version 與 RECORD payload，
    `sha256sum`、JSON-capable `universal-ctags` 與 `venv/ensurepip`。
 3. 在 runtime root 內建立唯一 staging directory並建立 venv，以
    `--no-index --find-links` 安裝 wheel closure。
-4. 在暫存 HOME 與 fixture repo 執行 policy/preflight artifact smoke。
-5. 把完整 staging rename 到新的 immutable `releases/<version>`。
-6. 以 snapshot + temp file/symlink + `os.replace` transaction 更新
+4. 移除只供 bootstrap 的 pip/setuptools；由 host/current manager 內的 stdlib
+   verifier 直接驗 site-packages 的每個 wheel RECORD，並拒絕 `.pth`、
+   site/user customization 與同名 module shadow，因此不先執行 selected venv code。
+5. 在暫存 HOME 與 fixture repo 執行 policy/preflight artifact smoke。
+6. 把完整 staging rename 到新的 immutable `releases/<version>`。
+7. 以 snapshot + temp file/symlink + `os.replace` transaction 更新
    state/current/stable launchers/managed skill link；任一步失敗即回復全組。
 
 失敗不得改變 active state。Rollback 只可切到已安裝且重新驗證通過的 release，

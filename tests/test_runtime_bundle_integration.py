@@ -184,26 +184,8 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
         )
     )
     yaml_init.write_text("# tampered dependency\n", encoding="utf-8")
-    attestation = subprocess.run(
-        [
-            str(manager._venv_python(runtime_root / "releases" / first / "venv")),
-            "-I",
-            "-c",
-            (
-                "import json; from pathlib import Path; "
-                "from policy_check import preflight; "
-                f"root=Path({str(first_bundle)!r}); "
-                "manifest=json.loads((root/'manifest.json').read_text()); "
-                "preflight._verify_installed_wheel_payload(root, manifest)"
-            ),
-        ],
-        cwd=runtime_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert attestation.returncode != 0
-    assert "PyYAML" in attestation.stderr
+    with pytest.raises(manager.RuntimeBundleError, match="PyYAML"):
+        manager.select_release(runtime_root, first_target)
 
     tampered = (
         runtime_root

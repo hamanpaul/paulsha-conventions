@@ -549,11 +549,19 @@ def test_selector_chooses_exact_version_and_never_current(
         encoding="utf-8",
     )
 
+    events: list[str] = []
+
     def fake_run(argv, **_kwargs):
+        assert events == ["attested"]
         python = Path(argv[0])
         return python.parents[2].name
 
     monkeypatch.setattr(manager, "_run", fake_run)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a: events.append("attested"),
+    )
     selected, manifest = manager.select_release(runtime_root, repo)
     assert selected == first
     assert manifest["policy_version"] == "1.0.13"
@@ -595,6 +603,7 @@ def test_selector_accepts_inline_policy_version_comment(
         encoding="utf-8",
     )
     monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "1.0.13")
+    monkeypatch.setattr(manager, "_attest_installed_release", lambda *_a: None)
     selected, _manifest = manager.select_release(runtime_root, repo)
     assert selected == expected
 
@@ -712,6 +721,11 @@ def test_install_upgrade_rollback_and_uninstall_are_scoped(
     monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
     monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
     monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
 
     assert manager.install(first, runtime_root, skill_target) == "1.0.13"
     assert manager.install(second, runtime_root, skill_target) == "1.0.14"
@@ -745,6 +759,11 @@ def test_force_reinstall_recovers_tampered_active_release(
     monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
     monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
     monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
 
     assert manager.install(bundle, runtime_root, skill_target) == "1.0.13"
     active_manifest = (
@@ -789,6 +808,11 @@ def test_force_reinstall_cleanup_failure_is_warning_after_successful_switch(
     monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
     monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
     monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
     assert manager.install(bundle, runtime_root, skill_target) == "1.0.13"
 
     real_rmtree = manager.shutil.rmtree
@@ -892,6 +916,11 @@ def test_failed_activation_restores_state_links_launchers_and_release(
     monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
     monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
     monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
     assert manager.install(first, runtime_root, skill_target) == "1.0.13"
     before_state = (runtime_root / "state.json").read_bytes()
     before_current = os.readlink(runtime_root / "current")
@@ -1006,6 +1035,11 @@ def test_install_records_state_before_switching_current(
     monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
     monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
     monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
     monkeypatch.setattr(manager, "_write_json_atomic", record_write)
     monkeypatch.setattr(manager, "_atomic_symlink", record_link)
     manager.install(bundle, runtime_root, skill_target)

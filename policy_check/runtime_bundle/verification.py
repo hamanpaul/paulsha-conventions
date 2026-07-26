@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import base64
+import csv
 import hashlib
+import io
 import json
 import re
+import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -234,3 +238,185 @@ def load_and_verify_bundle(bundle_root: Path) -> dict[str, Any]:
         ):
             raise BundleError(f"runtime payload hash mismatch: {relative.as_posix()}")
     return manifest
+
+
+def verify_installed_wheel_payload(
+    bundle_root: Path,
+    site_packages: Path,
+    manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    verified_manifest = (
+        load_and_verify_bundle(bundle_root)
+        if manifest is None
+        else manifest
+    )
+    installed_root_input = site_packages
+    if (
+        not installed_root_input.is_dir()
+        or installed_root_input.is_symlink()
+    ):
+        raise BundleError("installed site-packages must be a regular directory")
+    installed_root = installed_root_input.resolve()
+    executable_top_levels: set[str] = set()
+    recorded_paths: set[str] = set()
+    seen_distributions: set[str] = set()
+    saw_policy_check = False
+
+    for index, entry in enumerate(verified_manifest["wheels"]):
+        wheel_relative = safe_relative_path(
+            entry["path"],
+            field=f"wheels[{index}].path",
+        )
+        wheel = bundle_root.resolve() / wheel_relative
+        try:
+            with zipfile.ZipFile(wheel) as archive:
+                metadata_names = [
+                    name
+                    for name in archive.namelist()
+                    if name.endswith(".dist-info/METADATA")
+                ]
+                record_names = [
+                    name
+                    for name in archive.namelist()
+                    if name.endswith(".dist-info/RECORD")
+                ]
+                if len(metadata_names) != 1 or len(record_names) != 1:
+                    raise BundleError(
+                        f"wheel has ambiguous metadata/RECORD: {wheel.name}"
+                    )
+                metadata_root = metadata_names[0].removesuffix("METADATA")
+                if record_names[0].removesuffix("RECORD") != metadata_root:
+                    raise BundleError(
+                        f"wheel metadata/RECORD disagree: {wheel.name}"
+                    )
+                metadata_text = archive.read(metadata_names[0]).decode("utf-8")
+                rows = list(
+                    csv.reader(
+                        io.StringIO(
+                            archive.read(record_names[0]).decode("utf-8")
+                        )
+                    )
+                )
+        except (OSError, UnicodeError, zipfile.BadZipFile) as exc:
+            raise BundleError(f"cannot inspect verified wheel: {wheel.name}") from exc
+
+        metadata_fields: dict[str, str] = {}
+        for line in metadata_text.splitlines():
+            if ": " in line:
+                key, value = line.split(": ", 1)
+                metadata_fields.setdefault(key, value)
+        distribution_name = metadata_fields.get("Name")
+        distribution_version = metadata_fields.get("Version")
+        if not distribution_name or not distribution_version:
+            raise BundleError(f"wheel lacks Name/Version: {wheel.name}")
+        normalized_name = re.sub(r"[-_.]+", "-", distribution_name).lower()
+        if normalized_name in seen_distributions:
+            raise BundleError(
+                f"duplicate installed wheel distribution: {normalized_name}"
+            )
+        seen_distributions.add(normalized_name)
+        if normalized_name == "policy-check":
+            saw_policy_check = True
+            if (
+                isinstance(verified_manifest.get("package"), dict)
+                and distribution_version
+                != verified_manifest["package"].get("version")
+            ):
+                raise BundleError(
+                    "installed policy-check wheel version does not match manifest"
+                )
+
+        checked = 0
+        for row in rows:
+            if len(row) < 3:
+                raise BundleError(
+                    f"wheel RECORD is malformed: {distribution_name}"
+                )
+            name, encoded_digest, encoded_size = row[:3]
+            if name == record_names[0]:
+                continue
+            relative = safe_relative_path(
+                name,
+                field=f"{distribution_name} RECORD path",
+            )
+            if not encoded_digest.startswith("sha256=") or not encoded_size.isdigit():
+                raise BundleError(
+                    f"wheel RECORD lacks SHA-256/size: {distribution_name}"
+                )
+            unresolved = installed_root / relative
+            chain = [unresolved, *unresolved.parents]
+            for candidate in chain:
+                if candidate == installed_root:
+                    break
+                if candidate.is_symlink():
+                    raise BundleError(
+                        f"installed wheel path uses a symlink: "
+                        f"{distribution_name}: {name}"
+                    )
+            installed_path = unresolved.resolve()
+            try:
+                installed_path.relative_to(installed_root)
+            except ValueError as exc:
+                raise BundleError(
+                    f"installed file escapes selected environment: "
+                    f"{distribution_name}"
+                ) from exc
+            if not installed_path.is_file():
+                raise BundleError(
+                    f"installed file is missing: {distribution_name}: {name}"
+                )
+            content = installed_path.read_bytes()
+            if len(content) != int(encoded_size):
+                raise BundleError(
+                    f"installed file size changed: {distribution_name}: {name}"
+                )
+            actual = base64.urlsafe_b64encode(
+                hashlib.sha256(content).digest()
+            ).decode("ascii").rstrip("=")
+            expected = encoded_digest[len("sha256="):].rstrip("=")
+            if actual != expected:
+                raise BundleError(
+                    f"installed file was modified: {distribution_name}: {name}"
+                )
+            checked += 1
+            recorded_paths.add(relative.as_posix())
+
+            top_level = relative.parts[0]
+            if top_level.endswith((".dist-info", ".data")):
+                continue
+            module_name = top_level.split(".", 1)[0]
+            if module_name.isidentifier():
+                executable_top_levels.add(module_name)
+        if checked == 0:
+            raise BundleError(
+                f"wheel RECORD verified no installed files: {distribution_name}"
+            )
+
+    if not saw_policy_check:
+        raise BundleError("installed wheels do not contain policy-check")
+    forbidden_startup = [
+        *installed_root.glob("*.pth"),
+        installed_root / "sitecustomize.py",
+        installed_root / "sitecustomize.pyc",
+        installed_root / "usercustomize.py",
+        installed_root / "usercustomize.pyc",
+    ]
+    if any(path.exists() or path.is_symlink() for path in forbidden_startup):
+        raise BundleError(
+            "installed environment contains unverified startup customization"
+        )
+    for module_name in sorted(executable_top_levels):
+        shadow_candidates = [
+            installed_root / f"{module_name}.py",
+            installed_root / f"{module_name}.pyc",
+        ]
+        shadow_candidates.extend(installed_root.glob(f"{module_name}.*.so"))
+        for shadow in shadow_candidates:
+            if not (shadow.exists() or shadow.is_symlink()):
+                continue
+            relative = shadow.relative_to(installed_root).as_posix()
+            if relative not in recorded_paths:
+                raise BundleError(
+                    f"installed environment shadows verified module: {module_name}"
+                )
+    return verified_manifest

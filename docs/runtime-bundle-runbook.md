@@ -75,10 +75,13 @@ bundle payload 驗證。已安全解包的目錄仍可另跑
 Python 3.11+ 與 `venv/ensurepip` 可用，之後才執行 <!-- doc-drift-ignore -->
 bundle 內 stdlib manager。Debian/Ubuntu 若顯示 `python3-venv` 診斷，先由系統
 管理者安裝與該 Python minor version 相符的 venv 套件；manager 也會在建立
-staging 前重做相同能力檢查。manager
-與 source engine 共用同一份 stdlib verifier；manager 在同一 runtime root 建 staging venv，
-使用 `pip --no-index --find-links` 離線安裝，於暫存 HOME 與獨立 git fixture
-執行完整 `PREFLIGHT PASS`，成功後才 rename 成 immutable release。activation
+staging 前重做相同能力檢查。manager 與 source engine 共用同一份 stdlib
+verifier；manager 在同一 runtime root 建 staging venv，使用 isolated Python 加
+`pip --no-index --find-links` 離線安裝，隨即移除只供 bootstrap 的
+pip/setuptools。接著由尚未執行 selected venv site-packages 的 stdlib manager
+驗證每個 wheel RECORD payload，並拒絕 `.pth`、site/user customization 與同名
+module shadow；通過後才於暫存 HOME 與獨立 git fixture 執行完整
+`PREFLIGHT PASS`。成功後才 rename 成 immutable release。activation
 會把 `state.json`、`current`、兩個 stable launcher 與 managed skill link 視為
 單一 transaction；任一步失敗都回復先前 snapshot。 <!-- doc-drift-ignore -->
 若 host 的 Python major/minor、implementation、ABI 或 platform 不等於 manifest 的
@@ -139,7 +142,9 @@ scripts/install-preflight-skill.sh --replace-managed-runtime
 stable launcher 以自身實體位置決定 runtime root，不接受 ambient
 `PSC_CONVENTIONS_ROOT` 改寫既有 launcher 的 ownership；deployed skill 會把其已
 定案 root 傳給 launcher。兩者與 source wrapper 都以 Python isolated mode 執行，
-不消費 ambient `PYTHONPATH`/`PYTHONHOME`。selector 只從目標 repo 的
+不消費 ambient `PYTHONPATH`/`PYTHONHOME`。selector 在啟動 selected venv 前先由
+active stdlib manager 重做 installed wheel attestation，避免竄改的第三方 module
+在驗證前被 import。selector 只從目標 repo 的
 `.project-policy.yml`（legacy alias 相容）
 讀 exact `policy_version`，要求 `releases/<version>/VERIFIED`、artifact checksum、
 manifest、每個 installed wheel 的 distribution version/RECORD payload 全部相符。
