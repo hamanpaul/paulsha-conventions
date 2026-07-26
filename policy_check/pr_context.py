@@ -12,15 +12,30 @@ def load_event_payload() -> dict:
     return json.loads(Path(path).read_text())
 
 
+def _normalize_visibility(value) -> str | None:
+    if not isinstance(value, str):
+        return None
+    v = value.strip().lower()
+    if v in {"public", "private", "internal", "unknown"}:
+        return v
+    return None
+
+
 def pr_meta_from_event(event: dict) -> dict:
     pr = event.get("pull_request") or {}
     has_pr = bool(pr)
+    repo_visibility = _normalize_visibility((event.get("repository") or {}).get("visibility"))
+    if repo_visibility is None:
+        private = (event.get("repository") or {}).get("private")
+        if isinstance(private, bool):
+            repo_visibility = "private" if private else "public"
     return {
         "pr_title": pr.get("title"),
         "pr_body": pr.get("body"),
         "pr_labels": [l["name"] for l in pr.get("labels", [])] if has_pr else None,
         "pr_base_ref": (pr.get("base") or {}).get("ref"),
         "pr_head_ref": (pr.get("head") or {}).get("ref"),
+        "repo_visibility": repo_visibility,
         "provider": "github" if has_pr else None,
         "pr_base_sha": None,
     }
@@ -72,6 +87,7 @@ def gitlab_pr_meta() -> dict:
         "pr_base_ref": _env("CI_MERGE_REQUEST_TARGET_BRANCH_NAME"),
         "pr_head_ref": _env("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"),
         "pr_base_sha": _env("CI_MERGE_REQUEST_DIFF_BASE_SHA"),
+        "repo_visibility": _normalize_visibility(os.environ.get("CI_PROJECT_VISIBILITY")),
         "provider": "gitlab",
     }
 

@@ -34,6 +34,7 @@ class RuleContext:
     pr_labels: list[str] = field(default_factory=list)
     pr_base_ref: Optional[str] = None              # e.g. main
     pr_head_ref: Optional[str] = None              # e.g. feature/foo
+    repo_visibility: Optional[str] = None
     changed_files: list[str] = field(default_factory=list)
     latest_tag: Optional[str] = None
     provider: Optional[str] = None                 # "github" | "gitlab" | None

@@ -13,6 +13,8 @@ from policy_check.rules.registry import register
 # IGNORECASE 還原原 _EMPLOYER_MARKERS 行為：大寫 username（/home/Paul/）與 /HOME/ 也須命中
 _STRUCTURAL = re.compile(r"/home/[a-z_][a-z0-9_-]*/", re.IGNORECASE)
 _PRIVATE_KEY = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+_AWS_ACCESS_KEY = re.compile(r"\b(?:AKIA|ASIA|A3T|AIDA|AGPA)[A-Z0-9]{16}\b")
+_GITHUB_TOKEN = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")
 
 
 def _build_marker_re(tokens: set[str]) -> re.Pattern[str] | None:
@@ -44,6 +46,25 @@ def _is_exempt(rel: str, allow: list[str]) -> bool:
         if rel == base or rel.startswith(base.rstrip("/") + "/"):
             return True
     return False
+
+
+def _normalize_visibility(value) -> str:
+    if not isinstance(value, str):
+        return "unknown"
+    v = value.strip().lower()
+    if v in {"public", "private", "internal", "unknown"}:
+        return v
+    return "unknown"
+
+
+def _visibility_status(visibility: str, detector: str) -> Status:
+    if detector in {"structural", "credential"}:
+        if visibility in {"public", "unknown"}:
+            return Status.FAIL
+        return Status.WARN
+    if visibility in {"public", "private", "internal", "unknown"}:
+        return Status.WARN
+    return Status.FAIL
 
 
 def _git_tracked_files(root: Path) -> list[str] | None:
@@ -91,20 +112,18 @@ class R21SecretScan:
             )
 
         tier = (ctx.config or {}).get("tier")
-        if tier != "shareable":
-            return RuleResult(
-                rule_id=self.rule_id,
-                status=Status.PASS,
-                message=(
-                    f"tier={tier!r}; R-21 enforces only tier=shareable. "
-                    "Not applicable."
-                ),
-            )
-
         config = ctx.config or {}
         allow = (config.get("secret_scan") or {}).get("allow", [])
         marker_re = _build_marker_re(resolve_markers(config))
-        hits: list[str] = []
+        visibility = _normalize_visibility(ctx.repo_visibility)
+        hit_records: list[tuple[str, int, str]] = []
+        hit_counts: dict[str, int] = {"structural": 0, "credential": 0, "marker": 0}
+
+        def record_hit(rel: str, line_number: int, detector: str) -> None:
+            hit_counts[detector] += 1
+            if len(hit_records) < 20:
+                hit_records.append((rel, line_number, detector))
+
         for path in _iter_text_files(ctx.repo_root):
             rel = path.relative_to(ctx.repo_root).as_posix()
             if _is_exempt(rel, allow):
@@ -114,20 +133,45 @@ class R21SecretScan:
             except (UnicodeDecodeError, OSError):
                 continue
             for ln, line in enumerate(text.splitlines(), 1):
-                if _STRUCTURAL.search(line) or _PRIVATE_KEY.search(line) or (
-                    marker_re is not None and marker_re.search(line)
-                ):
-                    hits.append(f"{rel}:{ln}")
-                    break
-        if hits:
+                if _STRUCTURAL.search(line) or _PRIVATE_KEY.search(line):
+                    record_hit(rel, ln, "structural")
+                if _AWS_ACCESS_KEY.search(line) or _GITHUB_TOKEN.search(line):
+                    record_hit(rel, ln, "credential")
+                if marker_re is not None and marker_re.search(line):
+                    record_hit(rel, ln, "marker")
+        if any(hit_counts.values()):
+            rank = {Status.PASS: 0, Status.WARN: 1, Status.FAIL: 2}
+            final_status = Status.PASS
+            if tier == "shareable":
+                final_status = Status.FAIL
+            else:
+                for detector in ("structural", "credential", "marker"):
+                    if hit_counts[detector] <= 0:
+                        continue
+                    candidate = _visibility_status(visibility, detector)
+                    if rank[candidate] > rank[final_status]:
+                        final_status = candidate
+
+            summary = ", ".join(
+                f"{k}:{hit_counts[k]}" for k in ("structural", "credential", "marker")
+            )
+            message = (
+                f"R-21 findings with tier={tier!r}, visibility={visibility!r}: {summary}."
+            )
+            if visibility == "unknown" and tier != "shareable":
+                message = (
+                    f"{message} visibility is unknown; apply least-privilege coupling."
+                )
             return RuleResult(
                 rule_id=self.rule_id,
-                status=Status.FAIL,
-                message=f"shareable repo contains confidential markers in {len(hits)} file(s).",
-                detail="\n".join(hits[:20]),
+                status=final_status,
+                message=message,
+                detail="\n".join(f"{r}:{ln} {detector}" for r, ln, detector in hit_records),
             )
         return RuleResult(
             rule_id=self.rule_id,
             status=Status.PASS,
-            message="No confidential markers detected.",
+            message=(
+                f"No R-21 confidentiality hits under tier={tier!r}, visibility={visibility!r}."
+            ),
         )
