@@ -2,6 +2,8 @@
 
 ## 目標
 
+目前狀態：對抗審查修復中
+
 修正 PR #47（`feature/42-46-open-issues-batch`）在 exact head `b13da64`
 接受 Claude Opus 5 對抗審查時發現的 authority 完整性缺陷與驗收缺口。
 本輪只處理 #46 canonical local preflight，不改動 #42、#45 的既有行為。

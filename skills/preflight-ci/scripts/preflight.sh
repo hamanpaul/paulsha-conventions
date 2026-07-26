@@ -33,7 +33,7 @@ esac
 
 exec env PYTHONDONTWRITEBYTECODE=1 \
   PYTHONPATH="$ENGINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
-  "$PYTHON_BIN" -m policy_check.preflight \
+  "$PYTHON_BIN" -P -m policy_check.preflight \
   "$@" \
   --repo "$TARGET_ROOT" \
   --engine-source "$ENGINE_ROOT"

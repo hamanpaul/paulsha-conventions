@@ -7,6 +7,16 @@
 - **Fix:** declare typed validation/test commands. Use `--policy-only` only
   when policy-only execution is intentional.
 
+## Repo-owned step failure reproducibility
+
+- **Symptom:** preflight reports `<step>: FAIL ... (exit=N)` without the command's
+  captured stdout/stderr.
+- **Why:** the step output is intentionally not echoed; its executable contract
+  remains the typed `argv`, `cwd`, and timeout in `.paul-project.yml`.
+- **Fix:** from the same checkout and environment, change to the declared `cwd`
+  and rerun that step's exact `argv`. Do not reinterpret it through a shell or
+  add PR metadata flags that are not part of the declared command.
+
 ## R-17 issue links
 
 - **Symptom:** policy reports R-17 failure.
@@ -42,6 +52,17 @@
   not match the target repo's `.paul-project.yml.policy_version`.
 - **Fix:** update the deployed conventions checkout and target policy version
   through the normal release/rollout process. Never fall back silently.
+
+## Invalid cache artifact removal
+
+- **Symptom:** `_populate_cache` reports `invalid cache artifact already exists`.
+- **Why:** an interrupted resolve step created a partial cache at
+  `~/.cache/paulsha-conventions/preflight/<repo-owner>/<repo>/<sha>`.
+- **Fix:** confirm the exact `<repo>@<sha>` target from the error and quarantine
+  or trash only that directory (example:
+  `~/.cache/paulsha-conventions/preflight/hamanpaul/paulsha-conventions/<sha>/`).
+  Never delete parent directories like `~/.cache/paulsha-conventions/preflight/` or
+  `~/.cache/paulsha-conventions/` wholesale.
 
 ## Remote CI disagrees with local preflight
 
