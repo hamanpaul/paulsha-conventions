@@ -2,7 +2,7 @@
 
 ## 目標
 
-目前狀態：對抗審查修復中
+目前狀態：實作與主驗收完成，等待 Opus 5 第二輪對抗覆審
 
 修正 PR #47（`feature/42-46-open-issues-batch`）在 exact head `b13da64`
 接受 Claude Opus 5 對抗審查時發現的 authority 完整性缺陷與驗收缺口。
@@ -81,3 +81,22 @@ openspec validate --all --strict
 主整合者會逐項檢查 diff、重跑全套 gate，並將修正後 exact head 再送
 Claude Opus 5 對抗覆審。只有覆審無未處置 BLOCKER/MAJOR，且 GitHub
 review threads 與 CI 都關閉，才可 merge。
+
+## 主驗收與第二輪覆審契約
+
+- Codex Spark candidate：`6bd273f`
+- 整合 head：`e5e8c33`
+- targeted tests：42 passed
+- full suite：470 passed、1 skipped
+- policy：26 pass、0 fail、0 warn
+- OpenSpec：18 passed、0 failed
+- canonical `preflight-ci --pr 47`：PASS
+
+第一輪 F1 的核心 authority bypass 成立，但「PEP 420 namespace package 不需
+`__init__.py` 即可覆寫 canonical regular package」這項細節不成立；獨立複驗以
+target regular package（含 `__init__.py`）重現。第二輪 reviewer 必須依此修正後
+前提檢查 `-P` 是否封閉實際 bypass，不得沿用已被實驗反駁的 namespace 論證。
+
+第二輪判定契約：未處置的缺陷／驗收缺口為 FAIL；已明文承認、影響分析有界且
+列管的殘餘風險不單獨構成 FAIL。輸出最多 10 項 BLOCKER／MAJOR，每項須含
+`path:line`、失敗情境與必要修正；若沒有則輸出 `VERDICT: PASS / NONE`。

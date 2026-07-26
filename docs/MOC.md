@@ -11,7 +11,7 @@
 
 ## Plans（docs/superpowers/plans）
 - [內部發行管道決策（#39）](superpowers/plans/2026-07-26-issue-39-internal-release-channel.md) — needs_human（待公司選定 package authority）
-- [#46 Opus 5 對抗審查修復](superpowers/plans/2026-07-26-issue-46-opus5-review-repair.md) — 對抗審查修復中
+- [#46 Opus 5 對抗審查修復](superpowers/plans/2026-07-26-issue-46-opus5-review-repair.md) — 實作與主驗收完成，待第二輪覆審
 - [release ledger tag SHA（#42）](superpowers/plans/2026-07-26-issue-42-release-ledger-tag-sha.md) — 已實作、對抗審查通過並整合
 - [R-21 visibility coupling（#45）](superpowers/plans/2026-07-26-issue-45-r21-visibility-coupling.md) — 已實作、對抗審查通過並 archive
 - [canonical local preflight（#46）](superpowers/plans/2026-07-26-issue-46-local-preflight.md) — 已實作並 archive，Opus 5 覆審修復中
