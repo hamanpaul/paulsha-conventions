@@ -334,7 +334,8 @@ success exits 0.
 stdlib installer manager plus its shared verifier, manifest, and `SHA256SUMS`. Production builds accept
 only a clean canonical checkout at an annotated tag. The build host needs
 Python 3.11+, `build`, and pip; dependency versions are constrained by the
-bundle-owned lock input:
+bundle-owned lock input, and every direct project dependency must have one
+exact constraint:
 
 ```bash
 policy-runtime-bundle build \
@@ -361,14 +362,17 @@ falls back to `current`, a workflow checkout, another installed version, or the
 network. Because dependency wheels can be ABI/platform specific, installation
 also requires the exact Python major/minor, implementation, ABI, and platform
 recorded by the builder. Upgrade activation happens only after offline install
-and full preflight smoke. Rollback switches to an already verified release:
+and full preflight smoke. The install host must also provide `venv/ensurepip`
+(commonly the `python3-venv` package). Rollback switches to an already verified release:
 
 ```bash
 policy-runtime-bundle rollback --version X.Y.Z
 ```
 
-An active release that fails tamper verification can be reconstructed from the
-same externally verified artifact with `install --force-reinstall`; the
+An existing unmanaged `preflight-ci` directory or source-checkout symlink must
+first be moved to a reversible backup; the installer never adopts it. An active
+release that fails tamper verification can be reconstructed from the same
+externally verified artifact with `install --force-reinstall`; the
 replacement is staged and smoked before the state-owned release is exchanged.
 
 See [the runtime bundle runbook](docs/runtime-bundle-runbook.md) for layout,
@@ -839,7 +843,10 @@ policy-runtime-bundle extract \
 不會 fallback 到 `current`、workflow、其他版本或網路。升級須在離線安裝與
 完整 preflight smoke 都通過後才 activation。相依 wheel 可能綁 ABI/platform，
 因此安裝主機必須符合 manifest 記錄的 Python major/minor、implementation、ABI
-與 platform；rollback 只切到既有 VERIFIED release。active release 若被竄改，
+與 platform，並具備 `venv/ensurepip`（Debian/Ubuntu 通常是 `python3-venv`）；
+每個 direct project dependency 也必須有 exact constraint。既有未受管
+`preflight-ci` 目錄或 source-checkout symlink 須先移到可逆 backup，installer
+不會自動接管；rollback 只切到既有 VERIFIED release。active release 若被竄改，
 可用同一份已核對外部 digest 的 artifact 執行 `install --force-reinstall`；
 新 release 仍須先完成 staging 與 smoke 才替換。操作細節見
 [runtime bundle runbook](docs/runtime-bundle-runbook.md)。

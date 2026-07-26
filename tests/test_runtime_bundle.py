@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from policy_check.runtime_bundle import builder, integrity, manager
+from policy_check.runtime_bundle import builder, cli, integrity, manager
 
 
 def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
@@ -166,6 +166,34 @@ def test_installer_reports_python_311_requirement_before_using_safe_path(
 
     assert result.returncode == 2
     assert "Python 3.11+" in result.stderr
+
+
+def test_installer_reports_missing_venv_support_before_runtime_code(
+    tmp_path: Path,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "bundle")
+    incompatible = tmp_path / "python-no-venv"
+    incompatible.write_text(
+        "#!/usr/bin/env bash\n"
+        '[[ "${1:-}" == "-c" ]] && exit 0\n'
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    incompatible.chmod(0o755)
+    env = dict(os.environ)
+    env["PYTHON_BIN"] = str(incompatible)
+
+    result = subprocess.run(
+        [str(bundle / "install.sh")],
+        cwd=bundle,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "python3-venv" in result.stderr
 
 
 def test_verify_bundle_accepts_fix_suffix_as_post_package_version(
@@ -388,6 +416,24 @@ def test_prepare_package_version_rejects_mismatched_snapshot(tmp_path: Path) -> 
         builder._prepare_package_version(snapshot, "1.0.13-fix.2")
 
 
+def test_runtime_constraints_lock_every_direct_project_dependency(
+    tmp_path: Path,
+) -> None:
+    repo = Path(__file__).resolve().parents[1]
+    builder._validate_runtime_constraints(repo)
+
+    snapshot = tmp_path / "snapshot"
+    constraints = snapshot / "policy_check" / "runtime_bundle" / "constraints.txt"
+    constraints.parent.mkdir(parents=True)
+    constraints.write_text("PyYAML==6.0.3\n", encoding="utf-8")
+    (snapshot / "pyproject.toml").write_text(
+        '[project]\ndependencies = ["PyYAML>=6.0", "example-dep>=1"]\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(integrity.BundleError, match="example-dep"):
+        builder._validate_runtime_constraints(snapshot)
+
+
 def test_bundle_output_must_be_outside_source(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
@@ -479,6 +525,52 @@ def test_install_rejects_incompatible_runtime_before_staging(tmp_path: Path) -> 
     assert not runtime_root.exists()
 
 
+def test_install_rejects_missing_venv_support_before_staging(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    runtime_root = tmp_path / "runtime"
+
+    def fail_ensurepip(*_args, **_kwargs):
+        raise manager.RuntimeBundleError("ensurepip missing")
+
+    monkeypatch.setattr(manager, "_run", fail_ensurepip)
+    with pytest.raises(manager.RuntimeBundleError, match="python3-venv"):
+        manager.install(
+            bundle,
+            runtime_root,
+            tmp_path / "skills" / "preflight-ci",
+        )
+    assert not (runtime_root / "releases").exists()
+
+
+def test_install_wraps_venv_creation_failure_and_removes_staging(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    runtime_root = tmp_path / "runtime"
+
+    class BrokenEnvBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, _path):
+            raise subprocess.CalledProcessError(1, ["python", "-m", "venv"])
+
+    monkeypatch.setattr(manager.venv, "EnvBuilder", BrokenEnvBuilder)
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
+    with pytest.raises(manager.RuntimeBundleError, match="python3-venv"):
+        manager.install(
+            bundle,
+            runtime_root,
+            tmp_path / "skills" / "preflight-ci",
+        )
+    assert not list((runtime_root / "releases").glob(".staging-*"))
+    assert not (runtime_root / "releases" / "1.0.13").exists()
+
+
 def test_install_upgrade_rollback_and_uninstall_are_scoped(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -557,6 +649,49 @@ def test_force_reinstall_recovers_tampered_active_release(
     assert state["previous"] is None
 
 
+def test_force_reinstall_cleanup_failure_is_warning_after_successful_switch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+
+    class FakeEnvBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, path):
+            python = Path(path) / (
+                "Scripts/python.exe" if os.name == "nt" else "bin/python"
+            )
+            python.parent.mkdir(parents=True)
+            python.write_text("# fake\n", encoding="utf-8")
+
+    monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
+    monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    assert manager.install(bundle, runtime_root, skill_target) == "1.0.13"
+
+    real_rmtree = manager.shutil.rmtree
+
+    def fail_old_release_cleanup(path, *args, **kwargs):
+        if Path(path).name.startswith(".replaced-"):
+            raise OSError("simulated cleanup failure")
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(manager.shutil, "rmtree", fail_old_release_cleanup)
+    assert manager.install(
+        bundle,
+        runtime_root,
+        skill_target,
+        force_reinstall=True,
+    ) == "1.0.13"
+    assert manager._verified_release(runtime_root, "1.0.13").name == "1.0.13"
+    assert "cleanup failed" in capsys.readouterr().err
+
+
 def test_rollback_rejects_already_active_target_without_corrupting_previous(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -583,6 +718,65 @@ def test_rollback_rejects_already_active_target_without_corrupting_previous(
         manager.rollback(runtime_root, skill_target, "1.0.14")
     state = json.loads((runtime_root / "state.json").read_text(encoding="utf-8"))
     assert state["previous"] == first.name
+    assert skill_target.resolve() == (
+        second / "artifact" / "skills" / "preflight-ci"
+    ).resolve()
+
+
+def test_activate_repairs_managed_links_without_rewriting_history(
+    tmp_path: Path,
+) -> None:
+    first = _install_fake_release(tmp_path, "1.0.13")
+    second = _install_fake_release(tmp_path, "1.0.14")
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+    (runtime_root / "current").symlink_to(first)
+    skill_target.parent.mkdir(parents=True)
+    skill_target.symlink_to(first / "artifact" / "skills" / "preflight-ci")
+    state_path = runtime_root / "state.json"
+    original_state = {
+        "schema_version": 1,
+        "current": "1.0.14",
+        "previous": "1.0.13",
+        "installed": ["1.0.13", "1.0.14"],
+    }
+    state_path.write_text(json.dumps(original_state), encoding="utf-8")
+
+    manager.activate(runtime_root, skill_target, "1.0.14")
+
+    assert (runtime_root / "current").resolve() == second.resolve()
+    assert skill_target.resolve() == (
+        second / "artifact" / "skills" / "preflight-ci"
+    ).resolve()
+    assert json.loads(state_path.read_text(encoding="utf-8")) == original_state
+    assert (runtime_root / "bin" / "policy-preflight").is_file()
+
+
+def test_public_cli_forwards_force_reinstall(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[str] = []
+
+    def fake_manager_main(argv):
+        received.extend(argv)
+        return 0
+
+    monkeypatch.setattr(cli, "manager_main", fake_manager_main)
+    assert cli.main(
+        [
+            "install",
+            "--bundle",
+            str(tmp_path / "bundle"),
+            "--force-reinstall",
+        ]
+    ) == 0
+    assert received == [
+        "install",
+        "--bundle",
+        str(tmp_path / "bundle"),
+        "--force-reinstall",
+    ]
 
 
 def test_install_records_state_before_switching_current(

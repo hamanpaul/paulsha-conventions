@@ -3,12 +3,14 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import sysconfig
 import tarfile
 import tempfile
+import tomllib
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
@@ -39,6 +41,10 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
 }
 "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' || {
   echo "ERROR: Python 3.11+ is required to install this runtime bundle" >&2
+  exit 2
+}
+"$PYTHON_BIN" -I -m ensurepip --version >/dev/null 2>&1 || {
+  echo "ERROR: Python venv/ensurepip support is required; install python3-venv" >&2
   exit 2
 }
 exec "$PYTHON_BIN" -P "$BUNDLE_ROOT/runtime/runtime_manager.py" \
@@ -214,6 +220,62 @@ def _prepare_package_version(snapshot: Path, policy_version: str) -> None:
         raise BundleError("cannot prepare package version in tag snapshot") from exc
 
 
+def _normalize_distribution_name(value: str) -> str:
+    return re.sub(r"[-_.]+", "-", value).lower()
+
+
+def _validate_runtime_constraints(snapshot: Path) -> None:
+    pyproject = snapshot / "pyproject.toml"
+    constraints = (
+        snapshot / "policy_check" / "runtime_bundle" / "constraints.txt"
+    )
+    try:
+        project = tomllib.loads(pyproject.read_text(encoding="utf-8")).get(
+            "project",
+            {},
+        )
+        dependency_values = project.get("dependencies", [])
+        constraint_lines = constraints.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
+        raise BundleError("runtime dependency inputs are unreadable") from exc
+    if not isinstance(dependency_values, list) or not all(
+        isinstance(item, str) for item in dependency_values
+    ):
+        raise BundleError("[project].dependencies must be a list of strings")
+
+    required: set[str] = set()
+    for dependency in dependency_values:
+        match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", dependency)
+        if match is None:
+            raise BundleError(f"cannot parse project dependency: {dependency}")
+        required.add(_normalize_distribution_name(match.group(1)))
+
+    locked: set[str] = set()
+    for raw_line in constraint_lines:
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        match = re.fullmatch(
+            r"([A-Za-z0-9][A-Za-z0-9._-]*)==([A-Za-z0-9][A-Za-z0-9.!+_-]*)",
+            line,
+        )
+        if match is None:
+            raise BundleError(
+                "runtime constraints must use one exact name==version per line"
+            )
+        name = _normalize_distribution_name(match.group(1))
+        if name in locked:
+            raise BundleError(f"duplicate runtime constraint: {name}")
+        locked.add(name)
+
+    missing = sorted(required - locked)
+    if missing:
+        raise BundleError(
+            "runtime constraints do not lock project dependencies: "
+            + ", ".join(missing)
+        )
+
+
 def _prepare_output_directory(source: Path, output_dir: Path) -> Path:
     destination = output_dir.resolve()
     try:
@@ -242,6 +304,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
         temp = Path(temporary)
         snapshot = _tag_snapshot(source, tag, temp)
         _prepare_package_version(snapshot, version)
+        _validate_runtime_constraints(snapshot)
         wheel_build = temp / "wheel-build"
         wheels = temp / "wheels"
         wheel_build.mkdir()
@@ -352,6 +415,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
                 f"python=={sys.version_info.major}.{sys.version_info.minor}",
                 f"abi=={sysconfig.get_config_var('SOABI') or ''}",
                 f"platform=={sysconfig.get_platform()}",
+                "python-venv+ensurepip",
                 "git",
                 "sha256sum",
                 "universal-ctags",

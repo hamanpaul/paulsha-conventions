@@ -35,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument("--bundle", required=True)
     install.add_argument("--root")
     install.add_argument("--skill-target")
+    install.add_argument("--force-reinstall", action="store_true")
     rollback = subparsers.add_parser("rollback")
     rollback.add_argument("--root")
     rollback.add_argument("--skill-target")
@@ -76,6 +77,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 forwarded.extend(["--skill-target", args.skill_target])
             if getattr(args, "version", None):
                 forwarded.extend(["--version", args.version])
+            if getattr(args, "force_reinstall", False):
+                forwarded.append("--force-reinstall")
             return manager_main([args.command, *forwarded])
     except BundleError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

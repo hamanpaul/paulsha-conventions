@@ -18,6 +18,7 @@ paulsha-conventions-vX.Y.Z/
 ├── wheels/
 ├── skills/preflight-ci/
 ├── runtime/runtime_manager.py
+├── runtime/runtime_verifier.py
 ├── install.sh
 ├── manifest.json
 └── SHA256SUMS
@@ -40,11 +41,13 @@ Bundle 內 checksum 只證明取得後的完整性。能替換 bundle 與 checks
 ```text
 ~/.local/share/paulsha-conventions/
 ├── releases/<version>/
+│   ├── artifact/
+│   │   ├── wheels/
+│   │   ├── skills/preflight-ci/
+│   │   ├── runtime/
+│   │   ├── manifest.json
+│   │   └── SHA256SUMS
 │   ├── venv/
-│   ├── wheels/
-│   ├── skills/preflight-ci/
-│   ├── manifest.json
-│   ├── SHA256SUMS
 │   └── VERIFIED
 ├── current -> releases/<version>
 ├── bin/policy-preflight
@@ -68,8 +71,9 @@ Launcher 必須清除 `PYTHONPATH`／`PYTHONHOME`、啟用 safe-path/isolated im
 
 1. 以 source/manager 共用的 stdlib verifier 驗 manifest schema、path
    containment、hash、version 與 wheel closure。
-2. 在 runtime root 內建立唯一 staging directory。
-3. 建立 venv，以 `--no-index --find-links` 安裝 wheel closure。
+2. 在任何 staging 寫入前確認 host 提供 `venv/ensurepip`。
+3. 在 runtime root 內建立唯一 staging directory並建立 venv，以
+   `--no-index --find-links` 安裝 wheel closure。
 4. 在暫存 HOME 與 fixture repo 執行 policy/preflight artifact smoke。
 5. 把完整 staging rename 到新的 immutable `releases/<version>`。
 6. 以 temp file/symlink + `os.replace` 原子更新 state/current/managed skill link。
@@ -79,8 +83,9 @@ Launcher 必須清除 `PYTHONPATH`／`PYTHONHOME`、啟用 safe-path/isolated im
 state/target containment 證明為 installer 管理的產物。
 
 active release 若被竄改，以 `install --force-reinstall` 從已核對外部 digest
-的同版 bundle 修復；新 staging 通過 venv/smoke 後才交換 state-owned release。
-rollback target 已是 current 時明確拒絕，禁止把 previous 汙染成 current。
+的同版 bundle 修復；新 staging 通過 venv/smoke 後才交換 state-owned release，
+並在 state/link 成功後 best-effort 清理 displaced 舊目錄。rollback target 已是
+current 時先修復受管 links 再明確拒絕，禁止把 previous 汙染成 current。
 
 `~/.agents/skills/preflight-ci` 若是非受管真檔／目錄／外部 symlink，installer
 必須拒絕且保留原內容。所有測試使用暫存 HOME/runtime root，不碰真實 user state。

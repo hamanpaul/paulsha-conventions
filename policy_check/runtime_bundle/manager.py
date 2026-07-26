@@ -126,6 +126,36 @@ def _ensure_skill_target(target: Path, root: Path) -> None:
             ) from exc
 
 
+def _require_venv_support(cwd: Path) -> None:
+    try:
+        _run(
+            [sys.executable, "-I", "-m", "ensurepip", "--version"],
+            cwd=cwd,
+        )
+    except RuntimeBundleError as exc:
+        raise RuntimeBundleError(
+            "Python venv/ensurepip support is unavailable; install python3-venv"
+        ) from exc
+
+
+def _symlink_points_to(link: Path, target: Path) -> bool:
+    return (
+        link.is_symlink()
+        and link.resolve(strict=False) == target.resolve(strict=False)
+    )
+
+
+def _cleanup_displaced_release(displaced: Path) -> None:
+    try:
+        shutil.rmtree(displaced)
+    except OSError as exc:
+        print(
+            "WARNING: replacement succeeded but old release cleanup failed: "
+            f"{displaced} ({exc.__class__.__name__})",
+            file=sys.stderr,
+        )
+
+
 def _make_smoke_repo(root: Path, version: str) -> tuple[Path, Path]:
     repo = root / "fixture"
     repo.mkdir()
@@ -340,6 +370,7 @@ def install(
     )
     if not isinstance(previous, str):
         previous = None
+    _require_venv_support(bundle)
     releases.mkdir(parents=True, exist_ok=True)
     staging = releases / f".staging-{version}-{uuid.uuid4().hex}"
     displaced: Path | None = None
@@ -347,7 +378,12 @@ def install(
         (staging / "artifact").parent.mkdir(parents=True)
         shutil.copytree(bundle.resolve(), staging / "artifact")
         verify_bundle(staging / "artifact")
-        venv.EnvBuilder(with_pip=True, clear=False).create(staging / "venv")
+        try:
+            venv.EnvBuilder(with_pip=True, clear=False).create(staging / "venv")
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise RuntimeBundleError(
+                "cannot create a venv with pip; install python3-venv"
+            ) from exc
         python = _venv_python(staging / "venv")
         wheel_dir = staging / "artifact" / "wheels"
         package_version = manifest["package"]["version"]
@@ -382,8 +418,6 @@ def install(
                 os.replace(displaced, destination)
                 displaced = None
                 raise
-            shutil.rmtree(displaced)
-            displaced = None
         else:
             os.replace(staging, destination)
     except BaseException:
@@ -393,25 +427,29 @@ def install(
             os.replace(displaced, destination)
         raise
 
-    _write_json_atomic(
-        state_path,
-        {
-            "schema_version": 1,
-            "current": version,
-            "previous": previous,
-            "installed": sorted(
-                path.name
-                for path in releases.iterdir()
-                if path.is_dir() and not path.name.startswith(".")
-            ),
-        },
-    )
-    _atomic_symlink(destination, runtime_root / "current")
-    _install_launcher(runtime_root)
-    _atomic_symlink(
-        runtime_root / "current" / "artifact" / "skills" / "preflight-ci",
-        skill_target,
-    )
+    try:
+        _write_json_atomic(
+            state_path,
+            {
+                "schema_version": 1,
+                "current": version,
+                "previous": previous,
+                "installed": sorted(
+                    path.name
+                    for path in releases.iterdir()
+                    if path.is_dir() and not path.name.startswith(".")
+                ),
+            },
+        )
+        _atomic_symlink(destination, runtime_root / "current")
+        _install_launcher(runtime_root)
+        _atomic_symlink(
+            runtime_root / "current" / "artifact" / "skills" / "preflight-ci",
+            skill_target,
+        )
+    finally:
+        if displaced is not None:
+            _cleanup_displaced_release(displaced)
     return version
 
 
@@ -509,17 +547,24 @@ def activate(root: Path, skill_target: Path, version: str) -> None:
     state_path = runtime_root / "state.json"
     state = _load_state(state_path)
     current = state.get("current") if isinstance(state.get("current"), str) else None
-    if current == version:
-        return
-    previous = current
-    state.update({"schema_version": 1, "current": version, "previous": previous})
-    _write_json_atomic(state_path, state)
-    _atomic_symlink(release, runtime_root / "current")
-    _install_launcher(runtime_root)
-    _atomic_symlink(
-        runtime_root / "current" / "artifact" / "skills" / "preflight-ci",
-        skill_target,
+    current_link = runtime_root / "current"
+    skill_release = release / "artifact" / "skills" / "preflight-ci"
+    links_match = (
+        _symlink_points_to(current_link, release)
+        and _symlink_points_to(skill_target, skill_release)
+        and (runtime_root / "bin" / "policy-preflight").is_file()
     )
+    if current == version and links_match:
+        return
+    if current != version:
+        previous = current
+        state.update({"schema_version": 1, "current": version, "previous": previous})
+        _write_json_atomic(state_path, state)
+    if not _symlink_points_to(current_link, release):
+        _atomic_symlink(release, current_link)
+    _install_launcher(runtime_root)
+    if not _symlink_points_to(skill_target, skill_release):
+        _atomic_symlink(skill_release, skill_target)
 
 
 def rollback(root: Path, skill_target: Path, version: str | None) -> str:
@@ -529,7 +574,10 @@ def rollback(root: Path, skill_target: Path, version: str | None) -> str:
     if not isinstance(target, str):
         raise RuntimeBundleError("no verified previous version is recorded")
     if state.get("current") == target:
-        raise RuntimeBundleError(f"release is already active: {target}")
+        activate(root, skill_target, target)
+        raise RuntimeBundleError(
+            f"release is already active; managed links verified: {target}"
+        )
     activate(root, skill_target, target)
     return target
 

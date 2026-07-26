@@ -86,7 +86,8 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
     )
 
     first = "9.8.0"
-    _commit_release(source, "1.0.13", first)
+    baseline = (source / "VERSION").read_text(encoding="utf-8").strip()
+    _commit_release(source, baseline, first)
     first_bundle, first_digest = _build_and_extract(source, tmp_path, first)
     _repeat_archive, repeat_digest = builder.build_bundle(
         source,

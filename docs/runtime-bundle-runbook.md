@@ -18,6 +18,7 @@ paulsha-conventions-vX.Y.Z/
 ├── wheels/
 ├── skills/preflight-ci/
 ├── runtime/runtime_manager.py
+├── runtime/runtime_verifier.py
 ├── install.sh
 ├── manifest.json
 └── SHA256SUMS
@@ -45,8 +46,11 @@ policy-runtime-bundle build \
 ```
 
 發行建置環境需提供 Python 3.11+、`build` 與 pip。Python dependency 版本由
-`policy_check/runtime_bundle/constraints.txt` 鎖定；builder 會正規化 archive
-mode/mtime/owner/order，並把 build interpreter、ABI 與 platform 寫入 manifest。
+`policy_check/runtime_bundle/constraints.txt` 鎖定；builder 會先檢查每個
+`[project].dependencies` 都有一筆 exact `name==version` constraint，再正規化
+archive mode/mtime/owner/order，並把 build interpreter、ABI 與 platform 寫入
+manifest。constraint 檔也會包含在 wheel package data，避免 source/wheel
+交付內容漂移。
 
 在任何 Python 3.11+ 主機以外部 digest 驗證 archive 與 member，再原子解包：
 
@@ -64,8 +68,11 @@ bundle payload 驗證。已安全解包的目錄仍可另跑
 
 ## Install and state
 
-`install.sh` 先確認 Python 3.11+，再以 `sha256sum --check --strict` 驗證所有
-payload，之後才執行 <!-- doc-drift-ignore --> bundle 內 stdlib manager。manager
+`install.sh` 先以 `sha256sum --check --strict` 驗證所有 payload，再確認
+Python 3.11+ 與 `venv/ensurepip` 可用，之後才執行 <!-- doc-drift-ignore -->
+bundle 內 stdlib manager。Debian/Ubuntu 若顯示 `python3-venv` 診斷，先由系統
+管理者安裝與該 Python minor version 相符的 venv 套件；manager 也會在建立
+staging 前重做相同能力檢查。manager
 與 source engine 共用同一份 stdlib verifier；manager 在同一 runtime root 建 staging venv，
 使用 `pip --no-index --find-links` 離線安裝，於暫存 HOME 與獨立 git fixture
 執行完整 `PREFLIGHT PASS`，成功後才 rename 成 immutable release 並原子切換
@@ -89,6 +96,21 @@ ABI/platform-specific wheel closure 誤當成任意 Python 3.11+ 通用 bundle�
 
 可用 `XDG_DATA_HOME` 或 `PSC_CONVENTIONS_ROOT` 調整 root。安裝器不覆寫實體
 skill directory，也不接管指向 runtime root 外的既有 symlink。
+
+既有 source checkout 安裝通常會留下實體目錄或指向 repo 的 symlink；首次切換
+到 runtime bundle 前必須由操作者明確備份，不可讓 installer 自動接管：
+
+```bash
+skill_target="$HOME/.agents/skills/preflight-ci"
+skill_backup="$HOME/.agents/skills/preflight-ci.pre-runtime-bundle"
+test ! -e "$skill_backup" && test ! -L "$skill_backup"
+mv "$skill_target" "$skill_backup"
+./install.sh
+```
+
+若安裝失敗，在確認 `$skill_target` 仍不存在後用
+`mv "$skill_backup" "$skill_target"` 還原。安裝成功並完成 smoke 後才可保留或
+人工移除 backup；不要以覆寫、遞迴刪除或自動 adopt 取代這個可逆步驟。
 
 ## Exact selection
 
@@ -125,7 +147,10 @@ SHA-256 的 bundle 執行：
 ```
 
 manager 會先完成全新 staging/venv/smoke，再原子交換 state-owned 同版 release；
-不得以手動刪除 active directory 或整個 runtime root 代替。
+交換成功後才清理 displaced 舊目錄。清理失敗只輸出含精確路徑的 warning，
+不把已完成的 state/link 切換誤報為失敗；操作者可在確認路徑是
+`releases/.replaced-<version>-<uuid>` 且不是 active/current 後人工清理。不得以
+手動刪除 active directory 或整個 runtime root 代替。
 
 ## Publication boundary
 
