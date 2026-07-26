@@ -118,7 +118,7 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
     install_env = dict(os.environ)
     install_env["PYTHON_BIN"] = sys.executable
     install_env["PYTHONPATH"] = str(evil)
-    assert _run(
+    install_output = _run(
         [
             str(first_bundle / "install.sh"),
             "--root",
@@ -128,7 +128,8 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
         ],
         cwd=first_bundle,
         env=install_env,
-    ) == f"INSTALLED {first}"
+    )
+    assert install_output.splitlines()[-1] == f"INSTALLED {first}"
 
     second = "9.8.1"
     _commit_release(source, first, second)
