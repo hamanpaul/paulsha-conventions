@@ -1,15 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENGINE_ROOT="$(git -C "$SKILL_DIR" rev-parse --show-toplevel 2>/dev/null)" || {
-  echo "ERROR: preflight-ci is not inside a paulsha-conventions checkout" >&2
-  exit 2
-}
+SKILL_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "ERROR: run preflight-ci from a target git repository" >&2
   exit 2
 }
+
+ENGINE_ROOT="$(git -C "$SKILL_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "$ENGINE_ROOT" || ! -f "$ENGINE_ROOT/policy_check/preflight.py" ]]; then
+  PHYSICAL_RUNTIME_ROOT=""
+  case "$SKILL_DIR" in
+    */releases/*/artifact/skills/preflight-ci)
+      PHYSICAL_RUNTIME_ROOT="${SKILL_DIR%/releases/*/artifact/skills/preflight-ci}"
+      ;;
+    */current/artifact/skills/preflight-ci)
+      PHYSICAL_RUNTIME_ROOT="${SKILL_DIR%/current/artifact/skills/preflight-ci}"
+      ;;
+  esac
+  if [[ -n "$PHYSICAL_RUNTIME_ROOT" && -x "$PHYSICAL_RUNTIME_ROOT/bin/policy-preflight" ]]; then
+    RUNTIME_ROOT="$PHYSICAL_RUNTIME_ROOT"
+  elif [[ -n "${PSC_CONVENTIONS_ROOT:-}" ]]; then
+    RUNTIME_ROOT="$PSC_CONVENTIONS_ROOT"
+  elif [[ -n "${XDG_DATA_HOME:-}" ]]; then
+    RUNTIME_ROOT="$XDG_DATA_HOME/paulsha-conventions"
+  else
+    RUNTIME_ROOT="$HOME/.local/share/paulsha-conventions"
+  fi
+  LAUNCHER="$RUNTIME_ROOT/bin/policy-preflight"
+  [[ -x "$LAUNCHER" ]] || {
+    echo "ERROR: deployed policy-preflight launcher not found: $LAUNCHER" >&2
+    exit 2
+  }
+  PSC_CONVENTIONS_ROOT="$RUNTIME_ROOT" exec "$LAUNCHER" --repo "$TARGET_ROOT" "$@"
+fi
 
 PYTHON_BIN="${PSC_PREFLIGHT_PYTHON:-python3}"
 case "$PYTHON_BIN" in
@@ -32,8 +56,9 @@ esac
 }
 
 exec env PYTHONDONTWRITEBYTECODE=1 \
-  PYTHONPATH="$ENGINE_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
-  "$PYTHON_BIN" -P -m policy_check.preflight \
+  "$PYTHON_BIN" -I -B -c \
+  'import runpy, sys; root = sys.argv.pop(1); sys.path.insert(0, root); runpy.run_module("policy_check.preflight", run_name="__main__")' \
+  "$ENGINE_ROOT" \
   "$@" \
   --repo "$TARGET_ROOT" \
   --engine-source "$ENGINE_ROOT"

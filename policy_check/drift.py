@@ -11,6 +11,7 @@ from pathlib import Path
 
 import yaml
 
+from policy_check import config as policy_config
 from policy_check.config import CONFIG_NAMES
 
 CANONICAL_ORG = "hamanpaul"
@@ -148,11 +149,13 @@ def local_policy_version(path: str = ".") -> str | None:
     unmanaged — which would silently pass the freshness gate.
     """
     root = Path(path)
-    for name in CONFIG_NAMES:
-        cfg = root / name
-        if cfg.exists():
-            return parse_policy_version(cfg.read_text(encoding="utf-8"))
-    return None
+    if not any((root / name).exists() for name in CONFIG_NAMES):
+        return None
+    try:
+        resolution = policy_config.resolve(root)
+    except policy_config.ConfigError:
+        return ""
+    return str(resolution.data["policy_version"])
 
 
 def canonical_version_live(org: str = CANONICAL_ORG, repo: str = CANONICAL_REPO) -> str:
@@ -182,6 +185,7 @@ def fetch_policy_version(org: str, repo: str) -> str | None:
     DriftFetchError on a gh/network failure that is NOT a clean 404, so a
     transient error is not misreported as ``unmanaged``.
     """
+    found: list[str] = []
     for name in CONFIG_NAMES:
         try:
             out = _gh([
@@ -197,8 +201,18 @@ def fetch_policy_version(org: str, repo: str) -> str | None:
             raise DriftFetchError(str(exc)) from exc
         except (OSError, subprocess.SubprocessError) as exc:  # gh missing, timeout, etc.
             raise DriftFetchError(str(exc)) from exc
-        return parse_policy_version(out)
-    return None  # all names cleanly 404 → genuinely absent (unmanaged)
+        found.append(out)
+    if not found:
+        return None  # all names cleanly 404 → genuinely absent (unmanaged)
+    if len(found) == 2:
+        try:
+            canonical = yaml.safe_load(found[0])
+            legacy = yaml.safe_load(found[1])
+        except yaml.YAMLError:
+            return ""
+        if canonical != legacy:
+            return ""
+    return parse_policy_version(found[0])
 
 
 # --- CLI ---

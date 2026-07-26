@@ -8,7 +8,8 @@ Usage:
   scripts/update-cli-help.sh [--repo PATH] [--dry-run] [--apply] [--help]
 
 Description:
-  Read .paul-project.yml -> cli entries, execute each command help output,
+  Read .project-policy.yml (legacy alias accepted) -> cli entries,
+  execute each command help output,
   and update corresponding marker block in reflected docs file.
 
 Options:
@@ -50,8 +51,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
-CONFIG_PATH="$REPO_ROOT/.paul-project.yml"
-[[ -f "$CONFIG_PATH" ]] || { echo "ERROR: missing config: $CONFIG_PATH" >&2; exit 1; }
+CONFIG_PATH="$REPO_ROOT/.project-policy.yml"
+LEGACY_CONFIG_PATH="$REPO_ROOT/.paul-project.yml"
+[[ -f "$CONFIG_PATH" || -f "$LEGACY_CONFIG_PATH" ]] || {
+  echo "ERROR: missing .project-policy.yml or .paul-project.yml" >&2
+  exit 1
+}
 
 python3 - "$REPO_ROOT" "$APPLY" <<'PY'
 from __future__ import annotations
@@ -65,20 +70,21 @@ import sys
 from pathlib import Path
 
 import yaml
+from policy_check import config as policy_config
 
 repo_root = Path(sys.argv[1])
 apply = bool(int(sys.argv[2]))
 
-cfg_path = repo_root / ".paul-project.yml"
 try:
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-except yaml.YAMLError as exc:
-    print(f"ERROR: invalid YAML in {cfg_path}: {exc}", file=sys.stderr)
+    resolution = policy_config.resolve(repo_root)
+    cfg = resolution.data
+except policy_config.ConfigError as exc:
+    print(f"ERROR: invalid project policy config: {exc}", file=sys.stderr)
     raise SystemExit(2)
 
 entries = cfg.get("cli") or []
 if not isinstance(entries, list):
-    print("ERROR: .paul-project.yml key 'cli' must be a list", file=sys.stderr)
+    print("ERROR: project policy key 'cli' must be a list", file=sys.stderr)
     raise SystemExit(2)
 
 if not entries:

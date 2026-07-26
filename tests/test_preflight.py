@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import json
+import base64
+import hashlib
+import re
 import subprocess
+import sys
+import zipfile
 from argparse import Namespace
 from pathlib import Path
 from typing import Sequence
@@ -173,6 +178,24 @@ def test_parse_steps_rejects_path_traversal(tmp_path) -> None:
         preflight._parse_steps(config, tmp_path)
 
 
+@pytest.mark.parametrize("value", ["a/./b", "a//b", "./subdir"])
+def test_parse_steps_rejects_dot_segments(tmp_path, value: str) -> None:
+    config = {
+        "preflight": {
+            "steps": [
+                {
+                    "name": "unsafe",
+                    "kind": "tests",
+                    "argv": ["pytest"],
+                    "cwd": value,
+                }
+            ]
+        }
+    }
+    with pytest.raises(preflight.PreflightUsageError, match="unsafe"):
+        preflight._parse_steps(config, tmp_path)
+
+
 def test_parse_steps_rejects_duplicate_names(tmp_path) -> None:
     config = {
         "preflight": {
@@ -259,6 +282,191 @@ def test_resolve_engine_uses_verified_cached_offline(monkeypatch, tmp_path) -> N
         cache_dir=tmp_path / "cache",
     )
     assert identity.root == checkout
+
+
+def test_cache_artifact_rejects_dot_segment_repo(tmp_path) -> None:
+    with pytest.raises(preflight.PreflightGateError, match="unsafe"):
+        preflight._cache_artifact(tmp_path, ".hidden/repo", "a" * 40)
+    with pytest.raises(preflight.PreflightGateError, match="unsafe"):
+        preflight._cache_artifact(tmp_path, "owner/..", "a" * 40)
+
+
+def test_installed_manifest_engine_is_exact_and_does_not_resolve_source(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}\n", encoding="utf-8")
+    manifest = {
+        "policy_version": "1.0.12",
+        "release_tag": "v1.0.12",
+        "release_commit": "a" * 40,
+        "wheels": [{"sha256": "b" * 64}],
+    }
+    monkeypatch.setattr(preflight, "load_and_verify_bundle", lambda _root: manifest)
+    monkeypatch.setattr(preflight, "_installed_version", lambda: "1.0.12")
+    monkeypatch.setattr(
+        preflight,
+        "_verify_installed_wheel_payload",
+        lambda *_a: None,
+    )
+    monkeypatch.setattr(
+        preflight,
+        "__file__",
+        str(Path(sys.prefix) / "lib" / "policy_check" / "preflight.py"),
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_self_engine",
+        lambda *_a: pytest.fail("installed mode must not inspect source checkout"),
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_workflow_pin",
+        lambda *_a: pytest.fail("installed mode must not inspect workflow"),
+    )
+    identity = preflight._resolve_engine(
+        tmp_path,
+        _config(),
+        offline=True,
+        cache_dir=tmp_path / "cache",
+        installed_manifest=manifest_path,
+    )
+    assert identity.kind == "installed-bundle"
+    assert "v1.0.12@" in identity.display
+
+
+def test_installed_wheel_payload_attests_imported_files(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    prefix = tmp_path / "venv"
+    installed_root = prefix / "lib"
+    package = installed_root / "policy_check"
+    package.mkdir(parents=True)
+
+    def digest(content: bytes) -> str:
+        encoded = base64.urlsafe_b64encode(hashlib.sha256(content).digest())
+        return encoded.decode("ascii").rstrip("=")
+
+    def write_wheel(
+        wheel_name: str,
+        distribution_name: str,
+        version: str,
+        files: dict[str, bytes],
+    ) -> Path:
+        dist_info = (
+            f"{distribution_name.replace('-', '_')}-{version}.dist-info"
+        )
+        metadata_name = f"{dist_info}/METADATA"
+        metadata = (
+            f"Name: {distribution_name}\nVersion: {version}\n"
+        ).encode()
+        payload = {**files, metadata_name: metadata}
+        for name, content in payload.items():
+            path = installed_root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        record_name = f"{dist_info}/RECORD"
+        record = "".join(
+            f"{name},sha256={digest(content)},{len(content)}\n"
+            for name, content in payload.items()
+        ) + f"{record_name},,\n"
+        wheel = tmp_path / "bundle" / "wheels" / wheel_name
+        wheel.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(wheel, mode="w") as archive:
+            for name, content in payload.items():
+                archive.writestr(name, content)
+            archive.writestr(record_name, record)
+        return wheel
+
+    policy_wheel = write_wheel(
+        "policy_check-1.0.12-py3-none-any.whl",
+        "policy-check",
+        "1.0.12",
+        {
+            "policy_check/__init__.py": b"",
+            "policy_check/preflight.py": b"# installed preflight\n",
+        },
+    )
+    yaml_wheel = write_wheel(
+        "PyYAML-6.0.3-py3-none-any.whl",
+        "PyYAML",
+        "6.0.3",
+        {"yaml/__init__.py": b"# installed yaml\n"},
+    )
+
+    class FakeDistribution:
+        def __init__(self, version: str):
+            self.version = version
+
+        def locate_file(self, name):
+            return installed_root / str(name)
+
+    distributions = {
+        "policy-check": FakeDistribution("1.0.12"),
+        "pyyaml": FakeDistribution("6.0.3"),
+    }
+
+    def distribution(name: str) -> FakeDistribution:
+        normalized = re.sub(r"[-_.]+", "-", name).lower()
+        return distributions[normalized]
+
+    monkeypatch.setattr(preflight.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        preflight,
+        "__file__",
+        str(package / "preflight.py"),
+    )
+    monkeypatch.setattr(
+        preflight.importlib.metadata,
+        "distribution",
+        distribution,
+    )
+    manifest = {
+        "wheels": [
+            {"path": f"wheels/{policy_wheel.name}", "sha256": "a" * 64},
+            {"path": f"wheels/{yaml_wheel.name}", "sha256": "b" * 64},
+        ]
+    }
+    preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
+    (installed_root / "yaml" / "__init__.py").write_text(
+        "tampered\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(preflight.PreflightGateError, match="PyYAML"):
+        preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
+    (installed_root / "yaml" / "__init__.py").write_bytes(
+        b"# installed yaml\n"
+    )
+    (installed_root / "yaml.py").write_text(
+        "raise RuntimeError('shadow loaded')\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(preflight.PreflightGateError, match="shadows verified module"):
+        preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
+    (installed_root / "yaml.py").unlink()
+    (installed_root / "execute-before-attestation.pth").write_text(
+        "import sys\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        preflight.PreflightGateError,
+        match="startup customization",
+    ):
+        preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
+    (installed_root / "execute-before-attestation.pth").unlink()
+    startup_package = installed_root / "sitecustomize"
+    startup_package.mkdir()
+    (startup_package / "__init__.py").write_text(
+        "raise RuntimeError('executed before attestation')\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        preflight.PreflightGateError,
+        match="startup customization",
+    ):
+        preflight._verify_installed_wheel_payload(tmp_path / "bundle", manifest)
 
 
 def test_resolve_engine_offline_missing_artifact_fails_without_network(
@@ -599,6 +807,100 @@ def test_run_steps_honors_skip_tests_and_policy_only(monkeypatch, tmp_path) -> N
     assert calls == []
 
 
+def test_run_steps_fails_when_every_declared_step_is_conditionally_skipped(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    step = preflight.PreflightStep(
+        "optional",
+        "validation",
+        ("check",),
+        ".",
+        "missing-path",
+        10,
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_run_command",
+        lambda *_a, **_kw: pytest.fail("skipped step must not execute"),
+    )
+    assert not preflight._run_steps(
+        tmp_path,
+        [step],
+        skip_tests=False,
+        policy_only=False,
+    )
+    assert "all eligible preflight steps were conditional skips" in capsys.readouterr().out
+
+
+def test_run_steps_requires_policy_only_when_no_steps_are_declared(
+    tmp_path,
+    capsys,
+) -> None:
+    assert not preflight._run_steps(
+        tmp_path,
+        [],
+        skip_tests=False,
+        policy_only=False,
+    )
+    assert "no preflight steps declared" in capsys.readouterr().out
+    assert preflight._run_steps(
+        tmp_path,
+        [],
+        skip_tests=False,
+        policy_only=True,
+    )
+
+
+def test_run_steps_allows_explicit_skip_tests_for_tests_only_config(
+    tmp_path,
+) -> None:
+    step = preflight.PreflightStep(
+        "tests",
+        "tests",
+        ("pytest",),
+        ".",
+        None,
+        10,
+    )
+    assert preflight._run_steps(
+        tmp_path,
+        [step],
+        skip_tests=True,
+        policy_only=False,
+    )
+
+
+def test_run_steps_allows_explicit_skip_tests_with_missing_optional_validation(
+    tmp_path,
+) -> None:
+    steps = [
+        preflight.PreflightStep(
+            "optional",
+            "validation",
+            ("check",),
+            ".",
+            "missing-path",
+            10,
+        ),
+        preflight.PreflightStep(
+            "tests",
+            "tests",
+            ("pytest",),
+            ".",
+            None,
+            10,
+        ),
+    ]
+    assert preflight._run_steps(
+        tmp_path,
+        steps,
+        skip_tests=True,
+        policy_only=False,
+    )
+
+
 def test_run_steps_timeout_is_failure(monkeypatch, tmp_path) -> None:
     def timeout(*_args, **_kwargs):
         raise subprocess.TimeoutExpired(["pytest"], 1)
@@ -737,7 +1039,40 @@ def test_run_policy_isolates_installed_engine_from_repo_shadowing(
         context,
         preflight.EngineIdentity("installed", "test", None),
     )
-    assert captured["argv"][1] == "-I"
+    assert captured["argv"][1:3] == ["-P", "-I"]
+
+
+def test_run_policy_failure_reports_bounded_actionable_output(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    monkeypatch.setattr(
+        preflight,
+        "_run_command",
+        lambda argv, **_kwargs: subprocess.CompletedProcess(
+            argv,
+            1,
+            "",
+            "RuntimeError: universal-ctags is unavailable\n",
+        ),
+    )
+    context = preflight.PullRequestContext(
+        "feat: x",
+        "",
+        (),
+        "main",
+        "feature/x",
+        "public",
+    )
+    assert not preflight._run_policy(
+        tmp_path,
+        context,
+        preflight.EngineIdentity("installed", "test", None),
+    )
+    output = capsys.readouterr().out
+    assert "policy: FAIL" in output
+    assert "universal-ctags is unavailable" in output
 
 
 def test_main_returns_one_when_any_gate_fails(monkeypatch, tmp_path) -> None:

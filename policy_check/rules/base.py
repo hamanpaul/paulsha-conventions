@@ -28,7 +28,7 @@ class RuleContext:
     repo_root: Path
     profile: str                          # stage-driven | flat
     policy_version: str
-    config: dict = field(default_factory=dict)     # 解析後的 .paul-project.yml
+    config: dict = field(default_factory=dict)     # parsed project policy manifest
     pr_title: Optional[str] = None
     pr_body: Optional[str] = None
     pr_labels: list[str] = field(default_factory=list)

@@ -72,9 +72,28 @@ def test_r08_rejects_invalid_tier(fixture_repo):
 
 
 def _write_config(tmp_path: Path, cfg_text: str) -> Path:
-    # 直接把 config 寫到 repo root，沿用 config_path 的 .paul-project.yml 解析
-    (tmp_path / ".paul-project.yml").write_text(cfg_text, encoding="utf-8")
+    (tmp_path / ".project-policy.yml").write_text(cfg_text, encoding="utf-8")
     return tmp_path
+
+
+def test_r08_warns_on_legacy_only_manifest(tmp_path):
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.4\n",
+        encoding="utf-8",
+    )
+    result = get_rule("R-08").check(make_ctx(tmp_path))
+    assert result.status == Status.WARN
+    assert "deprecated legacy alias" in result.message
+
+
+def test_r08_rejects_non_mapping_agent_files(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.4\nagent_files: symlink\n",
+    )
+    result = get_rule("R-08").check(make_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "agent_files must be a mapping" in result.message
 
 
 def test_r08_accepts_secret_scan_marker_lists(tmp_path):
@@ -579,3 +598,26 @@ def test_r08_allows_unknown_preflight_subkeys(tmp_path):
         "      future_field: value\n",
     )
     assert _r08().check(_ctx(repo)).status == Status.PASS
+
+
+def test_r08_warns_when_config_semantics_match_between_names(tmp_path):
+    content = "policy_profile: flat\npolicy_version: 1.0.13\n"
+    (tmp_path / ".project-policy.yml").write_text(content, encoding="utf-8")
+    (tmp_path / ".paul-project.yml").write_text(content, encoding="utf-8")
+    result = _r08().check(_ctx(tmp_path))
+    assert result.status == Status.WARN
+    assert "identical semantics" in result.message
+
+
+def test_r08_fails_when_config_contents_conflict(tmp_path):
+    (tmp_path / ".project-policy.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.13\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.12\n",
+        encoding="utf-8",
+    )
+    result = _r08().check(_ctx(tmp_path))
+    assert result.status == Status.FAIL
+    assert "config conflict" in result.message

@@ -8,7 +8,7 @@ policy_version: 1.0.13
 所有 agent 進入 session 時，必須依下列 checklist 行動。
 
 ## 本 repo 的 profile
-- policy_profile: `flat` （見 `.paul-project.yml`）
+- policy_profile: `flat` （見 `.project-policy.yml`）
 - policy_version: `1.0.13`
 
 ## 動工前

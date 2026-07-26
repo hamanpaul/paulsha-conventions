@@ -17,6 +17,13 @@ from typing import Any, Mapping, Sequence
 import yaml
 
 from policy_check import config as policy_config
+from policy_check.runtime_bundle.integrity import (
+    BundleError,
+    load_and_verify_bundle,
+)
+from policy_check.runtime_bundle.verification import (
+    verify_installed_wheel_payload as verify_installed_bundle_wheels,
+)
 
 
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -151,6 +158,12 @@ def _repo_relative_path(value: object, *, field: str, allow_dot: bool = True) ->
     raw = value.strip()
     if "\\" in raw:
         raise PreflightUsageError(f"{field} must use POSIX separators")
+    raw_parts = raw.split("/")
+    if (
+        any(part in {"", ".."} for part in raw_parts)
+        or ("." in raw_parts and raw != ".")
+    ):
+        raise PreflightUsageError(f"{field} contains an unsafe path segment")
     path = PurePosixPath(raw)
     if path.is_absolute() or ".." in path.parts:
         raise PreflightUsageError(f"{field} must not escape the repository")
@@ -377,16 +390,23 @@ def _parse_steps(config: Mapping[str, Any], repo_root: Path) -> list[PreflightSt
         timeout = raw.get("timeout_seconds", DEFAULT_STEP_TIMEOUT)
         if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
             raise PreflightUsageError(f"{prefix}.timeout_seconds must be a positive integer")
-        cwd = _repo_relative_path(raw.get("cwd", "."), field=f"{prefix}.cwd")
-        _resolve_inside(repo_root, cwd, field=f"{prefix}.cwd")
+        cwd = _repo_relative_path(
+            raw.get("cwd", "."),
+            field=f"preflight step {name} cwd",
+        )
+        _resolve_inside(repo_root, cwd, field=f"preflight step {name} cwd")
         when = raw.get("when_path_exists")
         if when is not None:
             when = _repo_relative_path(
                 when,
-                field=f"{prefix}.when_path_exists",
+                field=f"preflight step {name} when_path_exists",
                 allow_dot=False,
             )
-            _resolve_inside(repo_root, when, field=f"{prefix}.when_path_exists")
+            _resolve_inside(
+                repo_root,
+                when,
+                field=f"preflight step {name} when_path_exists",
+            )
         steps.append(
             PreflightStep(
                 name=name,
@@ -598,13 +618,24 @@ def _verify_cache(artifact: Path, engine_repo: str, sha: str) -> Path | None:
 
 
 def _cache_artifact(cache_dir: Path, engine_repo: str, sha: str) -> Path:
+    if ENGINE_REPO_RE.fullmatch(engine_repo) is None or FULL_SHA_RE.fullmatch(sha) is None:
+        raise PreflightGateError("unsafe engine repo or SHA")
     owner, repo = engine_repo.split("/", 1)
-    return cache_dir.resolve() / owner / repo / sha
+    if any(
+        segment in {"", ".", ".."} or not segment[0].isalnum()
+        for segment in (owner, repo)
+    ):
+        raise PreflightGateError("unsafe engine repo or SHA")
+    root = cache_dir.resolve()
+    artifact = root / owner / repo / sha
+    try:
+        artifact.relative_to(root)
+    except ValueError as exc:
+        raise PreflightGateError("cache artifact escapes cache root") from exc
+    return artifact
 
 
 def _populate_cache(cache_dir: Path, engine_repo: str, sha: str) -> Path:
-    if ENGINE_REPO_RE.fullmatch(engine_repo) is None or FULL_SHA_RE.fullmatch(sha) is None:
-        raise PreflightGateError("unsafe engine repo or SHA")
     artifact = _cache_artifact(cache_dir, engine_repo, sha)
     if artifact.exists():
         raise PreflightGateError(
@@ -658,6 +689,84 @@ def _populate_cache(cache_dir: Path, engine_repo: str, sha: str) -> Path:
     return verified
 
 
+def _installed_manifest_engine(
+    manifest_path: Path,
+    config: Mapping[str, Any],
+) -> EngineIdentity:
+    path = manifest_path.resolve()
+    if path.name != "manifest.json" or not path.is_file():
+        raise PreflightGateError("installed manifest path is invalid")
+    try:
+        manifest = load_and_verify_bundle(path.parent)
+    except BundleError as exc:
+        raise PreflightGateError(f"installed bundle verification failed: {exc}") from exc
+    expected = str(config.get("policy_version") or "").strip()
+    if manifest.get("policy_version") != expected:
+        raise PreflightGateError(
+            f"installed manifest version mismatch: need {expected}"
+        )
+    installed = _installed_version()
+    if not _version_matches(installed, expected):
+        raise PreflightGateError(
+            f"installed policy-check version mismatch: need {expected}"
+        )
+    package_root = Path(__file__).resolve().parent
+    prefix = Path(sys.prefix).resolve()
+    try:
+        package_root.relative_to(prefix)
+    except ValueError as exc:
+        raise PreflightGateError(
+            "imported policy_check is outside the selected installed environment"
+        ) from exc
+    wheel_hashes = {
+        str(entry.get("sha256"))
+        for entry in manifest.get("wheels", [])
+        if isinstance(entry, dict)
+    }
+    if not wheel_hashes or any(len(digest) != 64 for digest in wheel_hashes):
+        raise PreflightGateError("installed manifest wheel identity is incomplete")
+    _verify_installed_wheel_payload(path.parent, manifest)
+    return EngineIdentity(
+        "installed-bundle",
+        (
+            f"policy-check=={installed} "
+            f"{manifest['release_tag']}@{manifest['release_commit']}"
+        ),
+        None,
+    )
+
+
+def _verify_installed_wheel_payload(
+    bundle_root: Path,
+    manifest: Mapping[str, Any],
+) -> None:
+    try:
+        distribution = importlib.metadata.distribution("policy-check")
+    except importlib.metadata.PackageNotFoundError as exc:
+        raise PreflightGateError(
+            "installed policy-check distribution is missing"
+        ) from exc
+    installed_root = Path(distribution.locate_file("")).resolve()
+    try:
+        verified = verify_installed_bundle_wheels(
+            bundle_root,
+            installed_root,
+            dict(manifest),
+        )
+    except BundleError as exc:
+        raise PreflightGateError(str(exc)) from exc
+    if verified.get("wheels") != manifest.get("wheels"):
+        raise PreflightGateError("installed manifest wheel identity changed")
+    expected_preflight = Path(
+        distribution.locate_file("policy_check/preflight.py")
+    ).resolve()
+    if Path(__file__).resolve() != expected_preflight:
+        raise PreflightGateError(
+            "imported preflight module does not belong to "
+            "the installed distribution"
+        )
+
+
 def _resolve_engine(
     repo_root: Path,
     config: Mapping[str, Any],
@@ -665,7 +774,10 @@ def _resolve_engine(
     offline: bool,
     cache_dir: Path,
     engine_source: Path | None = None,
+    installed_manifest: Path | None = None,
 ) -> EngineIdentity:
+    if installed_manifest is not None:
+        return _installed_manifest_engine(installed_manifest, config)
     if engine_source is not None:
         return _source_engine(
             engine_source.resolve(),
@@ -708,6 +820,19 @@ def _gate_result(name: str, status: str, started: float, detail: str = "") -> No
     print(f"{name}: {status} {duration:.2f}s{suffix}")
 
 
+def _bounded_command_diagnostic(
+    result: subprocess.CompletedProcess[str],
+) -> str:
+    text = (result.stderr or result.stdout).strip()
+    if not text:
+        return ""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    diagnostic = " | ".join(lines[-4:])
+    if len(diagnostic) > 800:
+        diagnostic = diagnostic[-800:]
+    return diagnostic
+
+
 def _run_policy(
     repo_root: Path,
     context: PullRequestContext,
@@ -716,7 +841,7 @@ def _run_policy(
     argv = [sys.executable]
     policy_cwd = repo_root
     if engine.root is None:
-        argv.append("-I")
+        argv.extend(["-P", "-I"])
     else:
         policy_cwd = engine.root
     argv.extend(["-m", "policy_check", "--repo", str(repo_root)])
@@ -758,7 +883,12 @@ def _run_policy(
         )
         return False
     ok = result.returncode == 0
-    _gate_result("policy", "PASS" if ok else "FAIL", started, f"exit={result.returncode}")
+    detail = f"exit={result.returncode}"
+    if not ok:
+        diagnostic = _bounded_command_diagnostic(result)
+        if diagnostic:
+            detail += f"; output={diagnostic}"
+    _gate_result("policy", "PASS" if ok else "FAIL", started, detail)
     return ok
 
 
@@ -770,12 +900,16 @@ def _run_steps(
     policy_only: bool,
 ) -> bool:
     all_passed = True
+    executed = 0
+    conditionally_skipped = 0
+    explicitly_skipped_tests = 0
     for step in steps:
         if policy_only:
             print(f"{step.name}: SKIP (policy-only)")
             continue
         if skip_tests and step.kind == "tests":
             print(f"{step.name}: SKIP (skip-tests)")
+            explicitly_skipped_tests += 1
             continue
         if step.when_path_exists is not None and not _resolve_inside(
             repo_root,
@@ -783,8 +917,10 @@ def _run_steps(
             field=f"preflight step {step.name}",
         ).exists():
             print(f"{step.name}: SKIP (when_path_exists missing)")
+            conditionally_skipped += 1
             continue
         cwd = _resolve_inside(repo_root, step.cwd, field=f"preflight step {step.name}")
+        executed += 1
         started = time.monotonic()
         try:
             result = _run_command(
@@ -817,6 +953,18 @@ def _run_steps(
             f"exit={result.returncode}",
         )
         all_passed = all_passed and ok
+    if not policy_only and executed == 0:
+        if (
+            steps
+            and explicitly_skipped_tests > 0
+            and explicitly_skipped_tests + conditionally_skipped == len(steps)
+        ):
+            return all_passed
+        if not steps:
+            print("repo-gates: FAIL (no preflight steps declared)")
+        else:
+            print("repo-gates: FAIL (all eligible preflight steps were conditional skips)")
+        return False
     return all_passed
 
 
@@ -842,14 +990,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-tests", action="store_true")
     parser.add_argument("--policy-only", action="store_true")
     parser.add_argument("--cache-dir")
-    parser.add_argument(
+    engine = parser.add_mutually_exclusive_group()
+    engine.add_argument(
         "--engine-source",
         help="Canonical paulsha-conventions checkout supplied by the owning skill",
+    )
+    engine.add_argument(
+        "--installed-manifest",
+        help="Verified deployed bundle manifest supplied by the stable selector",
     )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if sys.version_info < (3, 11):
+        print(
+            "PREFLIGHT ERROR: policy-preflight requires Python 3.11 or newer",
+            file=sys.stderr,
+        )
+        return 2
     parser = build_parser()
     args = parser.parse_args(argv)
     repo_root = Path(args.repo).resolve()
@@ -865,7 +1024,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         context = _load_context(args, repo_root)
         _validate_git_context(repo_root, context)
         steps = _parse_steps(config, repo_root)
-        if args.engine_source and not args.policy_only and not steps:
+        if (args.engine_source or args.installed_manifest) and not args.policy_only and not steps:
             raise PreflightUsageError(
                 "skill-driven full preflight requires at least one preflight step; "
                 "use --policy-only for an explicit policy-only run"
@@ -889,6 +1048,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine_source=(
                 Path(args.engine_source).expanduser()
                 if args.engine_source
+                else None
+            ),
+            installed_manifest=(
+                Path(args.installed_manifest).expanduser()
+                if args.installed_manifest
                 else None
             ),
         )

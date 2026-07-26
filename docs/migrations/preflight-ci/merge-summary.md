@@ -15,7 +15,7 @@ This is a governed authority migration:
 1. `paulsha-conventions/skills/preflight-ci` becomes the only canonical skill.
 2. Its wrapper delegates to the adjacent source engine with
    `--engine-source`; it owns no resolver/gate implementation.
-3. Target repositories own validation/test argv in `.paul-project.yml`.
+3. Target repositories own validation/test argv in `.project-policy.yml`.
 4. The user-level `~/.agents/skills/preflight-ci` symlink is switched only
    after tests and a real skill smoke pass.
 5. The old source skill is removed in a separate dependent PR after the new

@@ -3,10 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import PurePosixPath
 
-import yaml
-
 from policy_check.rules.base import RuleContext, RuleResult, Status
-from policy_check.config import CONFIG_NAMES_DISPLAY, config_path
+from policy_check import config as policy_config
 from policy_check.rules.registry import register
 
 # conventions_engine.repo 須為 'owner/repo'（空字串 = 未設/NA sentinel，放行）
@@ -32,30 +30,17 @@ class R08PolicyConfigSchema:
     _valid_tiers = {"shareable", "work", "personal"}
 
     def check(self, ctx: RuleContext) -> RuleResult:
-        path = config_path(ctx.repo_root)
-        if not path.is_file():
-            return RuleResult(
-                rule_id=self.rule_id,
-                status=Status.FAIL,
-                message=f"Missing {CONFIG_NAMES_DISPLAY} at repository root.",
-            )
-
         try:
-            loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except yaml.YAMLError as exc:
+            resolution = policy_config.resolve(ctx.repo_root)
+        except policy_config.ConfigError as exc:
             return RuleResult(
                 rule_id=self.rule_id,
                 status=Status.FAIL,
-                message=f"{path.name} is not valid YAML: {exc}",
+                message=str(exc),
             )
 
-        data = loaded or {}
-        if not isinstance(data, dict):
-            return RuleResult(
-                rule_id=self.rule_id,
-                status=Status.FAIL,
-                message=f"{path.name} top-level must be a mapping/object.",
-            )
+        path = resolution.path
+        data = resolution.data
 
         missing = [key for key in self._required_keys if key not in data]
         if missing:
@@ -338,8 +323,9 @@ class R08PolicyConfigSchema:
                     return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
                                       message=f"auto_build.{key} must be a list of strings")
 
+        warning = resolution.warning
         return RuleResult(
             rule_id=self.rule_id,
-            status=Status.PASS,
-            message=f"{path.name} schema is valid for R-08.",
+            status=Status.WARN if warning else Status.PASS,
+            message=warning or f"{path.name} schema is valid for R-08.",
         )

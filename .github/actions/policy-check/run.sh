@@ -28,7 +28,8 @@ fi
 
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
-# Validate profile and version against .project-policy.yml, with .paul-project.yml fallback (fail-close)
+# Validate the canonical manifest and legacy alias through the engine's single
+# resolution path, including dual-file semantic conflict detection.
 # REPO_INPUT can be absolute or relative path; normalize it
 if [[ "$REPO_INPUT" = /* ]]; then
   PROJECT_CONFIG_PATH="${REPO_INPUT}/.project-policy.yml"
@@ -37,40 +38,37 @@ else
   PROJECT_CONFIG_PATH="${WORKSPACE}/${REPO_INPUT}/.project-policy.yml"
   LEGACY_CONFIG_PATH="${WORKSPACE}/${REPO_INPUT}/.paul-project.yml"
 fi
-CONFIG_PATH="$PROJECT_CONFIG_PATH"
-if [[ ! -f "$CONFIG_PATH" ]]; then
-  CONFIG_PATH="$LEGACY_CONFIG_PATH"
-fi
-
-if [[ -f "$CONFIG_PATH" ]]; then
+if [[ -f "$PROJECT_CONFIG_PATH" || -f "$LEGACY_CONFIG_PATH" ]]; then
   # Run validation script, preserving stderr
   VALIDATION_SCRIPT=$(cat <<'PYEOF'
 import sys
-import yaml
-config_path = sys.argv[1]
+from pathlib import Path
+from policy_check import config as policy_config
+
+repo_root = Path(sys.argv[1])
 expected_profile = sys.argv[2]
 expected_version = sys.argv[3]
 
 try:
-    with open(config_path, encoding="utf-8") as f:
-        config = yaml.safe_load(f) or {}
+    resolution = policy_config.resolve(repo_root)
+    config = resolution.data
     actual_profile = config.get("policy_profile", "")
     actual_version = config.get("policy_version", "")
     
     if expected_profile and actual_profile != expected_profile:
-        print(f"ERROR: profile mismatch: action expects '{expected_profile}' but {config_path} has '{actual_profile}'", file=sys.stderr)
+        print(f"ERROR: profile mismatch: action expects '{expected_profile}' but {resolution.path.name} has '{actual_profile}'", file=sys.stderr)
         sys.exit(1)
     if expected_version and actual_version != expected_version:
-        print(f"ERROR: version mismatch: action expects '{expected_version}' but {config_path} has '{actual_version}'", file=sys.stderr)
+        print(f"ERROR: version mismatch: action expects '{expected_version}' but {resolution.path.name} has '{actual_version}'", file=sys.stderr)
         sys.exit(1)
     print("OK")
-except Exception as exc:
+except policy_config.ConfigError as exc:
     print(f"ERROR: failed to validate config: {exc}", file=sys.stderr)
     sys.exit(1)
 PYEOF
 )
 
-  if ! "$PYTHON_BIN" -c "$VALIDATION_SCRIPT" "$CONFIG_PATH" "$PROFILE_INPUT" "$VERSION_INPUT"; then
+  if ! "$PYTHON_BIN" -c "$VALIDATION_SCRIPT" "$WORKSPACE/$REPO_INPUT" "$PROFILE_INPUT" "$VERSION_INPUT"; then
     echo "Profile/version validation failed. See error above." >&2
     exit 1
   fi

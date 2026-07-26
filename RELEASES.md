@@ -1,7 +1,7 @@
 # Policy 版本譜系
 
 `policy_version` ↔ engine 釋出（tag / commit SHA）的權威對照表。
-下游 repo 的 `POLICY_ENGINE_REF` 釘選 SHA 時，依此表查對應 policy 版本；升版傳播 PR 必須同時更新 `.paul-project.yml` 的 `policy_version`、四份 agent 檔與此處對應的 SHA。
+下游 repo 的 `POLICY_ENGINE_REF` 釘選 SHA 時，依此表查對應 policy 版本；升版傳播 PR 必須同時更新 canonical `.project-policy.yml` 的 `policy_version`、四份 agent 檔與此處對應的 SHA。
 
 | policy_version | engine tag | engine SHA | 摘要 |
 |----------------|-----------|------------|------|
@@ -27,7 +27,7 @@
 canonical bump 後，落後的下游 repo 由**其自身 agent** 依序升版（engine 不主動改下游；`python3 -m policy_check.drift report --org hamanpaul` 會點名哪些 repo `behind`）：
 
 1. 以 `git rev-list -n1 vX.Y.Z` 取得目標 tag 的完整 commit SHA，並與上表的 `policy_version`、engine tag 與 engine SHA 三者交叉核對。
-2. 改 `.paul-project.yml` 的 `policy_version`。
+2. 改 canonical `.project-policy.yml` 的 `policy_version`（legacy alias 只供相容，不應由新 PR 產生）。
 3. 若 repo 有啟用 README 的 `repo-version` generated-fact marker，更新其值為新 `VERSION`（R-26 為安全網，漏改則 CI 會擋）。
 4. re-pin workflow 的 `policy_engine_ref` 為新 SHA，並補 `# vX.Y.Z` 尾註（R-23）。
 5. canonical `CLAUDE.md` 有變則更新（`AGENTS.md` / `GEMINI.md` / `.github/copilot-instructions.md` 在 `agent_files.mode: symlink` 下自動跟隨）。

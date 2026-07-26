@@ -17,7 +17,7 @@ def _pyproject_version() -> str:
 
 def test_version_lockstep():
     v_file = (REPO / "VERSION").read_text(encoding="utf-8").strip()
-    cfg = yaml.safe_load((REPO / ".paul-project.yml").read_text(encoding="utf-8"))
+    cfg = yaml.safe_load((REPO / ".project-policy.yml").read_text(encoding="utf-8"))
     assert _pyproject_version() == v_file == str(cfg["policy_version"]), (
         f"版本不一致：pyproject={_pyproject_version()} VERSION={v_file} "
         f"policy_version={cfg['policy_version']}"

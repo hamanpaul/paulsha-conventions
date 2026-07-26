@@ -17,12 +17,14 @@ test = ["pytest>=7.0"]
 [project.scripts]
 policy-check = "policy_check.cli:main"
 policy-preflight = "policy_check.preflight:main"
+policy-runtime-bundle = "policy_check.runtime_bundle.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["policy_check*"]
 
 [tool.setuptools.package-data]
 "policy_check.data" = ["*.yml"]
+"policy_check.runtime_bundle" = ["constraints.txt"]
 
 [tool.pytest.ini_options]
 # fixtures/ 內含給規則測試用的假 repo（可能帶 test_*.py），不可被 pytest 蒐集

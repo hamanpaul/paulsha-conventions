@@ -2,11 +2,12 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: scripts/install-preflight-skill.sh [--target-root PATH] [--replace]"
+  echo "Usage: scripts/install-preflight-skill.sh [--target-root PATH] [--replace] [--replace-managed-runtime]"
 }
 
 TARGET_ROOT="${HOME}/.agents/skills"
 REPLACE=0
+REPLACE_MANAGED_RUNTIME=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -20,6 +21,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --replace)
       REPLACE=1
+      shift
+      ;;
+    --replace-managed-runtime)
+      REPLACE=1
+      REPLACE_MANAGED_RUNTIME=1
       shift
       ;;
     --help|-h)
@@ -49,6 +55,16 @@ if [[ -L "$TARGET" ]]; then
     echo "preflight-ci already points to $SOURCE"
     exit 0
   fi
+  LINK_TARGET="$(readlink "$TARGET")"
+  RESOLVED_TARGET="$(readlink -f "$TARGET")"
+  case "$LINK_TARGET:$RESOLVED_TARGET" in
+    */current/artifact/skills/preflight-ci:*|*:*/releases/*/artifact/skills/preflight-ci)
+      [[ $REPLACE_MANAGED_RUNTIME -eq 1 ]] || {
+        echo "ERROR: $TARGET is managed by a runtime bundle; follow the runtime bundle runbook or pass --replace-managed-runtime for an explicit source-checkout migration" >&2
+        exit 1
+      }
+      ;;
+  esac
   [[ $REPLACE -eq 1 ]] || {
     echo "ERROR: $TARGET points elsewhere; pass --replace to migrate the symlink" >&2
     exit 1
