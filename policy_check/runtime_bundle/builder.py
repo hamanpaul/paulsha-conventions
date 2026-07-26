@@ -9,7 +9,7 @@ import sys
 import tarfile
 import tempfile
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
 
 from .integrity import (
@@ -137,6 +137,30 @@ def _deterministic_archive(source: Path, archive: Path, *, epoch: int) -> None:
                         tar.addfile(info)
 
 
+def _tag_snapshot(repo: Path, tag: str, destination: Path) -> Path:
+    destination.mkdir(parents=True, exist_ok=True)
+    snapshot = destination / "source"
+    archive = destination / "source.tar"
+    _run(
+        ["git", "archive", "--format=tar", "--output", str(archive), tag],
+        cwd=repo,
+    )
+    snapshot.mkdir()
+    try:
+        with tarfile.open(archive, mode="r:") as source_tar:
+            for member in source_tar.getmembers():
+                path = PurePosixPath(member.name)
+                if (
+                    path.is_absolute()
+                    or any(part in {"", ".", ".."} for part in path.parts)
+                ):
+                    raise BundleError("git archive contains an unsafe member")
+            source_tar.extractall(snapshot, filter="data")
+    except (OSError, tarfile.TarError) as exc:
+        raise BundleError("cannot extract clean tag snapshot") from exc
+    return snapshot
+
+
 def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
     source = repo.resolve()
     version, commit, epoch = attest_clean_tag(source, tag)
@@ -149,6 +173,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
 
     with tempfile.TemporaryDirectory(prefix="runtime-bundle-") as temporary:
         temp = Path(temporary)
+        snapshot = _tag_snapshot(source, tag, temp)
         wheel_build = temp / "wheel-build"
         wheels = temp / "wheels"
         wheel_build.mkdir()
@@ -163,9 +188,9 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
                 "--wheel",
                 "--outdir",
                 str(wheel_build),
-                str(source),
+                str(snapshot),
             ],
-            cwd=source,
+            cwd=snapshot,
             env=env,
         )
         built = sorted(wheel_build.glob("policy_check-*.whl"))
@@ -183,7 +208,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
                 str(wheels),
                 str(built[0]),
             ],
-            cwd=source,
+            cwd=snapshot,
         )
         if any(path.suffix != ".whl" for path in wheels.iterdir()):
             raise BundleError("dependency closure contains a non-wheel artifact")
@@ -196,10 +221,12 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
         bundle.mkdir()
         shutil.move(str(wheels), bundle / "wheels")
         skill_root = bundle / "skills" / "preflight-ci"
-        shutil.copytree(source / "skills" / "preflight-ci", skill_root)
+        shutil.copytree(snapshot / "skills" / "preflight-ci", skill_root)
         runtime_dir = bundle / "runtime"
         runtime_dir.mkdir()
-        manager_source = Path(__file__).with_name("manager.py")
+        manager_source = snapshot / "policy_check" / "runtime_bundle" / "manager.py"
+        if not manager_source.is_file():
+            raise BundleError("tag snapshot is missing the runtime manager")
         shutil.copy2(manager_source, runtime_dir / "runtime_manager.py")
         installer = bundle / "install.sh"
         installer.write_text(INSTALLER, encoding="utf-8")

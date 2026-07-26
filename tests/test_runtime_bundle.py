@@ -168,6 +168,16 @@ def test_attest_clean_annotated_tag_and_rejects_dirty(tmp_path: Path) -> None:
     assert version == "1.0.13"
     assert len(commit) == 40
     assert epoch > 0
+    snapshot = builder._tag_snapshot(repo, "v1.0.13", tmp_path / "snapshot")
+    assert (snapshot / "VERSION").read_text(encoding="utf-8") == "1.0.13\n"
+    assert (
+        subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=repo,
+            text=True,
+        )
+        == ""
+    )
     (repo / "dirty").write_text("x", encoding="utf-8")
     with pytest.raises(integrity.BundleError, match="not clean"):
         builder.attest_clean_tag(repo, "v1.0.13")
