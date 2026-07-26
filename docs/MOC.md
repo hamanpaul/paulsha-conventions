@@ -1,16 +1,22 @@
 # paulsha-conventions — MOC（Map of Content）
 
-專案層地圖：連結 active openspec changes 與 superpowers plans/specs，並標其 stage 狀態。
+專案層地圖：連結 canonical capabilities、active/archived OpenSpec changes 與
+superpowers plans/specs，並標其 stage 狀態。
 本 repo 以 `moc.map: docs/MOC.md` 宣告，由 R-24（moc-alignment）盯其與本次變更同步。
 
 ## Active openspec changes
 
-- [versioned runtime bundle（#48）](../openspec/changes/2026-07-26-versioned-runtime-bundle/proposal.md) — 中央實作與驗收進行中
+目前無 active change。
 
-（已落地者見 `openspec/changes/archive/`。[#46 canonical local preflight](../openspec/changes/archive/2026-07-26-canonical-local-preflight/proposal.md) 已 archive，canonical spec 見 `openspec/specs/preflight/`。[#45 R-21 visibility coupling](../openspec/changes/archive/2026-07-26-r21-visibility-coupling/proposal.md) 已 archive，canonical spec 見 `openspec/specs/secret-scan/`。[#30 提案 A auto-build-block](../openspec/changes/archive/2026-07-02-auto-build-block/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/auto-build-config/`。[#20 gitlab-internalization](../openspec/changes/archive/2026-07-01-gitlab-internalization/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/gitlab-ci-gate/`。#25 doc-drift-action 已於本批落地並 archive，canonical specs 見 `openspec/specs/doc-drift-core/`・`openspec/specs/doc-drift-action/`（`doc-reference`／`moc-alignment` 規格亦同步更新）。#23 cross-repo-drift-governance 已於本批落地並 archive，canonical spec 見 `openspec/specs/cross-repo-drift-governance/`。Runbook：[`docs/org-ruleset-runbook.md`](org-ruleset-runbook.md)。）
+## Canonical capabilities / archived changes
+
+- [runtime bundle specification](../openspec/specs/runtime-bundle/spec.md) — v1.0.14 正式 bundle、offline lifecycle 與 fleet rollout 已完成；斷電級 hardening 見 #52
+- [project-policy manifest specification](../openspec/specs/project-policy-manifest/spec.md) — canonical manifest 與 10-repo migration 已完成
+
+（已落地者見 `openspec/changes/archive/`。[#48 versioned runtime bundle](../openspec/changes/archive/2026-07-26-2026-07-26-versioned-runtime-bundle/proposal.md) 已 archive，canonical specs 見 `openspec/specs/runtime-bundle/` 與 `openspec/specs/project-policy-manifest/`。[#46 canonical local preflight](../openspec/changes/archive/2026-07-26-canonical-local-preflight/proposal.md) 已 archive，canonical spec 見 `openspec/specs/preflight/`。[#45 R-21 visibility coupling](../openspec/changes/archive/2026-07-26-r21-visibility-coupling/proposal.md) 已 archive，canonical spec 見 `openspec/specs/secret-scan/`。[#30 提案 A auto-build-block](../openspec/changes/archive/2026-07-02-auto-build-block/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/auto-build-config/`。[#20 gitlab-internalization](../openspec/changes/archive/2026-07-01-gitlab-internalization/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/gitlab-ci-gate/`。#25 doc-drift-action 已於本批落地並 archive，canonical specs 見 `openspec/specs/doc-drift-core/`・`openspec/specs/doc-drift-action/`（`doc-reference`／`moc-alignment` 規格亦同步更新）。#23 cross-repo-drift-governance 已於本批落地並 archive，canonical spec 見 `openspec/specs/cross-repo-drift-governance/`。Runbook：[`docs/org-ruleset-runbook.md`](org-ruleset-runbook.md)。）
 
 ## Plans（docs/superpowers/plans）
-- [versioned runtime bundle（#48）](superpowers/plans/2026-07-26-issue-48-runtime-bundle.md) — Spark 候選已派工，主整合補齊實作與驗收
+- [versioned runtime bundle（#48）](superpowers/plans/2026-07-26-issue-48-runtime-bundle.md) — 歷史 implementation plan；v1.0.14 與 fleet rollout 已落地
 - [runtime bundle runbook](runtime-bundle-runbook.md) — build/install/exact selection/rollback 與 #39 authority 邊界
 - [內部發行管道決策（#39）](superpowers/plans/2026-07-26-issue-39-internal-release-channel.md) — needs_human（待公司選定 package authority）
 - [#46 Opus 5 對抗審查修復](superpowers/plans/2026-07-26-issue-46-opus5-review-repair.md) — 第三輪 `PASS / NONE`，主整合驗收通過
