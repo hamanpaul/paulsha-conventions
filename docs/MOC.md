@@ -5,7 +5,7 @@
 
 ## Active openspec changes
 - [R-21 visibility coupling（#45）](../openspec/changes/r21-visibility-coupling/proposal.md) — candidate 已實作並整合，待 batch archive
-- [canonical local preflight（#46）](../openspec/changes/canonical-local-preflight/proposal.md) — candidate 實作與驗收中
+- [canonical local preflight（#46）](../openspec/changes/canonical-local-preflight/proposal.md) — candidate 已實作、對抗審查通過，待 batch archive
 
 （已落地者見 `openspec/changes/archive/`。[#30 提案 A auto-build-block](../openspec/changes/archive/2026-07-02-auto-build-block/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/auto-build-config/`。[#20 gitlab-internalization](../openspec/changes/archive/2026-07-01-gitlab-internalization/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/gitlab-ci-gate/`。#25 doc-drift-action 已於本批落地並 archive，canonical specs 見 `openspec/specs/doc-drift-core/`・`openspec/specs/doc-drift-action/`（`doc-reference`／`moc-alignment` 規格亦同步更新）。#23 cross-repo-drift-governance 已於本批落地並 archive，canonical spec 見 `openspec/specs/cross-repo-drift-governance/`。Runbook：[`docs/org-ruleset-runbook.md`](org-ruleset-runbook.md)。）
 
@@ -13,7 +13,7 @@
 - [內部發行管道決策（#39）](superpowers/plans/2026-07-26-issue-39-internal-release-channel.md) — needs_human（待公司選定 package authority）
 - [release ledger tag SHA（#42）](superpowers/plans/2026-07-26-issue-42-release-ledger-tag-sha.md) — 已實作、對抗審查通過並整合
 - [R-21 visibility coupling（#45）](superpowers/plans/2026-07-26-issue-45-r21-visibility-coupling.md) — 已實作、對抗審查通過並整合
-- [canonical local preflight（#46）](superpowers/plans/2026-07-26-issue-46-local-preflight.md) — 實作與驗收中
+- [canonical local preflight（#46）](superpowers/plans/2026-07-26-issue-46-local-preflight.md) — 已實作、對抗審查通過並驗收
 - [auto-build-block（#30 提案 A）](superpowers/plans/2026-07-02-auto-build-block.md) — 已完成（#30 提案 A，change 已 archive）
 - [gitlab-internalization（#20）](superpowers/plans/2026-07-01-gitlab-internalization.md) — 已完成（#20，change 已 archive）
 - [rule families + 版號 generated-fact（無 issue）](superpowers/plans/2026-07-01-rule-families-and-version-fact.md) — 已完成（change 已 archive）
