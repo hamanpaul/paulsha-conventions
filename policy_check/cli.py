@@ -16,6 +16,11 @@ def build_context(args: argparse.Namespace) -> RuleContext:
     conf = cfg.load(repo_root)
     pr_meta = prc.load_pr_meta()
     base_ref = pr_meta.get("pr_base_ref") or args.pr_base_ref
+    repo_visibility = (
+        pr_meta.get("repo_visibility")
+        or args.repo_visibility
+        or "unknown"
+    )
     return RuleContext(
         repo_root=repo_root,
         profile=conf["policy_profile"],
@@ -30,6 +35,7 @@ def build_context(args: argparse.Namespace) -> RuleContext:
         ),
         pr_base_ref=base_ref,
         pr_head_ref=pr_meta.get("pr_head_ref") or args.pr_head_ref,
+        repo_visibility=repo_visibility,
         changed_files=prc.changed_files(base_ref, repo_root, pr_meta.get("pr_base_sha")),
         latest_tag=prc.latest_tag(repo_root),
         provider=pr_meta.get("provider"),
@@ -44,6 +50,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pr-labels", default=None, help="Comma-separated")
     p.add_argument("--pr-base-ref", default=None)
     p.add_argument("--pr-head-ref", default=None)
+    p.add_argument(
+        "--repo-visibility",
+        choices=["public", "private", "internal", "unknown"],
+        default=None,
+    )
     p.add_argument("--only", default=None, help="Comma-separated rule IDs (e.g. R-01,R-09)")
     args = p.parse_args(argv)
 

@@ -1,18 +1,4 @@
-# secret-scan Specification
-
-## Purpose
-TBD - created by archiving change 2026-06-14-account-visibility-and-secret-scan. Update Purpose after archive.
-## Requirements
-### Requirement: 納管 repo 必須宣告內容 tier
-每個由 `paulsha-conventions` 納管的 repo MUST 在 `.paul-project.yml` 宣告 `tier`，值為 `shareable`、`work` 或 `personal` 之一。tier 表達該 repo 內容的預期可見性等級，是機密掃描規則用來決定強制程度的輸入。
-
-#### Scenario: 合法 tier 通過 schema 驗證
-- **WHEN** 對一個 `.paul-project.yml` 設定 `tier: shareable` 的 repo 跑 `python3 -m policy_check --repo .`
-- **THEN** project-config schema 規則接受該檔案
-
-#### Scenario: 非法 tier 未通過 schema 驗證
-- **WHEN** 某 repo 的 `.paul-project.yml` 將 `tier` 設為 `{shareable, work, personal}` 以外的值
-- **THEN** project-config schema 規則回報失敗
+## MODIFIED Requirements
 
 ### Requirement: shareable repo 不得含雇主機敏標記
 機密掃描規則（R-21）MUST 掃描所有 tier 的 tracked 文字檔，不得因 `tier !=
@@ -57,38 +43,7 @@ R-21 MUST 依下列矩陣採用最嚴重 verdict：
 - **WHEN** repo 沒有任何 R-21 命中
 - **THEN** R-21 回報 PASS；visibility unknown 時訊息仍明示 unknown
 
-### Requirement: 機密掃描規則必須排除自身定義與 fixtures
-由於 denylist 字串必然出現在規則實作、其測試 fixtures、以及被豁免的文件中，R-21 MUST 將這些路徑排除於掃描之外，使規則不會掃到自己。
-
-#### Scenario: 規則不誤報自身原始碼
-- **WHEN** R-21 在 `paulsha-conventions` repo（其 `r21_secret_scan.py` 與 fixtures 含 denylist 字串）內執行
-- **THEN** R-21 對這些被豁免的路徑回報通過
-
-### Requirement: 機密標記清單必須由設定驅動且可疊加
-R-21 的 confidential marker 與 public-name 清單 MUST 來自引擎內附的 baseline 資料檔（非寫死於規則原始碼），且每個 repo 可於 `.paul-project.yml` 的 `secret_scan.markers` / `secret_scan.public_names` 疊加自身項目。疊加為 extend-only：repo 不能移除 baseline 的 marker；要在單一 repo 壓制某 marker，須將其加入該 repo 的 `public_names`。
-
-#### Scenario: 中央減敏移除 baseline marker
-- **WHEN** 將某 token 從 baseline 資料檔的 `markers` 移除（或加入 `public_names`）後重發引擎
-- **THEN** 套用該版引擎的 shareable repo 不再因該 token 失敗
-
-#### Scenario: per-repo 疊加 marker
-- **WHEN** 某 `tier: shareable` repo 在 `.paul-project.yml` 的 `secret_scan.markers` 增補一個自身機密 token，且某 tracked 檔含該 token
-- **THEN** R-21 對該 repo 回報失敗（baseline 未含該 token）
-
-#### Scenario: per-repo public_names 局部壓制
-- **WHEN** 某 `tier: shareable` repo 在 `secret_scan.public_names` 加入一個原本會命中的 token
-- **THEN** R-21 不因該 token 使該 repo 失敗
-
-### Requirement: project-config schema 必須驗證 secret_scan 標記欄位
-project-config schema（R-08）MUST 接受 `secret_scan` 物件下的 optional `markers` 與 `public_names`（皆為 `list[str]`），與既有 `allow` 並存；元素非字串時回報失敗。
-
-#### Scenario: 合法 secret_scan 標記欄位通過
-- **WHEN** `.paul-project.yml` 設 `secret_scan: { markers: ["FOO123"], public_names: ["broadcom"] }`
-- **THEN** R-08 接受該檔案
-
-#### Scenario: 非法 secret_scan 標記欄位失敗
-- **WHEN** `.paul-project.yml` 將 `secret_scan.markers` 設為非 list-of-str（如字串或含非字串元素）
-- **THEN** R-08 回報失敗
+## ADDED Requirements
 
 ### Requirement: repository visibility 必須由既有執行上下文注入
 `RuleContext` SHALL 提供 `repo_visibility`。GitHub MUST 從 event payload 的
@@ -134,4 +89,3 @@ message MAY 輸出各 detector 的命中數，但 MUST NOT 輸出 matched value�
 #### Scenario: marker 命中不輸出 marker 字串
 - **WHEN** tracked 檔含 confidential marker 且 R-21 命中
 - **THEN** detail 僅標示 `marker` 類別，不輸出 matched marker 或原始行
-

@@ -83,7 +83,7 @@ This repository **dog-foods its own policy** (`profile: flat`; `policy_version` 
 | R-18 | docs / README track code changes | code_paths changed but `README.md` / `docs/**` was not updated (**WARN**, does not block merge) | `policy-exempt:docs-sync` |
 | R-19 | repo has tests ⇒ CI runs them | a `tests/` dir exists (with `test_*.py` / `*_test.py`) but no `.github/workflows/**` runs any test command | `policy-exempt:ci-tests` |
 | R-20 | workflow policy_version in sync | the literal `policy_version` / `POLICY_VERSION` declared in a workflow disagrees with `.paul-project.yml` | — |
-| R-21 | tier = shareable secret scan | a repo declaring `tier: shareable` contains employer markers / personal absolute paths / credential patterns not covered by `secret_scan.allow` or self-exemption | `policy-exempt:secret-scan` |
+| R-21 | visibility-aware secret scan | all tiers are scanned; `shareable` hits **FAIL**; for other tiers, public/unknown structural or credential hits **FAIL**, while marker-only and private/internal hits **WARN**; reports expose only relative `path:line`, detector class, and counts | `policy-exempt:secret-scan` |
 | R-22 | docs have no dangling code references | a path / internal link / backtick symbol referenced inside the canonical doc scope (`doc_paths`) does not exist; symbols use a language-agnostic scoped identity (ctags `(language, kind, scope, name)` diff); newly introduced breakage **FAIL**, pre-existing dangling **WARN** | `policy-exempt:doc-reference` |
 | R-23 | engine pin matches policy_version | a workflow `uses:` pointing at `conventions_engine.repo` pins an engine version (tag `@vX.Y.Z`, or SHA `@<sha>` + trailing `# vX.Y.Z`) that disagrees with `.paul-project.yml`'s `policy_version` | `policy-exempt:engine-pin` |
 | R-24 | MOC aligned with this change | when a repo declares `moc`: `moc.static` out of sync (**WARN**) / `moc.map` has a dangling link (new breakage **FAIL**, pre-existing **WARN**) / an active openspec change・plan・spec is unlinked (**WARN**) | `policy-exempt:moc-alignment` |
@@ -232,7 +232,95 @@ python3 -m policy_check --repo .
 python3 -m policy_check --repo . --only R-01,R-02,R-03
 ```
 
-#### 2. CI integration (downstream repos)
+#### 2. Local/offline preflight
+
+`policy-preflight` runs the policy gate and the repository-owned validation/test
+steps declared in `.paul-project.yml`. Manual mode requires an explicit PR title
+and body file so PR-only rules are evaluated with complete context:
+
+The canonical agent-facing entrypoint is the `preflight-ci` skill owned by this
+repository. Install or migrate the user-level skill symlink from a conventions
+checkout:
+
+```bash
+scripts/install-preflight-skill.sh --replace
+```
+
+Then run it from the target repository:
+
+```bash
+~/.agents/skills/preflight-ci/scripts/preflight.sh \
+  --pr-title "feat(preflight): add canonical local preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/local-preflight \
+  --repo-visibility public
+```
+
+The skill supplies its adjacent `paulsha-conventions` checkout as the verified
+source engine. It does not inspect or execute a GitHub Actions workflow, and it
+does not clone/fetch an engine. The target repo's `policy_version` must match
+the deployed conventions checkout. A full skill-driven run requires explicit
+`.paul-project.yml.preflight.steps`; use `--policy-only` only when that reduced
+scope is intentional.
+
+```bash
+policy-preflight \
+  --repo . \
+  --pr-title "feat(preflight): add canonical local preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/local-preflight \
+  --repo-visibility public
+```
+
+When GitHub metadata is available, online mode can load it directly:
+
+```bash
+policy-preflight --repo . --pr 46
+```
+
+Offline mode disables network-capable **engine resolver** operations and accepts
+only a matching installed distribution or a verified exact-SHA cache artifact.
+PR metadata must be supplied manually. Repository-owned commands still execute
+under the repository's authority and may have their own network behavior:
+
+```bash
+policy-preflight \
+  --repo . \
+  --offline \
+  --pr-title "fix(policy): verify offline preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/offline-preflight \
+  --repo-visibility private
+```
+
+Downstream repositories declare typed commands rather than shell strings:
+
+```yaml
+preflight:
+  steps:
+    - name: openspec
+      kind: validation
+      argv: ["openspec", "validate", "--all"]
+      when_path_exists: "openspec"
+      timeout_seconds: 300
+    - name: tests
+      kind: tests
+      argv: ["python3", "-m", "pytest", "-q"]
+      timeout_seconds: 1200
+```
+
+`--skip-tests` skips only `kind: tests`; `--policy-only` skips every
+repository-owned step while preserving engine resolution and the policy gate.
+The effective head must match the current checkout branch, and `origin/<base>`
+must exist with a valid merge base; otherwise preflight stops instead of
+silently evaluating an empty changed-file set.
+Configuration/input errors exit 2, a failed gate exits 1, and only complete
+success exits 0.
+
+#### 3. CI integration (downstream repos)
 
 **GitHub reusable workflow** — call this repo's reusable workflow from `.github/workflows/policy-check.yml`:
 
@@ -261,11 +349,11 @@ conventions_engine:
   mode: pip
 ```
 
-#### 3. Helper scripts
+#### 4. Helper scripts
 
 `scripts/update-cli-help.sh` — actually runs each command declared in `.paul-project.yml.cli` and rewrites the marker blocks in the docs (the R-16 sync mechanism). CI does **not** auto-fix; developers run it locally and commit the updated docs. The script fixes `LC_ALL=C` to avoid locale-dependent output.
 
-#### 4. New-project bootstrap
+#### 5. New-project bootstrap
 
 Use `hamanpaul/new-project-template` to create a new repo that automatically includes `.paul-project.yml`, the README / CHANGELOG / VERSION skeleton, the four agent convention files, and a `.github/workflows/policy-check.yml` calling this repo's reusable workflow:
 
@@ -279,6 +367,7 @@ gh repo create hamanpaul/<new-project> --template hamanpaul/new-project-template
 usage: policy-check [-h] [--repo REPO] [--pr-title PR_TITLE]
                     [--pr-body PR_BODY] [--pr-labels PR_LABELS]
                     [--pr-base-ref PR_BASE_REF] [--pr-head-ref PR_HEAD_REF]
+                    [--repo-visibility {public,private,internal,unknown}]
                     [--only ONLY]
 
 options:
@@ -290,8 +379,37 @@ options:
                         Comma-separated
   --pr-base-ref PR_BASE_REF
   --pr-head-ref PR_HEAD_REF
+  --repo-visibility {public,private,internal,unknown}
   --only ONLY           Comma-separated rule IDs (e.g. R-01,R-09)
 <!-- END: cli-help marker="policy-check-help" -->
+
+<!-- BEGIN: cli-help marker="policy-preflight-help" -->
+usage: policy-preflight [-h] [--repo REPO] [--pr PR | --offline]
+                        [--pr-title PR_TITLE] [--pr-body-file PR_BODY_FILE]
+                        [--pr-labels PR_LABELS] [--base BASE] [--head HEAD]
+                        [--repo-visibility {public,private,internal,unknown}]
+                        [--skip-tests] [--policy-only] [--cache-dir CACHE_DIR]
+                        [--engine-source ENGINE_SOURCE]
+
+options:
+  -h, --help            show this help message and exit
+  --repo REPO           Repository root
+  --pr PR               GitHub PR number or URL
+  --offline             Disable network-capable resolver operations
+  --pr-title PR_TITLE
+  --pr-body-file PR_BODY_FILE
+  --pr-labels PR_LABELS
+                        Comma-separated; empty means no labels
+  --base BASE
+  --head HEAD
+  --repo-visibility {public,private,internal,unknown}
+  --skip-tests
+  --policy-only
+  --cache-dir CACHE_DIR
+  --engine-source ENGINE_SOURCE
+                        Canonical paulsha-conventions checkout supplied by the
+                        owning skill
+<!-- END: cli-help marker="policy-preflight-help" -->
 
 ### Versioning
 
@@ -357,7 +475,7 @@ The license follows the repository owner's preference; see the `LICENSE` file at
 | R-18 | docs/README 對齊 code 變動 | code_paths 有變動但 `README.md` / `docs/**` 未同步（**WARN**，不擋 merge） | `policy-exempt:docs-sync` |
 | R-19 | repo 有測試則 CI 必須執行 | 存在 `tests/`（含 `test_*.py` / `*_test.py`）但 `.github/workflows/**` 無任何測試執行指令（pytest / unittest / npm test 等） | `policy-exempt:ci-tests` |
 | R-20 | Workflow policy_version 與 config 同步 | workflow 內宣告的 `policy_version` / `POLICY_VERSION` 字面值與 `.paul-project.yml` 的 `policy_version` 不一致 | — |
-| R-21 | tier=shareable repo 機密掃描 | 宣告 `tier: shareable` 的 repo 含雇主標記（內部代號、裝置型號等）／個人絕對路徑／憑證模式，且不在 `secret_scan.allow` 或自我豁免範圍 | `policy-exempt:secret-scan` |
+| R-21 | visibility-aware 機密掃描 | 所有 tier 都掃描；`shareable` 命中一律 **FAIL**；其他 tier 的 public/unknown 結構或憑證命中 **FAIL**，僅 marker 及 private/internal 命中 **WARN**；報告只揭露相對 `path:line`、detector 類別與筆數 | `policy-exempt:secret-scan` |
 | R-22 | docs 對 code 產物引用無懸空 | canonical doc scope（`doc_paths`，預設 `README.md` / `docs/**`）引用的路徑／內部連結／反引號 symbol 在 repo 不存在；symbol 改用**語言無關 scoped identity**（ctags `(language, kind, scope, name)` 差集，限定式 token 精準命中、結構化裸名 snake/Camel 多 scope 同名只 WARN、純單字不偵測以避免常見字誤報）；本次變更新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）降 WARN；`openspec/**`・`docs/superpowers/**`・fixtures 內建排除 | `policy-exempt:doc-reference` |
 | R-23 | 引擎 pin 版本與 policy_version 對齊 | workflow `uses:` 指向 `conventions_engine.repo` 的引擎版本（tag `@vX.Y.Z` 或 SHA `@<sha>` + 尾註 `# vX.Y.Z`）與 `.paul-project.yml` 的 `policy_version` 不一致 **FAIL**；純 SHA 無註解 **WARN**；`./` 在地引用或未設 `conventions_engine.repo` 則 NA | `policy-exempt:engine-pin` |
 | R-24 | MOC 與本次變更對齊 | repo 宣告 `moc` 時：`moc.triggers` 命中但 `moc.static` 未同步（**WARN**）／`moc.map` 連結懸空（本次新破壞 **FAIL**、陳年 **WARN**）／active openspec change・plan・spec 未被連結（**WARN**，永不 FAIL）；orphan/freshness 改呼叫共用核心，受治理前綴**參數化**（預設沿用既有前綴）；未宣告 `moc` 則 NA | `policy-exempt:moc-alignment` |
@@ -531,7 +649,91 @@ python3 -m policy_check --repo .
 python3 -m policy_check --repo . --only R-01,R-02,R-03
 ```
 
-#### 2. CI 整合（下游 repo）
+#### 2. 本地／離線 Preflight
+
+`policy-preflight` 會依序執行 policy gate，以及 `.paul-project.yml`
+宣告的 repo-owned validation/test steps。手動模式必須明確提供 PR title 與
+body file，確保 PR-only 規則拿到完整脈絡：
+
+Agent-facing canonical 入口是由本 repo 擁有的 `preflight-ci` skill。從
+`paulsha-conventions` checkout 安裝或遷移 user-level skill symlink：
+
+```bash
+scripts/install-preflight-skill.sh --replace
+```
+
+之後在目標 repo 執行：
+
+```bash
+~/.agents/skills/preflight-ci/scripts/preflight.sh \
+  --pr-title "feat(preflight): 新增 canonical local preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/local-preflight \
+  --repo-visibility public
+```
+
+Skill 直接把相鄰的 `paulsha-conventions` checkout 當作經驗證 source engine，
+不讀取或執行 GitHub Actions workflow，也不 clone/fetch engine。目標 repo 的
+`policy_version` 必須與已部署的 conventions checkout 一致。Skill-driven 完整
+執行要求明確宣告 `.paul-project.yml.preflight.steps`；只有刻意縮成 policy-only
+時才使用 `--policy-only`。
+
+```bash
+policy-preflight \
+  --repo . \
+  --pr-title "feat(preflight): 新增 canonical local preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/local-preflight \
+  --repo-visibility public
+```
+
+可連 GitHub 時，可直接讀取 PR metadata：
+
+```bash
+policy-preflight --repo . --pr 46
+```
+
+離線模式只禁止 preflight 的 **engine resolver** 執行可連網操作，並只接受
+版本相符的 installed distribution 或通過驗證的 exact-SHA cache；PR metadata
+必須由手動參數／檔案提供。Repo-owned commands 仍受該 repo 自身 authority
+管轄，可能另有自己的網路行為：
+
+```bash
+policy-preflight \
+  --repo . \
+  --offline \
+  --pr-title "fix(policy): 驗證離線 preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/offline-preflight \
+  --repo-visibility private
+```
+
+下游 repo 以 typed argv 宣告命令，不使用 shell 字串：
+
+```yaml
+preflight:
+  steps:
+    - name: openspec
+      kind: validation
+      argv: ["openspec", "validate", "--all"]
+      when_path_exists: "openspec"
+      timeout_seconds: 300
+    - name: tests
+      kind: tests
+      argv: ["python3", "-m", "pytest", "-q"]
+      timeout_seconds: 1200
+```
+
+`--skip-tests` 只跳過 `kind: tests`；`--policy-only` 會跳過所有 repo-owned
+steps，但仍執行 engine resolution 與 policy gate。參數／設定錯誤回 exit 2，
+effective head 必須等於目前 checkout branch，且 `origin/<base>` 必須存在並可建立
+merge base；否則會直接停止，不會用空 changed-files 集合繼續。
+任一 gate 失敗回 exit 1，全部通過才回 exit 0。
+
+#### 3. CI 整合（下游 repo）
 
 ##### GitHub reusable workflow
 
@@ -594,7 +796,7 @@ policy-check:
 
 此範例假設 runner 在 gate-time 已取得 build-time 產出的 `vendor/` 內容。若要讓 MR gate 不碰外部網路，請把 `universal-ctags` 預裝進 runner image；否則至少需接公司內部 APT / package mirror。換言之，這裡的離線保證只涵蓋 **Python wheel / vendored 相依安裝** 這一段。**Artifactory / 內部 PyPI / GitLab Package Registry** 哪一條作為正式發行管道，仍屬需由公司決定的 follow-up。
 
-#### 3. Helper Scripts
+#### 4. Helper Scripts
 
 ##### `scripts/update-cli-help.sh`
 
@@ -611,7 +813,7 @@ bash /path/to/paulsha-conventions/scripts/update-cli-help.sh
 - 開發者在本地跑，commit 更新後的 docs
 - 此 script 固定 `LC_ALL=C` 避免多語系輸出差異
 
-#### 4. 新專案 Bootstrap
+#### 5. 新專案 Bootstrap
 
 使用 `hamanpaul/new-project-template` 建立新 repo，自動包含：
 - `.paul-project.yml`（需填入 profile / version）

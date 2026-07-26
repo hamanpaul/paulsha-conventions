@@ -41,10 +41,11 @@ policy_version: 1.0.12
 - [ ] `.github/pull_request_template.md` checklist 全勾
 - [ ] 測試全綠（本 repo: `python3 -m pytest -q`）
 - [ ] `python3 -m policy_check --repo .` 無任何 failure
+- [ ] 已執行本 repo 擁有的 canonical `preflight-ci` skill（其核心為 `policy-preflight`），且全部 selected gates 通過
 - [ ] R-17：PR body 若引用 issue（`#N`），必須是 closing-keyword 形式（`Closes/Fixes/Resolves #N`）；只引用不關閉時上 `policy-exempt:issue-link`
 - [ ] R-18：code 有變動時已評估並（如需要）同步 `README.md` / `docs/**`，或上 `policy-exempt:docs-sync`
 - [ ] R-19：repo 有 `tests/` 時，CI workflow 有實際執行測試（pytest 等）；新增測試套件而 CI 未涵蓋時同步補上
-- [ ] R-21：宣告 `tier: shareable` 的 repo 不得含雇主機敏標記（內部代號、裝置型號等）、個人絕對路徑或憑證模式；合法引用上 `secret_scan.allow` 或命中時上 `policy-exempt:secret-scan` 並附理由
+- [ ] R-21：所有 tier 皆會掃描；`shareable` 命中一律失敗，其他 tier 依 repository visibility 分級（public/unknown 的結構或憑證命中失敗，marker-only 與 private/internal 命中警告）；合法引用上 `secret_scan.allow` 或命中時上 `policy-exempt:secret-scan` 並附理由
 - [ ] R-22：docs 對本次刪改 code 產物的引用無懸空（CI 報「本次新破壞」FAIL、陳年 WARN），或上 `policy-exempt:doc-reference`
 - [ ] R-23：workflow 對引擎的 pin 版本與 `policy_version` 一致（tag `@vX.Y.Z`，或 SHA `@<sha>` + 尾註 `# vX.Y.Z`），或上 `policy-exempt:engine-pin`（`./` 在地引用或未設 `conventions_engine.repo` 時不適用）
 - [ ] R-24：repo 宣告 `moc` 時，本次變更已同步靜態脈絡（`moc.static`）與動態地圖（`moc.map` 無懸空、新產物已連結），或上 `policy-exempt:moc-alignment`（未宣告 `moc` 時不適用）
@@ -75,7 +76,7 @@ policy_version: 1.0.12
 - `policy-exempt:issue-link` — R-17 PR body issue 參照需 closing-keyword 形式
 - `policy-exempt:docs-sync` — R-18 code 變動需同步 README/docs
 - `policy-exempt:ci-tests` — R-19 repo 有測試則 CI 必須執行
-- `policy-exempt:secret-scan` — R-21 機密掃描（tier=shareable 命中雇主標記）
+- `policy-exempt:secret-scan` — R-21 visibility-aware 機密掃描
 - `policy-exempt:doc-reference` — R-22 文件懸空引用（doc dangling reference）
 - `policy-exempt:engine-pin` — R-23 引擎 pin 版本與 policy_version 對齊
 - `policy-exempt:moc-alignment` — R-24 MOC 與本次變更對齊
