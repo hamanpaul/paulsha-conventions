@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 import uuid
 import venv
@@ -136,6 +137,19 @@ def verify_bundle(root: Path) -> dict[str, Any]:
         raise RuntimeBundleError("skill payload hash mismatch")
     if _sha256(runtime_path) != runtime.get("sha256"):
         raise RuntimeBundleError("runtime manager hash mismatch")
+    compatibility = manifest.get("runtime_compatibility")
+    if (
+        not isinstance(compatibility, dict)
+        or re.fullmatch(
+            r"[a-z][a-z0-9_]*",
+            str(compatibility.get("implementation") or ""),
+        )
+        is None
+        or re.fullmatch(r"\d+\.\d+", str(compatibility.get("python") or "")) is None
+        or not isinstance(compatibility.get("platform"), str)
+        or not compatibility["platform"]
+    ):
+        raise RuntimeBundleError("runtime compatibility metadata is invalid")
     return manifest
 
 
@@ -167,7 +181,11 @@ def _run(argv: Sequence[str], *, cwd: Path, env: dict[str, str] | None = None) -
     except (OSError, UnicodeError) as exc:
         raise RuntimeBundleError(f"command unavailable: {argv[0]}") from exc
     if result.returncode != 0:
-        raise RuntimeBundleError(f"command failed ({result.returncode}): {argv[0]}")
+        details = (result.stderr or result.stdout).strip().splitlines()
+        suffix = f": {details[-1][:500]}" if details else ""
+        raise RuntimeBundleError(
+            f"command failed ({result.returncode}): {argv[0]}{suffix}"
+        )
     return result.stdout.strip()
 
 
@@ -302,10 +320,20 @@ def _install_launcher(root: Path) -> None:
     text = (
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
-        f'RUNTIME_ROOT="${{PSC_CONVENTIONS_ROOT:-{root}}}"\n'
+        'RUNTIME_ROOT="${PSC_CONVENTIONS_ROOT:-'
+        '$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"\n'
+        'TARGET_REPO="$PWD"\n'
+        'if [[ "${1:-}" == "--repo" ]]; then\n'
+        '  [[ $# -ge 2 ]] || { echo "ERROR: --repo requires a value" >&2; exit 2; }\n'
+        '  TARGET_REPO="$2"\n'
+        '  shift 2\n'
+        'elif [[ "${1:-}" == --repo=* ]]; then\n'
+        '  TARGET_REPO="${1#--repo=}"\n'
+        '  shift\n'
+        "fi\n"
         'MANAGER="$RUNTIME_ROOT/current/artifact/runtime/runtime_manager.py"\n'
         '[[ -f "$MANAGER" ]] || { echo "ERROR: no active runtime manager" >&2; exit 2; }\n'
-        'exec python3 -P "$MANAGER" exec --root "$RUNTIME_ROOT" --repo "$PWD" -- "$@"\n'
+        'exec python3 -P "$MANAGER" exec --root "$RUNTIME_ROOT" --repo "$TARGET_REPO" -- "$@"\n'
     )
     temporary = launcher.with_name(f".{launcher.name}.tmp-{uuid.uuid4().hex}")
     temporary.write_text(text, encoding="utf-8")
@@ -315,6 +343,17 @@ def _install_launcher(root: Path) -> None:
 
 def install(bundle: Path, root: Path, skill_target: Path) -> str:
     manifest = verify_bundle(bundle)
+    compatibility = manifest["runtime_compatibility"]
+    current = {
+        "implementation": sys.implementation.name,
+        "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+        "platform": sysconfig.get_platform(),
+    }
+    if compatibility != current:
+        raise RuntimeBundleError(
+            "bundle runtime is incompatible: "
+            f"need {compatibility}, current {current}"
+        )
     version = manifest["policy_version"]
     runtime_root = root.resolve()
     releases = runtime_root / "releases"
@@ -428,7 +467,10 @@ def _extract_policy_version(path: Path) -> str:
         raise RuntimeBundleError(f"cannot read policy manifest: {path}") from exc
     values: list[str] = []
     for line in text.splitlines():
-        match = re.fullmatch(r"policy_version:\s*([^#]+?)\s*", line)
+        match = re.fullmatch(
+            r"policy_version:\s*(.+?)\s*",
+            line.split("#", 1)[0],
+        )
         if match:
             value = match.group(1).strip().strip("'\"")
             values.append(value)
@@ -506,13 +548,15 @@ def rollback(root: Path, skill_target: Path, version: str | None) -> str:
     return target
 
 
-def uninstall(root: Path, skill_target: Path, version: str) -> None:
+def uninstall(root: Path, version: str) -> None:
     runtime_root = root.resolve()
     state_path = runtime_root / "state.json"
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise RuntimeBundleError("cannot read install state") from exc
+    if not isinstance(state, dict):
+        raise RuntimeBundleError("install state must be a JSON object")
     if state.get("current") == version:
         raise RuntimeBundleError("refusing to uninstall the active release")
     release = _verified_release(runtime_root, version)
@@ -551,7 +595,6 @@ def build_parser() -> argparse.ArgumentParser:
     rollback_parser.add_argument("--version")
     uninstall_parser = subparsers.add_parser("uninstall")
     uninstall_parser.add_argument("--root")
-    uninstall_parser.add_argument("--skill-target")
     uninstall_parser.add_argument("--version", required=True)
     return parser
 
@@ -575,15 +618,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             version = rollback(root, skill_target, args.version)
             print(f"ROLLED BACK {version}")
         elif args.command == "uninstall":
-            uninstall(root, skill_target, args.version)
+            uninstall(root, args.version)
             print(f"UNINSTALLED {args.version}")
         elif args.command == "exec":
             repo = Path(args.repo).resolve()
-            release, _manifest = select_release(root, repo)
-            python = _venv_python(release / "venv")
             forwarded = list(args.arguments)
             if forwarded and forwarded[0] == "--":
                 forwarded = forwarded[1:]
+            if any(
+                value == "--repo" or value.startswith("--repo=")
+                for value in forwarded
+            ):
+                raise RuntimeBundleError(
+                    "forwarded --repo conflicts with exact-version selection"
+                )
+            release, _manifest = select_release(root, repo)
+            python = _venv_python(release / "venv")
             command = [
                 str(python),
                 "-P",

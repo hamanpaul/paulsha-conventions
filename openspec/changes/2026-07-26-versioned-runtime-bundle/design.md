@@ -8,7 +8,8 @@ Bundle 僅能從 clean tagged canonical source 建立。Builder 必須驗證：
 - worktree 無 tracked/untracked/ignored 汙染；
 - `HEAD` 是完整 commit SHA，release tag 指向該 commit；
 - `VERSION`、wheel metadata 與 tag 版號一致；
-- Python dependency closure 全部下載成 wheel，不保留 sdist。
+- Python dependency closure 依 bundle-owned constraint 鎖版並全部下載成 wheel，
+  不保留 sdist。
 
 輸出為 deterministic archive：
 
@@ -23,9 +24,11 @@ paulsha-conventions-vX.Y.Z/
 ```
 
 `manifest.json` schema 1 至少包含 policy/skill/package version、canonical repo、
-tag、commit、Python compatibility、prerequisites、每個 wheel 的 filename/hash、
-skill tree hash 與 runtime manager hash。`SHA256SUMS` 覆蓋 manifest 與所有
-payload；builder 另輸出 archive SHA-256 供 issue 39 的 authority 發布。
+tag、commit、build Python implementation/major-minor/platform compatibility、
+prerequisites、每個 wheel 的 filename/hash、skill tree hash 與 runtime manager
+hash。Installer 只接受相同 runtime compatibility，避免把 ABI/platform-specific
+closure 當作通用 wheel 集合。`SHA256SUMS` 覆蓋 manifest 與所有 payload；
+builder 另輸出 archive SHA-256 供 issue 39 的 authority 發布。
 
 Bundle 內 checksum 只證明取得後的完整性。能替換 bundle 與 checksum 的攻擊者仍
 可重建整組內容；artifact authenticity/signature 由 issue 39 的可信發行管道負責。

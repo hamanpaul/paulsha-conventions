@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tarfile
 import tempfile
 import zipfile
@@ -131,6 +132,13 @@ def _deterministic_archive(source: Path, archive: Path, *, epoch: int) -> None:
                     info.uname = ""
                     info.gname = ""
                     info.mtime = epoch
+                    info.mode = (
+                        0o755
+                        if info.isdir()
+                        or (info.isfile() and path.stat().st_mode & 0o111)
+                        else 0o644
+                    )
+                    info.pax_headers = {}
                     if info.isfile():
                         with path.open("rb") as stream:
                             tar.addfile(info, stream)
@@ -238,6 +246,8 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
                 "pip",
                 "download",
                 "--only-binary=:all:",
+                "--constraint",
+                str(snapshot / "policy_check" / "runtime_bundle" / "constraints.txt"),
                 "--dest",
                 str(wheels),
                 str(built[0]),
@@ -298,7 +308,18 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
                 "path": "runtime/runtime_manager.py",
                 "sha256": sha256_file(runtime_dir / "runtime_manager.py"),
             },
-            "prerequisites": ["python>=3.11", "git", "sha256sum", "universal-ctags"],
+            "runtime_compatibility": {
+                "implementation": sys.implementation.name,
+                "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+                "platform": sysconfig.get_platform(),
+            },
+            "prerequisites": [
+                f"python=={sys.version_info.major}.{sys.version_info.minor}",
+                f"platform=={sysconfig.get_platform()}",
+                "git",
+                "sha256sum",
+                "universal-ctags",
+            ],
         }
         (bundle / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",

@@ -17,7 +17,11 @@ bundle。`VERSION`、tag、wheel metadata 與 manifest policy/package version MU
 Bundle SHALL 原子包含 engine wheel、wheel-only dependency closure、
 `preflight-ci` skill、runtime manager、installer、manifest 與 checksums。
 Manifest MUST 記錄 schema、policy/skill/package version、repo、tag、commit、
-Python compatibility、prerequisites 與 payload hashes。
+build interpreter/platform compatibility、prerequisites 與 payload hashes。
+
+#### Scenario: 安裝 runtime 不相容
+- **WHEN** host Python major/minor、implementation 或 platform 不等於 manifest
+- **THEN** installer 在建立 staging 前 FAIL，不嘗試用不相容 wheel closure 安裝
 
 #### Scenario: 任一 payload 被竄改
 - **WHEN** wheel、skill、runtime manager 或 manifest 在 build 後被修改

@@ -123,18 +123,25 @@ def test_deployed_skill_delegates_to_stable_runtime_launcher(tmp_path: Path) -> 
     target = tmp_path / "target"
     target.mkdir()
     subprocess.run(["git", "init", "-q", str(target)], check=True)
+    nested = target / "nested"
+    nested.mkdir()
     env = dict(os.environ)
     env["PSC_CONVENTIONS_ROOT"] = str(runtime_root)
     result = subprocess.run(
         [str(deployed_skill / "scripts" / "preflight.sh"), "--offline"],
-        cwd=target,
+        cwd=nested,
         env=env,
         capture_output=True,
         text=True,
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.splitlines() == [str(target), "--offline"]
+    assert result.stdout.splitlines() == [
+        str(nested),
+        "--repo",
+        str(target),
+        "--offline",
+    ]
 
 
 def test_installer_rejects_non_symlink_target(tmp_path) -> None:

@@ -323,7 +323,7 @@ class R08PolicyConfigSchema:
                     return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
                                       message=f"auto_build.{key} must be a list of strings")
 
-        warning = resolution.warning if resolution.dual_identical else None
+        warning = resolution.warning
         return RuleResult(
             rule_id=self.rule_id,
             status=Status.WARN if warning else Status.PASS,

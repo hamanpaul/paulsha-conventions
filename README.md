@@ -330,7 +330,9 @@ success exits 0.
 `policy-runtime-bundle` builds one immutable release unit containing the
 `policy-check` wheel, wheel-only dependency closure, `preflight-ci` skill,
 stdlib installer manager, manifest, and `SHA256SUMS`. Production builds accept
-only a clean canonical checkout at an annotated tag:
+only a clean canonical checkout at an annotated tag. The build host needs
+Python 3.11+, `build`, and pip; dependency versions are constrained by the
+bundle-owned lock input:
 
 ```bash
 policy-runtime-bundle build \
@@ -354,8 +356,10 @@ The stable deployed skill launcher reads the target repository's exact
 `policy_version`, verifies the matching installed release, and invokes that
 release's isolated venv with `-P`. A missing version is a hard failure; it never
 falls back to `current`, a workflow checkout, another installed version, or the
-network. Upgrade activation happens only after offline install and full
-preflight smoke. Rollback switches to an already verified release:
+network. Because dependency wheels can be ABI/platform specific, installation
+also requires the exact Python major/minor, implementation, and platform
+recorded by the builder. Upgrade activation happens only after offline install
+and full preflight smoke. Rollback switches to an already verified release:
 
 ```bash
 policy-runtime-bundle rollback --version X.Y.Z
@@ -803,7 +807,8 @@ merge base；否則會直接停止，不會用空 changed-files 集合繼續。
 
 `policy-runtime-bundle` 從 clean canonical annotated tag 建立單一不可變
 release unit，原子包含 engine wheel、wheel-only 相依閉包、`preflight-ci`
-skill、stdlib installer manager、manifest 與 `SHA256SUMS`：
+skill、stdlib installer manager、manifest 與 `SHA256SUMS`。建置主機需有
+Python 3.11+、`build` 與 pip；相依版本由 bundle 自有 constraint 鎖定：
 
 ```bash
 policy-runtime-bundle build \
@@ -825,8 +830,10 @@ policy-runtime-bundle extract \
 部署後的 stable launcher 會讀目標 repo 的 exact `policy_version`，驗證相同
 版本的 installed release，再用該 venv 的 Python `-P` 執行。缺版直接失敗，
 不會 fallback 到 `current`、workflow、其他版本或網路。升級須在離線安裝與
-完整 preflight smoke 都通過後才 activation；rollback 只切到既有 VERIFIED
-release。操作細節見 [runtime bundle runbook](docs/runtime-bundle-runbook.md)。
+完整 preflight smoke 都通過後才 activation。相依 wheel 可能綁 ABI/platform，
+因此安裝主機必須符合 manifest 記錄的 Python major/minor、implementation 與
+platform；rollback 只切到既有 VERIFIED release。操作細節見
+[runtime bundle runbook](docs/runtime-bundle-runbook.md)。
 
 #### 4. CI 整合（下游 repo）
 

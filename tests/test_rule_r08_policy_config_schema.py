@@ -72,9 +72,18 @@ def test_r08_rejects_invalid_tier(fixture_repo):
 
 
 def _write_config(tmp_path: Path, cfg_text: str) -> Path:
-    # 直接把 config 寫到 repo root，沿用 config_path 的 .paul-project.yml 解析
-    (tmp_path / ".paul-project.yml").write_text(cfg_text, encoding="utf-8")
+    (tmp_path / ".project-policy.yml").write_text(cfg_text, encoding="utf-8")
     return tmp_path
+
+
+def test_r08_warns_on_legacy_only_manifest(tmp_path):
+    (tmp_path / ".paul-project.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.4\n",
+        encoding="utf-8",
+    )
+    result = get_rule("R-08").check(make_ctx(tmp_path))
+    assert result.status == Status.WARN
+    assert "deprecated legacy alias" in result.message
 
 
 def test_r08_accepts_secret_scan_marker_lists(tmp_path):

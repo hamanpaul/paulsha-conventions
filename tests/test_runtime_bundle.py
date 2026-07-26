@@ -4,6 +4,8 @@ import json
 import io
 import os
 import subprocess
+import sys
+import sysconfig
 import tarfile
 from pathlib import Path
 
@@ -56,7 +58,17 @@ def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
             "path": "runtime/runtime_manager.py",
             "sha256": integrity.sha256_file(runtime),
         },
-        "prerequisites": ["python>=3.11", "git", "sha256sum"],
+        "runtime_compatibility": {
+            "implementation": sys.implementation.name,
+            "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+            "platform": sysconfig.get_platform(),
+        },
+        "prerequisites": [
+            f"python=={sys.version_info.major}.{sys.version_info.minor}",
+            f"platform=={sysconfig.get_platform()}",
+            "git",
+            "sha256sum",
+        ],
     }
     (bundle / "manifest.json").write_text(
         json.dumps(manifest, sort_keys=True) + "\n",
@@ -149,6 +161,27 @@ def test_extract_archive_verifies_digest_members_and_payload(tmp_path: Path) -> 
     assert integrity.load_and_verify_bundle(extracted)["policy_version"] == "1.0.13"
     with pytest.raises(integrity.BundleError, match="already exists"):
         integrity.extract_verified_archive(archive, tmp_path / "output", digest)
+
+
+def test_deterministic_archive_normalizes_umask_sensitive_modes(
+    tmp_path: Path,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    archive_one = tmp_path / "one.tar.gz"
+    archive_two = tmp_path / "two.tar.gz"
+    for path in bundle.rglob("*"):
+        if path.is_dir():
+            path.chmod(0o700)
+        elif path.name not in {"install.sh", "preflight.sh"}:
+            path.chmod(0o600)
+    builder._deterministic_archive(bundle, archive_one, epoch=1_700_000_000)
+    for path in bundle.rglob("*"):
+        if path.is_dir():
+            path.chmod(0o755)
+        elif path.name not in {"install.sh", "preflight.sh"}:
+            path.chmod(0o644)
+    builder._deterministic_archive(bundle, archive_two, epoch=1_700_000_000)
+    assert integrity.sha256_file(archive_one) == integrity.sha256_file(archive_two)
 
 
 @pytest.mark.parametrize("kind", ["duplicate", "traversal", "symlink"])
@@ -319,6 +352,40 @@ def test_selector_missing_version_and_alias_conflict_fail_closed(
         manager.select_release(runtime_root, repo)
 
 
+def test_selector_accepts_inline_policy_version_comment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_root = tmp_path / "runtime"
+    expected = _install_fake_release(tmp_path, "1.0.13")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".project-policy.yml").write_text(
+        "policy_profile: flat\npolicy_version: 1.0.13  # managed\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "1.0.13")
+    selected, _manifest = manager.select_release(runtime_root, repo)
+    assert selected == expected
+
+
+def test_install_rejects_incompatible_runtime_before_staging(tmp_path: Path) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["runtime_compatibility"]["python"] = "99.99"
+    manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+    integrity.write_checksums(bundle)
+    runtime_root = tmp_path / "runtime"
+    with pytest.raises(manager.RuntimeBundleError, match="incompatible"):
+        manager.install(
+            bundle,
+            runtime_root,
+            tmp_path / "skills" / "preflight-ci",
+        )
+    assert not runtime_root.exists()
+
+
 def test_install_upgrade_rollback_and_uninstall_are_scoped(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -350,7 +417,7 @@ def test_install_upgrade_rollback_and_uninstall_are_scoped(
     assert skill_target.is_symlink()
     assert manager.rollback(runtime_root, skill_target, None) == "1.0.13"
     assert (runtime_root / "current").resolve().name == "1.0.13"
-    manager.uninstall(runtime_root, skill_target, "1.0.14")
+    manager.uninstall(runtime_root, "1.0.14")
     assert not (runtime_root / "releases" / "1.0.14").exists()
 
 
@@ -365,3 +432,36 @@ def test_install_preserves_unmanaged_skill_target(tmp_path: Path) -> None:
         manager.install(bundle, runtime_root, skill_target)
     assert sentinel.read_text(encoding="utf-8") == "keep\n"
     assert not (runtime_root / "releases" / "1.0.13").exists()
+
+
+def test_uninstall_rejects_non_object_state(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir()
+    (runtime_root / "state.json").write_text("[]\n", encoding="utf-8")
+    with pytest.raises(manager.RuntimeBundleError, match="JSON object"):
+        manager.uninstall(runtime_root, "1.0.13")
+
+
+def test_launcher_derives_root_and_rejects_forwarded_repo(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    runtime_root = tmp_path / 'runtime-$("unsafe")'
+    manager._install_launcher(runtime_root)
+    text = (runtime_root / "bin" / "policy-preflight").read_text(encoding="utf-8")
+    assert str(runtime_root) not in text
+    assert 'dirname "${BASH_SOURCE[0]}"' in text
+    assert 'TARGET_REPO="$PWD"' in text
+    assert manager.main(
+        [
+            "exec",
+            "--root",
+            str(runtime_root),
+            "--repo",
+            str(tmp_path),
+            "--",
+            "--repo",
+            str(tmp_path / "other"),
+        ]
+    ) == 1
+    assert "conflicts" in capsys.readouterr().err

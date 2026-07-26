@@ -41,7 +41,6 @@ def build_parser() -> argparse.ArgumentParser:
     rollback.add_argument("--version")
     uninstall = subparsers.add_parser("uninstall")
     uninstall.add_argument("--root")
-    uninstall.add_argument("--skill-target")
     uninstall.add_argument("--version", required=True)
     return parser
 
@@ -73,7 +72,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 forwarded.extend(["--bundle", args.bundle])
             if args.root:
                 forwarded.extend(["--root", args.root])
-            if args.skill_target:
+            if getattr(args, "skill_target", None):
                 forwarded.extend(["--skill-target", args.skill_target])
             if getattr(args, "version", None):
                 forwarded.extend(["--version", args.version])

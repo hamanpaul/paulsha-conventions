@@ -143,6 +143,19 @@ def _require_manifest_shape(manifest: dict[str, Any]) -> None:
     safe_relative_path(runtime.get("path"), field="runtime.path")
     if SHA256_RE.fullmatch(str(runtime.get("sha256") or "")) is None:
         raise BundleError("runtime.sha256 is invalid")
+    compatibility = manifest.get("runtime_compatibility")
+    if (
+        not isinstance(compatibility, dict)
+        or re.fullmatch(
+            r"[a-z][a-z0-9_]*",
+            str(compatibility.get("implementation") or ""),
+        )
+        is None
+        or re.fullmatch(r"\d+\.\d+", str(compatibility.get("python") or "")) is None
+        or not isinstance(compatibility.get("platform"), str)
+        or not compatibility["platform"]
+    ):
+        raise BundleError("runtime_compatibility is invalid")
     prerequisites = manifest.get("prerequisites")
     if not isinstance(prerequisites, list) or not all(
         isinstance(item, str) and item for item in prerequisites

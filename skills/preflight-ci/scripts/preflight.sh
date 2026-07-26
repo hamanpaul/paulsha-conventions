@@ -21,7 +21,7 @@ if [[ -z "$ENGINE_ROOT" || ! -f "$ENGINE_ROOT/policy_check/preflight.py" ]]; the
     echo "ERROR: deployed policy-preflight launcher not found: $LAUNCHER" >&2
     exit 2
   }
-  exec "$LAUNCHER" "$@"
+  exec "$LAUNCHER" --repo "$TARGET_ROOT" "$@"
 fi
 
 PYTHON_BIN="${PSC_PREFLIGHT_PYTHON:-python3}"
