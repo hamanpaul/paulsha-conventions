@@ -4,11 +4,11 @@
 
 `hamanpaul/paulsha-conventions#45`
 
-## Purpose
+## Why
 
 讓 `R-21` 規則依據 repo visibility 進行分級判定，不再只侷限於 `tier=shareable`，並保留 `RuleContext` 不直接做環境 provider API 呼叫。
 
-## Scope
+## What Changes
 
 - `policy_check/pr_context.py`：擷取 GitHub/GitLab visibility。
 - `policy_check/cli.py`：加入 `--repo-visibility`，供 local/offline CI parity。

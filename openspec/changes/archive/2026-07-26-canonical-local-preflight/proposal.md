@@ -4,12 +4,12 @@
 
 `hamanpaul/paulsha-conventions#46`
 
-## Purpose
+## Why
 
 建立本 repo 的 `policy-preflight` canonical CLI，並以 repo-owned config 與 engine metadata 驗證
 PR context、policy gate 與測試/OpenSpec 步驟，以提升 local-parity 預檢成功率。
 
-## Scope
+## What Changes
 
 - 新增 `policy_check` 本地 preflight entrypoint `policy-preflight`：
   - `policy-preflight`
