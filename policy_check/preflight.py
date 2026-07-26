@@ -423,7 +423,7 @@ def _is_canonical_checkout(repo_root: Path) -> bool:
             timeout=30,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
+        return False
     normalized_remote = remote.stdout.strip().removesuffix(".git")
     canonical_remotes = {
         f"https://github.com/{CANONICAL_ENGINE_REPO}",
@@ -848,16 +848,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         config = policy_config.load(repo_root)
         context = _load_context(args, repo_root)
         _validate_git_context(repo_root, context)
-        if (
-            args.engine_source
-            and "preflight" not in config
-            and not args.policy_only
-        ):
-            raise PreflightUsageError(
-                "skill-driven full preflight requires .paul-project.yml "
-                "preflight.steps; use --policy-only for an explicit policy-only run"
-            )
         steps = _parse_steps(config, repo_root)
+        if args.engine_source and not args.policy_only and not steps:
+            raise PreflightUsageError(
+                "skill-driven full preflight requires at least one preflight step; "
+                "use --policy-only for an explicit policy-only run"
+            )
     except (policy_config.ConfigError, PreflightUsageError) as exc:
         print(f"PREFLIGHT ERROR: {exc}", file=sys.stderr)
         return 2
@@ -885,6 +881,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     except PreflightGateError as exc:
         _gate_result("engine", "FAIL", engine_started, str(exc))
+        print("PREFLIGHT FAIL")
         return 1
 
     _gate_result("engine", "PASS", engine_started, engine.display)

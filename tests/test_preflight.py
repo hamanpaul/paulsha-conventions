@@ -4,6 +4,7 @@ import json
 import subprocess
 from argparse import Namespace
 from pathlib import Path
+from typing import Sequence
 
 import pytest
 
@@ -282,6 +283,115 @@ def test_resolve_engine_offline_missing_artifact_fails_without_network(
         )
 
 
+def test_populate_cache_builds_and_verifies_requested_sha(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    cache_dir = tmp_path / "cache"
+    engine_repo = "hamanpaul/paulsha-conventions"
+    sha = "a" * 40
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run_or_error(
+        argv: Sequence[str],
+        *,
+        cwd: Path,
+        timeout: int = 60,
+        gate: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        command = tuple(argv)
+        calls.append(command)
+        if len(command) == 4 and command[:3] == ("git", "init", "--quiet"):
+            Path(command[3]).mkdir(parents=True)
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if (
+            len(command) == 7
+            and command[0] == "git"
+            and command[1] == "-C"
+            and command[3] == "remote"
+            and command[4] == "add"
+            and command[5] == "origin"
+            and command[6] == f"https://github.com/{engine_repo}.git"
+        ):
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if (
+            len(command) == 8
+            and command[0] == "git"
+            and command[1] == "-C"
+            and command[3] == "fetch"
+            and command[4] == "--depth"
+            and command[5] == "1"
+            and command[6] == "origin"
+            and command[7] == sha
+        ):
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if (
+            len(command) == 6
+            and command[0] == "git"
+            and command[1] == "-C"
+            and command[3] == "checkout"
+            and command[4] == "--detach"
+            and command[5] == sha
+        ):
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if command == ("git", "status", "--porcelain", "--untracked-files=all"):
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if command == ("git", "status", "--porcelain", "--untracked-files=all", "--ignored=matching"):
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if command == ("git", "rev-parse", "HEAD"):
+            return subprocess.CompletedProcess(command, 0, f"{sha}\n", "")
+        if command == ("git", "rev-parse", "HEAD^{tree}"):
+            return subprocess.CompletedProcess(command, 0, "tree-sha\n", "")
+        raise AssertionError(f"unexpected command: {command} (cwd={cwd})")
+
+    monkeypatch.setattr(preflight, "_run_or_error", fake_run_or_error)
+    checkout = preflight._populate_cache(cache_dir, engine_repo, sha)
+    assert (cache_dir / "hamanpaul" / "paulsha-conventions" / sha / "repo").is_dir()
+    assert checkout == cache_dir / "hamanpaul" / "paulsha-conventions" / sha / "repo"
+
+    manifest = json.loads(
+        (cache_dir / "hamanpaul" / "paulsha-conventions" / sha / "manifest.json").read_text(encoding="utf-8")
+    )
+    payload = manifest["payload"]
+    assert payload["engine_repo"] == engine_repo
+    assert payload["commit"] == sha
+    assert manifest["sha256"] == preflight._manifest_digest(payload)
+    assert preflight._verify_cache(
+        cache_dir / "hamanpaul" / "paulsha-conventions" / sha,
+        engine_repo,
+        sha,
+    ) == checkout
+    assert any(
+        (
+            command[0] == "git"
+            and command[1] == "-C"
+            and command[3:8]
+            == ("fetch", "--depth", "1", "origin", sha)
+        )
+        for command in calls
+    )
+    assert any(
+        (
+            command[0] == "git"
+            and command[1] == "-C"
+            and command[3:6] == ("checkout", "--detach", sha)
+        )
+        for command in calls
+    )
+
+
+def test_populate_cache_rejects_existing_artifact(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    artifact = preflight._cache_artifact(cache_dir, "hamanpaul/paulsha-conventions", "a" * 40)
+    artifact.mkdir(parents=True)
+    (artifact / "stale-marker").write_text("stale\n", encoding="utf-8")
+    with pytest.raises(
+        preflight.PreflightGateError,
+        match="invalid cache artifact already exists",
+    ):
+        preflight._populate_cache(cache_dir, "hamanpaul/paulsha-conventions", "a" * 40)
+
+
 def test_resolve_engine_pip_version_skew_fails(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(preflight, "_self_engine", lambda *_a: None)
     monkeypatch.setattr(preflight, "_installed_version", lambda: "1.0.11")
@@ -369,6 +479,33 @@ def test_source_engine_rejects_version_skew(monkeypatch, tmp_path) -> None:
 
     with pytest.raises(preflight.PreflightGateError, match="VERSION mismatch"):
         preflight._source_engine(tmp_path, _config(), display_prefix="skill")
+
+
+def test_is_canonical_checkout_returns_bool_all_branches(monkeypatch, tmp_path) -> None:
+    def remote_result(remote: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(["git", "remote", "get-url", "origin"], 0, f"{remote}\n", "")
+
+    monkeypatch.setattr(
+        preflight,
+        "_run_command",
+        lambda *_args, **_kwargs: remote_result(
+            "https://github.com/hamanpaul/paulsha-conventions"
+        ),
+    )
+    assert preflight._is_canonical_checkout(tmp_path) is True
+
+    monkeypatch.setattr(
+        preflight,
+        "_run_command",
+        lambda *_args, **_kwargs: remote_result("https://github.com/other/repo"),
+    )
+    assert preflight._is_canonical_checkout(tmp_path) is False
+
+    def fail_command(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(["git", "remote", "get-url", "origin"], 1)
+
+    monkeypatch.setattr(preflight, "_run_command", fail_command)
+    assert preflight._is_canonical_checkout(tmp_path) is False
 
 
 def test_verified_cache_requires_manifest_hash_and_clean_checkout(tmp_path) -> None:
@@ -599,6 +736,119 @@ def test_main_skill_mode_requires_repo_owned_steps(monkeypatch, tmp_path) -> Non
         ]
     )
     assert rc == 2
+
+
+@pytest.mark.parametrize(
+    "policy_body",
+    [
+        {"policy_profile": "flat", "policy_version": "1.0.12", "preflight": {}},
+        {
+            "policy_profile": "flat",
+            "policy_version": "1.0.12",
+            "preflight": {"steps": []},
+        },
+    ],
+)
+def test_main_skill_mode_requires_repo_owned_preflight_steps(
+    monkeypatch,
+    tmp_path,
+    policy_body: dict[str, object],
+) -> None:
+    body = tmp_path / "body.md"
+    body.write_text("Fixes #46\n", encoding="utf-8")
+    monkeypatch.setattr(preflight.policy_config, "load", lambda _repo, conf=policy_body: conf)
+    monkeypatch.setattr(preflight, "_validate_git_context", lambda *_a: None)
+    rc = preflight.main(
+        [
+            "--repo",
+            str(tmp_path),
+            "--engine-source",
+            str(tmp_path / "engine"),
+            "--pr-title",
+            "feat: x",
+            "--pr-body-file",
+            str(body),
+            "--base",
+            "main",
+            "--head",
+            "feature/x",
+        ]
+    )
+    assert rc == 2
+
+
+def test_main_skill_mode_allows_empty_steps_when_policy_only(monkeypatch, tmp_path) -> None:
+    body = tmp_path / "body.md"
+    body.write_text("Fixes #46\n", encoding="utf-8")
+    monkeypatch.setattr(
+        preflight.policy_config,
+        "load",
+        lambda _repo: {
+            "policy_profile": "flat",
+            "policy_version": "1.0.12",
+            "preflight": {"steps": []},
+        },
+    )
+    monkeypatch.setattr(preflight, "_validate_git_context", lambda *_a: None)
+    monkeypatch.setattr(preflight, "_run_policy", lambda *_a, **_kw: True)
+    monkeypatch.setattr(preflight, "_run_steps", lambda *_a, **_kw: True)
+    monkeypatch.setattr(
+        preflight,
+        "_resolve_engine",
+        lambda *_a, **_kw: preflight.EngineIdentity("installed", "test", None),
+    )
+    rc = preflight.main(
+        [
+            "--repo",
+            str(tmp_path),
+            "--engine-source",
+            str(tmp_path / "engine"),
+            "--policy-only",
+            "--pr-title",
+            "feat: x",
+            "--pr-body-file",
+            str(body),
+            "--base",
+            "main",
+            "--head",
+            "feature/x",
+        ]
+    )
+    assert rc == 0
+
+
+def test_main_engine_resolve_failure_still_prints_final_fail(monkeypatch, tmp_path, capsys) -> None:
+    body = tmp_path / "body.md"
+    body.write_text("Fixes #46\n", encoding="utf-8")
+    monkeypatch.setattr(
+        preflight.policy_config,
+        "load",
+        lambda _repo: {"policy_profile": "flat", "policy_version": "1.0.12"},
+    )
+    monkeypatch.setattr(preflight, "_validate_git_context", lambda *_a: None)
+
+    def fail_resolve(*_args, **_kwargs) -> preflight.EngineIdentity:
+        raise preflight.PreflightGateError("engine failed")
+
+    monkeypatch.setattr(preflight, "_resolve_engine", fail_resolve)
+    rc = preflight.main(
+        [
+            "--repo",
+            str(tmp_path),
+            "--pr-title",
+            "feat: x",
+            "--pr-body-file",
+            str(body),
+            "--base",
+            "main",
+            "--head",
+            "feature/x",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "engine: FAIL" in captured.out
+    assert "PREFLIGHT FAIL" in captured.out
 
 
 def test_main_prints_pass_only_when_all_selected_gates_pass(

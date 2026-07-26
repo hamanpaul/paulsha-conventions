@@ -42,6 +42,33 @@ def test_preflight_skill_wrapper_loads_canonical_help() -> None:
     assert "--engine-source" in result.stdout
 
 
+def test_preflight_skill_wrapper_prefers_canonical_over_target_decoy(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    subprocess.run(["git", "init", "-q", str(target)], check=True)
+    decoy = target / "policy_check"
+    decoy.mkdir()
+    (decoy / "__init__.py").write_text("", encoding="utf-8")
+    (decoy / "preflight.py").write_text(
+        'print("decoy module loaded")\n',
+        encoding="utf-8",
+    )
+
+    env = dict(os.environ)
+    env["PSC_PREFLIGHT_PYTHON"] = sys.executable
+    result = subprocess.run(
+        [str(SKILL / "scripts" / "preflight.sh"), "--help"],
+        cwd=target,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("usage: policy-preflight")
+    assert "decoy module loaded" not in result.stdout
+
+
 def test_preflight_skill_wrapper_keeps_target_as_working_directory(
     tmp_path: Path,
 ) -> None:
@@ -77,6 +104,47 @@ def test_preflight_skill_wrapper_keeps_target_as_working_directory(
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == str(target)
+
+
+def test_installer_rejects_non_symlink_target(tmp_path) -> None:
+    target_root = tmp_path / "skills"
+    target_root.mkdir()
+    target = target_root / "preflight-ci"
+    target.mkdir()
+    (target / "sentinel.txt").write_text("keep", encoding="utf-8")
+
+    installer = REPO / "scripts" / "install-preflight-skill.sh"
+    result = subprocess.run(
+        [str(installer), "--target-root", str(target_root)],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1, result.stderr
+    assert target.is_dir()
+    assert (target / "sentinel.txt").read_text(encoding="utf-8") == "keep"
+
+
+def test_installer_rejects_wrong_symlink_without_replace(tmp_path) -> None:
+    target_root = tmp_path / "skills"
+    target_root.mkdir()
+    other = tmp_path / "other-target"
+    other.mkdir()
+    target = target_root / "preflight-ci"
+    target.symlink_to(other)
+
+    installer = REPO / "scripts" / "install-preflight-skill.sh"
+    result = subprocess.run(
+        [str(installer), "--target-root", str(target_root)],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1, result.stderr
+    assert target.is_symlink()
+    assert target.resolve() == other.resolve()
 
 
 def test_installer_migrates_only_a_symlink(tmp_path) -> None:
