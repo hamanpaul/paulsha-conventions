@@ -201,6 +201,20 @@ def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def _load_state(path: Path, *, required: bool = False) -> dict[str, Any]:
+    if not path.is_file():
+        if required:
+            raise RuntimeBundleError("install state is missing")
+        return {}
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeBundleError("install state is invalid") from exc
+    if not isinstance(state, dict):
+        raise RuntimeBundleError("install state must be a JSON object")
+    return state
+
+
 def _atomic_symlink(target: Path, link: Path) -> None:
     link.parent.mkdir(parents=True, exist_ok=True)
     temporary = link.with_name(f".{link.name}.tmp-{uuid.uuid4().hex}")
@@ -363,6 +377,9 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
     _ensure_skill_target(skill_target, runtime_root)
     if destination.exists() or destination.is_symlink():
         raise RuntimeBundleError(f"release already installed: {version}")
+    state_path = runtime_root / "state.json"
+    state = _load_state(state_path)
+    previous = state.get("current") if isinstance(state.get("current"), str) else None
     releases.mkdir(parents=True, exist_ok=True)
     staging = releases / f".staging-{version}-{uuid.uuid4().hex}"
     try:
@@ -401,15 +418,6 @@ def install(bundle: Path, root: Path, skill_target: Path) -> str:
             shutil.rmtree(staging)
         raise
 
-    state_path = runtime_root / "state.json"
-    previous: str | None = None
-    if state_path.is_file():
-        try:
-            state = json.loads(state_path.read_text(encoding="utf-8"))
-            if isinstance(state, dict) and isinstance(state.get("current"), str):
-                previous = state["current"]
-        except (OSError, UnicodeError, json.JSONDecodeError):
-            raise RuntimeBundleError("existing state.json is invalid")
     _atomic_symlink(destination, runtime_root / "current")
     _write_json_atomic(
         state_path,
@@ -518,14 +526,7 @@ def activate(root: Path, skill_target: Path, version: str) -> None:
     release = _verified_release(runtime_root, version)
     _ensure_skill_target(skill_target, runtime_root)
     state_path = runtime_root / "state.json"
-    state: dict[str, Any] = {}
-    if state_path.is_file():
-        try:
-            loaded = json.loads(state_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise RuntimeBundleError("state.json is invalid") from exc
-        if isinstance(loaded, dict):
-            state = loaded
+    state = _load_state(state_path)
     previous = state.get("current") if isinstance(state.get("current"), str) else None
     _atomic_symlink(release, runtime_root / "current")
     state.update({"schema_version": 1, "current": version, "previous": previous})
@@ -539,11 +540,8 @@ def activate(root: Path, skill_target: Path, version: str) -> None:
 
 def rollback(root: Path, skill_target: Path, version: str | None) -> str:
     state_path = root.resolve() / "state.json"
-    try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise RuntimeBundleError("cannot read rollback state") from exc
-    target = version or (state.get("previous") if isinstance(state, dict) else None)
+    state = _load_state(state_path, required=True)
+    target = version or state.get("previous")
     if not isinstance(target, str):
         raise RuntimeBundleError("no verified previous version is recorded")
     activate(root, skill_target, target)
@@ -553,12 +551,7 @@ def rollback(root: Path, skill_target: Path, version: str | None) -> str:
 def uninstall(root: Path, version: str) -> None:
     runtime_root = root.resolve()
     state_path = runtime_root / "state.json"
-    try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise RuntimeBundleError("cannot read install state") from exc
-    if not isinstance(state, dict):
-        raise RuntimeBundleError("install state must be a JSON object")
+    state = _load_state(state_path, required=True)
     if state.get("current") == version:
         raise RuntimeBundleError("refusing to uninstall the active release")
     release = _verified_release(runtime_root, version)

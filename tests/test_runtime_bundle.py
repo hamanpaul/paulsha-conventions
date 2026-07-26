@@ -464,6 +464,22 @@ def test_uninstall_rejects_non_object_state(tmp_path: Path) -> None:
         manager.uninstall(runtime_root, "1.0.13")
 
 
+def test_install_rejects_corrupt_state_before_creating_release(
+    tmp_path: Path,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir()
+    (runtime_root / "state.json").write_text("[]\n", encoding="utf-8")
+    with pytest.raises(manager.RuntimeBundleError, match="JSON object"):
+        manager.install(
+            bundle,
+            runtime_root,
+            tmp_path / "skills" / "preflight-ci",
+        )
+    assert not (runtime_root / "releases").exists()
+
+
 def test_launcher_derives_root_and_rejects_forwarded_repo(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
