@@ -183,7 +183,7 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
             "lib/python*/site-packages/yaml/__init__.py"
         )
     )
-    yaml_init.write_text("tampered dependency\n", encoding="utf-8")
+    yaml_init.write_text("# tampered dependency\n", encoding="utf-8")
     attestation = subprocess.run(
         [
             str(manager._venv_python(runtime_root / "releases" / first / "venv")),
