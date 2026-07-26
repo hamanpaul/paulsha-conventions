@@ -75,8 +75,10 @@ release requested by the target manifest and never falls back to `current`.
 - `--skip-tests`: skip only steps declared with `kind: tests`.
 - `PSC_PREFLIGHT_PYTHON`: optional Python interpreter used to start the
   canonical engine. Project test interpreters belong in each step's `argv`.
-- `PSC_CONVENTIONS_ROOT`: optional deployed runtime root override. It is used
-  only when the skill is not inside a source checkout.
+- `PSC_CONVENTIONS_ROOT`: optional deployed runtime root fallback. A
+  bundle-managed skill first derives its custom runtime root from its resolved
+  physical location, then falls back to this variable, `XDG_DATA_HOME`, and
+  the default HOME location.
 
 ## Failure handling
 

@@ -45,7 +45,9 @@ policy-runtime-bundle build \
   --output-dir /path/release-output
 ```
 
-發行建置環境需提供 Python 3.11+、`build` 與 pip。Python dependency 版本由
+發行建置環境需提供 Python 3.11+、`build` 與 pip。安裝主機另需 `git`、
+GNU `sha256sum` 與支援 JSON output 的 `universal-ctags`；installer 會依
+manifest prerequisites 在 staging 前驗證命令存在且可用。Python dependency 版本由
 `policy_check/runtime_bundle/constraints.txt` 鎖定；builder 會先檢查每個
 `[project].dependencies` 都有一筆 exact `name==version` constraint，再正規化
 archive mode/mtime/owner/order，並把 build interpreter、ABI 與 platform 寫入
@@ -94,8 +96,11 @@ ABI/platform-specific wheel closure 誤當成任意 Python 3.11+ 通用 bundle�
 └── state.json
 ```
 
-可用 `XDG_DATA_HOME` 或 `PSC_CONVENTIONS_ROOT` 調整 root。安裝器不覆寫實體
-skill directory，也不接管指向 runtime root 外的既有 symlink。
+可用 `--root <PATH>`、`XDG_DATA_HOME` 或 `PSC_CONVENTIONS_ROOT` 調整 root，
+並可用 `--skill-target <PATH>` 指定受管 skill symlink。部署後的 skill 先從
+自身解析後的 `current/artifact/skills/preflight-ci` 實體位置反推 runtime
+root，再退回環境變數與預設值，因此 custom `--root` 不要求永久 export。
+安裝器不覆寫實體 skill directory，也不接管指向 runtime root 外的既有 symlink。
 
 既有 source checkout 安裝通常會留下實體目錄或指向 repo 的 symlink；首次切換
 到 runtime bundle 前必須由操作者明確備份，不可讓 installer 自動接管：
@@ -111,6 +116,20 @@ mv "$skill_target" "$skill_backup"
 若安裝失敗，在確認 `$skill_target` 仍不存在後用
 `mv "$skill_backup" "$skill_target"` 還原。安裝成功並完成 smoke 後才可保留或
 人工移除 backup；不要以覆寫、遞迴刪除或自動 adopt 取代這個可逆步驟。
+
+反向從 bundle-managed skill 切回 source checkout 時，普通 `--replace` 會拒絕
+覆寫受管 symlink。先確認目前不需切換到另一個 VERIFIED bundle release（需要時
+用 `policy-runtime-bundle rollback --version X.Y.Z`），再由 source checkout
+明確執行：
+
+```bash
+scripts/install-preflight-skill.sh --replace-managed-runtime
+```
+
+這只改變 agent skill discovery；不會偽造 `state.json`、移除 active release <!-- doc-drift-ignore -->
+或刪除 runtime root。非 active 舊版本仍須用受管 `uninstall --version X.Y.Z`
+移除；若要恢復 bundle discovery，重新執行已驗證 bundle 的 install/activate
+流程，不要手動改 `current` 或 `state.json`。 <!-- doc-drift-ignore -->
 
 ## Exact selection
 

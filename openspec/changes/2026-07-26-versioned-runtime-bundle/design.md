@@ -71,7 +71,8 @@ Launcher 必須清除 `PYTHONPATH`／`PYTHONHOME`、啟用 safe-path/isolated im
 
 1. 以 source/manager 共用的 stdlib verifier 驗 manifest schema、path
    containment、hash、version 與 wheel closure。
-2. 在任何 staging 寫入前確認 host 提供 `venv/ensurepip`。
+2. 在任何 staging 寫入前依 manifest prerequisites 確認 host 提供 `git`、
+   `sha256sum`、JSON-capable `universal-ctags` 與 `venv/ensurepip`。
 3. 在 runtime root 內建立唯一 staging directory並建立 venv，以
    `--no-index --find-links` 安裝 wheel closure。
 4. 在暫存 HOME 與 fixture repo 執行 policy/preflight artifact smoke。
@@ -89,6 +90,10 @@ current 時先修復受管 links 再明確拒絕，禁止把 previous 汙染成 
 
 `~/.agents/skills/preflight-ci` 若是非受管真檔／目錄／外部 symlink，installer
 必須拒絕且保留原內容。所有測試使用暫存 HOME/runtime root，不碰真實 user state。
+反向 source installer 若遇到 bundle-managed symlink，普通 `--replace` 也必須
+拒絕；distinct explicit migration flag 只可改 skill discovery，不改 runtime
+state/current。部署 skill 從自身 resolved physical path 優先反推 custom runtime
+root，避免公開 `--root` 安裝成功後因未 export 環境變數而失聯。
 
 ## 4. Canonical project manifest 與 conflict gate
 

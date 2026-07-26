@@ -47,6 +47,63 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
   echo "ERROR: Python venv/ensurepip support is required; install python3-venv" >&2
   exit 2
 }
+"$PYTHON_BIN" -I - "$BUNDLE_ROOT/manifest.json" <<'PY' || exit 2
+import json
+import shutil
+import subprocess
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        manifest = json.load(stream)
+except (OSError, UnicodeError, json.JSONDecodeError):
+    print("ERROR: verified bundle manifest is unreadable", file=sys.stderr)
+    raise SystemExit(2)
+if not isinstance(manifest, dict) or not isinstance(
+    manifest.get("prerequisites"),
+    list,
+):
+    print("ERROR: verified bundle manifest prerequisites are invalid", file=sys.stderr)
+    raise SystemExit(2)
+checks = {
+    "git": ("git", ["--version"]),
+    "sha256sum": ("sha256sum", ["--version"]),
+    "universal-ctags": ("ctags", ["--output-format=json", "--version"]),
+}
+missing = []
+for prerequisite in manifest.get("prerequisites", []):
+    if not isinstance(prerequisite, str):
+        print(
+            "ERROR: verified bundle manifest prerequisites are invalid",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    if prerequisite not in checks:
+        continue
+    command, arguments = checks[prerequisite]
+    executable = shutil.which(command)
+    if executable is None:
+        missing.append(f"{prerequisite} ({command})")
+        continue
+    try:
+        result = subprocess.run(
+            [executable, *arguments],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except OSError:
+        missing.append(f"{prerequisite} ({command})")
+        continue
+    if result.returncode != 0:
+        missing.append(f"{prerequisite} ({command})")
+if missing:
+    print(
+        "ERROR: runtime install prerequisites unavailable: " + ", ".join(missing),
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+PY
 exec "$PYTHON_BIN" -P "$BUNDLE_ROOT/runtime/runtime_manager.py" \
   install --bundle "$BUNDLE_ROOT" "$@"
 """

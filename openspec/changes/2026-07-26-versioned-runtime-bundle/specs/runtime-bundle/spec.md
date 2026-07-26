@@ -32,6 +32,9 @@ build interpreter/ABI/platform compatibility、prerequisites 與 payload hashes�
 Installer SHALL 先驗證 bundle，再於新 staging 建隔離 venv，以
 `--no-index --find-links` 安裝 dependency closure並執行 artifact smoke；全部成功
 後才 MAY 原子 activation。失敗 MUST 保持原 active release/state/skill link。
+Installer SHALL 在 staging 前消費 manifest prerequisites，驗證 `git`、
+`sha256sum`、JSON-capable `universal-ctags` 與 `venv/ensurepip` 可用，失敗訊息
+MUST 指出缺少的能力。Policy smoke 失敗 MUST 保留 bounded gate diagnostic。
 
 #### Scenario: install smoke 失敗
 - **WHEN** venv install、policy smoke 或 preflight smoke 任一步失敗
@@ -46,6 +49,11 @@ Installer SHALL 先驗證 bundle，再於新 staging 建隔離 venv，以
 #### Scenario: unmanaged skill target
 - **WHEN** agent skill target 是非 installer 管理的真檔、目錄或外部 symlink
 - **THEN** installer FAIL 並保留原 target
+
+#### Scenario: source installer 遇到 bundle-managed skill
+- **WHEN** source-checkout skill installer 要替換 bundle-managed skill symlink
+- **THEN** 普通 replace MUST FAIL；只有 distinct explicit migration flag 才可改變
+  agent discovery，且不得改寫 runtime state/current
 
 ### Requirement: selector 必須依 target exact version，禁止 fallback
 Stable launcher SHALL 讀 target project manifest 的 exact `policy_version`，只使用

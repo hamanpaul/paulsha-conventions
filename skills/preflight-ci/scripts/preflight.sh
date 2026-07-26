@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SKILL_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "ERROR: run preflight-ci from a target git repository" >&2
   exit 2
@@ -9,7 +9,10 @@ TARGET_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 
 ENGINE_ROOT="$(git -C "$SKILL_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -z "$ENGINE_ROOT" || ! -f "$ENGINE_ROOT/policy_check/preflight.py" ]]; then
-  if [[ -n "${PSC_CONVENTIONS_ROOT:-}" ]]; then
+  PHYSICAL_RUNTIME_ROOT="$(cd -P "$SKILL_DIR/../../../.." 2>/dev/null && pwd || true)"
+  if [[ -n "$PHYSICAL_RUNTIME_ROOT" && -x "$PHYSICAL_RUNTIME_ROOT/bin/policy-preflight" ]]; then
+    RUNTIME_ROOT="$PHYSICAL_RUNTIME_ROOT"
+  elif [[ -n "${PSC_CONVENTIONS_ROOT:-}" ]]; then
     RUNTIME_ROOT="$PSC_CONVENTIONS_ROOT"
   elif [[ -n "${XDG_DATA_HOME:-}" ]]; then
     RUNTIME_ROOT="$XDG_DATA_HOME/paulsha-conventions"

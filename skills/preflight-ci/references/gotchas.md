@@ -12,8 +12,9 @@
 
 - **Symptom:** preflight reports `<step>: FAIL ... (exit=N)` without the command's
   captured stdout/stderr.
-- **Why:** the step output is intentionally not echoed; its executable contract
-  remains the typed `argv`, `cwd`, and timeout in the project policy manifest.
+- **Why:** repo-owned step output is intentionally not echoed; its executable
+  contract remains the typed `argv`, `cwd`, and timeout in the project policy
+  manifest. The engine-owned policy gate separately emits a bounded diagnostic.
 - **Fix:** from the same checkout and environment, change to the declared `cwd`
   and rerun that step's exact `argv`. Do not reinterpret it through a shell or
   add PR metadata flags that are not part of the declared command.

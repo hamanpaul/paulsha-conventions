@@ -363,7 +363,8 @@ network. Because dependency wheels can be ABI/platform specific, installation
 also requires the exact Python major/minor, implementation, ABI, and platform
 recorded by the builder. Upgrade activation happens only after offline install
 and full preflight smoke. The install host must also provide `venv/ensurepip`
-(commonly the `python3-venv` package). Rollback switches to an already verified release:
+(commonly the `python3-venv` package), `git`, GNU `sha256sum`, and
+`universal-ctags` with JSON output. Rollback switches to an already verified release:
 
 ```bash
 policy-runtime-bundle rollback --version X.Y.Z
@@ -844,6 +845,8 @@ policy-runtime-bundle extract \
 完整 preflight smoke 都通過後才 activation。相依 wheel 可能綁 ABI/platform，
 因此安裝主機必須符合 manifest 記錄的 Python major/minor、implementation、ABI
 與 platform，並具備 `venv/ensurepip`（Debian/Ubuntu 通常是 `python3-venv`）；
+安裝主機也需有 `git`、GNU `sha256sum` 與支援 JSON output 的
+`universal-ctags`；
 每個 direct project dependency 也必須有 exact constraint。既有未受管
 `preflight-ci` 目錄或 source-checkout symlink 須先移到可逆 backup，installer
 不會自動接管；rollback 只切到既有 VERIFIED release。active release 若被竄改，

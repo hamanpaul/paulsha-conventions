@@ -970,6 +970,39 @@ def test_run_policy_isolates_installed_engine_from_repo_shadowing(
     assert captured["argv"][1:3] == ["-P", "-I"]
 
 
+def test_run_policy_failure_reports_bounded_actionable_output(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    monkeypatch.setattr(
+        preflight,
+        "_run_command",
+        lambda argv, **_kwargs: subprocess.CompletedProcess(
+            argv,
+            1,
+            "",
+            "RuntimeError: universal-ctags is unavailable\n",
+        ),
+    )
+    context = preflight.PullRequestContext(
+        "feat: x",
+        "",
+        (),
+        "main",
+        "feature/x",
+        "public",
+    )
+    assert not preflight._run_policy(
+        tmp_path,
+        context,
+        preflight.EngineIdentity("installed", "test", None),
+    )
+    output = capsys.readouterr().out
+    assert "policy: FAIL" in output
+    assert "universal-ctags is unavailable" in output
+
+
 def test_main_returns_one_when_any_gate_fails(monkeypatch, tmp_path) -> None:
     body = tmp_path / "body.md"
     body.write_text("Fixes #46\n", encoding="utf-8")

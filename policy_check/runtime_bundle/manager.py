@@ -75,8 +75,19 @@ def _run(argv: Sequence[str], *, cwd: Path, env: dict[str, str] | None = None) -
     except (OSError, UnicodeError) as exc:
         raise RuntimeBundleError(f"command unavailable: {argv[0]}") from exc
     if result.returncode != 0:
-        details = (result.stderr or result.stdout).strip().splitlines()
-        suffix = f": {details[-1][:500]}" if details else ""
+        details: list[str] = []
+        for line in (result.stderr or result.stdout).strip().splitlines():
+            if not line.strip():
+                continue
+            details.append(
+                line
+                if len(line) <= 500
+                else f"{line[:240]} ... {line[-240:]}"
+            )
+        diagnostic = "\n".join(details[-12:])
+        if len(diagnostic) > 3000:
+            diagnostic = diagnostic[-3000:]
+        suffix = f":\n{diagnostic}" if diagnostic else ""
         raise RuntimeBundleError(
             f"command failed ({result.returncode}): {argv[0]}{suffix}"
         )
@@ -136,6 +147,32 @@ def _require_venv_support(cwd: Path) -> None:
         raise RuntimeBundleError(
             "Python venv/ensurepip support is unavailable; install python3-venv"
         ) from exc
+
+
+def _require_runtime_commands(manifest: dict[str, Any], cwd: Path) -> None:
+    checks = {
+        "git": ("git", ["--version"]),
+        "sha256sum": ("sha256sum", ["--version"]),
+        "universal-ctags": ("ctags", ["--output-format=json", "--version"]),
+    }
+    declared = manifest["prerequisites"]
+    for prerequisite in declared:
+        check = checks.get(prerequisite)
+        if check is None:
+            continue
+        command, arguments = check
+        if shutil.which(command) is None:
+            raise RuntimeBundleError(
+                "runtime install prerequisite unavailable: "
+                f"{prerequisite} ({command})"
+            )
+        try:
+            _run([command, *arguments], cwd=cwd)
+        except RuntimeBundleError as exc:
+            raise RuntimeBundleError(
+                "runtime install prerequisite is incompatible: "
+                f"{prerequisite} ({command})"
+            ) from exc
 
 
 def _symlink_points_to(link: Path, target: Path) -> bool:
@@ -371,6 +408,7 @@ def install(
     if not isinstance(previous, str):
         previous = None
     _require_venv_support(bundle)
+    _require_runtime_commands(manifest, bundle)
     releases.mkdir(parents=True, exist_ok=True)
     staging = releases / f".staging-{version}-{uuid.uuid4().hex}"
     displaced: Path | None = None

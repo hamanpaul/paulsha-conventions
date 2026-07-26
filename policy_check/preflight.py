@@ -869,6 +869,19 @@ def _gate_result(name: str, status: str, started: float, detail: str = "") -> No
     print(f"{name}: {status} {duration:.2f}s{suffix}")
 
 
+def _bounded_command_diagnostic(
+    result: subprocess.CompletedProcess[str],
+) -> str:
+    text = (result.stderr or result.stdout).strip()
+    if not text:
+        return ""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    diagnostic = " | ".join(lines[-4:])
+    if len(diagnostic) > 800:
+        diagnostic = diagnostic[-800:]
+    return diagnostic
+
+
 def _run_policy(
     repo_root: Path,
     context: PullRequestContext,
@@ -919,7 +932,12 @@ def _run_policy(
         )
         return False
     ok = result.returncode == 0
-    _gate_result("policy", "PASS" if ok else "FAIL", started, f"exit={result.returncode}")
+    detail = f"exit={result.returncode}"
+    if not ok:
+        diagnostic = _bounded_command_diagnostic(result)
+        if diagnostic:
+            detail += f"; output={diagnostic}"
+    _gate_result("policy", "PASS" if ok else "FAIL", started, detail)
     return ok
 
 

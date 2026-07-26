@@ -72,8 +72,10 @@ def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
             f"python=={sys.version_info.major}.{sys.version_info.minor}",
             f"abi=={sysconfig.get_config_var('SOABI') or ''}",
             f"platform=={sysconfig.get_platform()}",
+            "python-venv+ensurepip",
             "git",
             "sha256sum",
+            "universal-ctags",
         ],
     }
     (bundle / "manifest.json").write_text(
@@ -194,6 +196,33 @@ def test_installer_reports_missing_venv_support_before_runtime_code(
 
     assert result.returncode == 2
     assert "python3-venv" in result.stderr
+
+
+def test_installer_reports_missing_manifest_command_before_runtime_code(
+    tmp_path: Path,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "bundle")
+    command_dir = tmp_path / "commands"
+    command_dir.mkdir()
+    for command in ("bash", "dirname", "git", "sha256sum"):
+        source = manager.shutil.which(command)
+        assert source is not None
+        (command_dir / command).symlink_to(source)
+    env = dict(os.environ)
+    env["PATH"] = str(command_dir)
+    env["PYTHON_BIN"] = sys.executable
+
+    result = subprocess.run(
+        [str(bundle / "install.sh")],
+        cwd=bundle,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "universal-ctags (ctags)" in result.stderr
 
 
 def test_verify_bundle_accepts_fix_suffix_as_post_package_version(
@@ -327,6 +356,25 @@ def test_runtime_command_failure_includes_bounded_diagnostic(tmp_path: Path) -> 
             ],
             cwd=tmp_path,
         )
+
+
+def test_runtime_command_failure_preserves_bounded_multiline_diagnostic(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(manager.RuntimeBundleError) as failure:
+        manager._run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; "
+                "print('policy: FAIL (universal-ctags unavailable)', file=sys.stderr); "
+                "print('PREFLIGHT FAIL', file=sys.stderr); "
+                "raise SystemExit(1)",
+            ],
+            cwd=tmp_path,
+        )
+    assert "universal-ctags unavailable" in str(failure.value)
+    assert "PREFLIGHT FAIL" in str(failure.value)
 
 
 def test_default_root_prefers_explicit_runtime_root(
@@ -537,6 +585,32 @@ def test_install_rejects_missing_venv_support_before_staging(
 
     monkeypatch.setattr(manager, "_run", fail_ensurepip)
     with pytest.raises(manager.RuntimeBundleError, match="python3-venv"):
+        manager.install(
+            bundle,
+            runtime_root,
+            tmp_path / "skills" / "preflight-ci",
+        )
+    assert not (runtime_root / "releases").exists()
+
+
+def test_install_rejects_missing_manifest_command_before_staging(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    runtime_root = tmp_path / "runtime"
+    real_which = manager.shutil.which
+
+    monkeypatch.setattr(manager, "_require_venv_support", lambda *_a: None)
+    monkeypatch.setattr(
+        manager.shutil,
+        "which",
+        lambda command: None if command == "ctags" else real_which(command),
+    )
+    with pytest.raises(
+        manager.RuntimeBundleError,
+        match=r"universal-ctags \(ctags\)",
+    ):
         manager.install(
             bundle,
             runtime_root,
