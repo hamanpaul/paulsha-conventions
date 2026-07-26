@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import PurePosixPath
 
 import yaml
 
@@ -10,6 +11,15 @@ from policy_check.rules.registry import register
 
 # conventions_engine.repo 須為 'owner/repo'（空字串 = 未設/NA sentinel，放行）
 _ENGINE_REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
+
+
+def _is_repo_relative_path(value: object, *, allow_dot: bool = True) -> bool:
+    if not isinstance(value, str) or not value.strip() or "\\" in value:
+        return False
+    path = PurePosixPath(value.strip())
+    if path.is_absolute() or ".." in path.parts:
+        return False
+    return allow_dot or path.as_posix() != "."
 
 
 @register
@@ -205,6 +215,91 @@ class R08PolicyConfigSchema:
         ):
             return RuleResult(rule_id=self.rule_id, status=Status.FAIL,
                               message="generated_facts must be a list of mappings")
+
+        # 驗證 preflight：typed argv、repo-relative paths、bounded timeout。
+        # 未知 subkey 保持 lenient；只驗已知契約欄位。
+        preflight = data.get("preflight")
+        if preflight is not None:
+            if not isinstance(preflight, dict):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="preflight must be a mapping",
+                )
+            steps = preflight.get("steps")
+            if steps is not None:
+                if not isinstance(steps, list) or not all(
+                    isinstance(step, dict) for step in steps
+                ):
+                    return RuleResult(
+                        rule_id=self.rule_id,
+                        status=Status.FAIL,
+                        message="preflight.steps must be a list of mappings",
+                    )
+                names: set[str] = set()
+                for index, step in enumerate(steps):
+                    prefix = f"preflight.steps[{index}]"
+                    name = step.get("name")
+                    if not isinstance(name, str) or not name.strip():
+                        return RuleResult(
+                            rule_id=self.rule_id,
+                            status=Status.FAIL,
+                            message=f"{prefix}.name must be a non-empty string",
+                        )
+                    if name.strip() in names:
+                        return RuleResult(
+                            rule_id=self.rule_id,
+                            status=Status.FAIL,
+                            message=f"{prefix}.name must be unique",
+                        )
+                    names.add(name.strip())
+                    if step.get("kind") not in ("validation", "tests"):
+                        return RuleResult(
+                            rule_id=self.rule_id,
+                            status=Status.FAIL,
+                            message=f"{prefix}.kind must be one of ['tests', 'validation']",
+                        )
+                    argv = step.get("argv")
+                    if (
+                        not isinstance(argv, list)
+                        or not argv
+                        or not all(isinstance(item, str) and item for item in argv)
+                    ):
+                        return RuleResult(
+                            rule_id=self.rule_id,
+                            status=Status.FAIL,
+                            message=f"{prefix}.argv must be a non-empty list of strings",
+                        )
+                    cwd = step.get("cwd")
+                    if cwd is not None and not _is_repo_relative_path(cwd):
+                        return RuleResult(
+                            rule_id=self.rule_id,
+                            status=Status.FAIL,
+                            message=f"{prefix}.cwd must be a repo-relative path",
+                        )
+                    when = step.get("when_path_exists")
+                    if when is not None and not _is_repo_relative_path(
+                        when,
+                        allow_dot=False,
+                    ):
+                        return RuleResult(
+                            rule_id=self.rule_id,
+                            status=Status.FAIL,
+                            message=(
+                                f"{prefix}.when_path_exists must be a repo-relative path"
+                            ),
+                        )
+                    timeout = step.get("timeout_seconds")
+                    if timeout is not None and (
+                        not isinstance(timeout, int)
+                        or isinstance(timeout, bool)
+                        or timeout <= 0
+                    ):
+                        return RuleResult(
+                            rule_id=self.rule_id,
+                            status=Status.FAIL,
+                            message=f"{prefix}.timeout_seconds must be a positive integer",
+                        )
 
         # 驗證 moc 區塊：mapping；static/map 為 str；triggers 為 list[str]
         moc = data.get("moc")

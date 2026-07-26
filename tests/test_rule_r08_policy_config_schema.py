@@ -469,3 +469,113 @@ def test_r08_pass_on_null_auto_build_subkeys(tmp_path):
     )
     result = _r08().check(_ctx(repo))
     assert result.status == Status.PASS
+
+
+# ---- canonical local preflight schema (issue #46) ----
+
+
+def test_r08_pass_valid_preflight_steps(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.12\n"
+        "preflight:\n"
+        "  steps:\n"
+        "    - name: openspec\n"
+        "      kind: validation\n"
+        '      argv: ["openspec", "validate", "--all"]\n'
+        "      when_path_exists: openspec\n"
+        "      timeout_seconds: 300\n"
+        "    - name: tests\n"
+        "      kind: tests\n"
+        '      argv: ["python3", "-m", "pytest", "-q"]\n'
+        "      cwd: .\n"
+        "      timeout_seconds: 1200\n",
+    )
+    assert _r08().check(_ctx(repo)).status == Status.PASS
+
+
+@pytest.mark.parametrize(
+    ("preflight_yaml", "expected"),
+    [
+        ("preflight: nope\n", "preflight must be a mapping"),
+        ("preflight:\n  steps: nope\n", "preflight.steps"),
+        (
+            "preflight:\n  steps:\n    - name: ''\n"
+            "      kind: tests\n      argv: [pytest]\n",
+            ".name",
+        ),
+        (
+            "preflight:\n  steps:\n    - name: x\n"
+            "      kind: deploy\n      argv: [deploy]\n",
+            ".kind",
+        ),
+        (
+            "preflight:\n  steps:\n    - name: x\n"
+            "      kind: tests\n      argv: pytest\n",
+            ".argv",
+        ),
+        (
+            "preflight:\n  steps:\n    - name: x\n"
+            "      kind: tests\n      argv: [pytest, 3]\n",
+            ".argv",
+        ),
+        (
+            "preflight:\n  steps:\n    - name: x\n"
+            "      kind: tests\n      argv: [pytest]\n      cwd: ../outside\n",
+            ".cwd",
+        ),
+        (
+            "preflight:\n  steps:\n    - name: x\n"
+            "      kind: tests\n      argv: [pytest]\n"
+            "      when_path_exists: /absolute\n",
+            ".when_path_exists",
+        ),
+        (
+            "preflight:\n  steps:\n    - name: x\n"
+            "      kind: tests\n      argv: [pytest]\n      timeout_seconds: 0\n",
+            ".timeout_seconds",
+        ),
+        (
+            "preflight:\n  steps:\n    - name: x\n"
+            "      kind: tests\n      argv: [pytest]\n      timeout_seconds: true\n",
+            ".timeout_seconds",
+        ),
+    ],
+)
+def test_r08_rejects_invalid_preflight_shapes(tmp_path, preflight_yaml, expected):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.12\n" + preflight_yaml,
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert expected in result.message
+
+
+def test_r08_rejects_duplicate_preflight_step_names(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.12\n"
+        "preflight:\n"
+        "  steps:\n"
+        "    - {name: same, kind: tests, argv: [pytest]}\n"
+        "    - {name: same, kind: validation, argv: [check]}\n",
+    )
+    result = _r08().check(_ctx(repo))
+    assert result.status == Status.FAIL
+    assert "unique" in result.message
+
+
+def test_r08_allows_unknown_preflight_subkeys(tmp_path):
+    repo = _write_config(
+        tmp_path,
+        "policy_profile: flat\npolicy_version: 1.0.12\n"
+        "preflight:\n"
+        "  future_mode: strict\n"
+        "  steps:\n"
+        "    - name: tests\n"
+        "      kind: tests\n"
+        "      argv: [pytest]\n"
+        "      future_field: value\n",
+    )
+    assert _r08().check(_ctx(repo)).status == Status.PASS

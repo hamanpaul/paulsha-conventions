@@ -232,7 +232,69 @@ python3 -m policy_check --repo .
 python3 -m policy_check --repo . --only R-01,R-02,R-03
 ```
 
-#### 2. CI integration (downstream repos)
+#### 2. Local/offline preflight
+
+`policy-preflight` runs the policy gate and the repository-owned validation/test
+steps declared in `.paul-project.yml`. Manual mode requires an explicit PR title
+and body file so PR-only rules are evaluated with complete context:
+
+```bash
+policy-preflight \
+  --repo . \
+  --pr-title "feat(preflight): add canonical local preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/local-preflight \
+  --repo-visibility public
+```
+
+When GitHub metadata is available, online mode can load it directly:
+
+```bash
+policy-preflight --repo . --pr 46
+```
+
+Offline mode disables network-capable **engine resolver** operations and accepts
+only a matching installed distribution or a verified exact-SHA cache artifact.
+PR metadata must be supplied manually. Repository-owned commands still execute
+under the repository's authority and may have their own network behavior:
+
+```bash
+policy-preflight \
+  --repo . \
+  --offline \
+  --pr-title "fix(policy): verify offline preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/offline-preflight \
+  --repo-visibility private
+```
+
+Downstream repositories declare typed commands rather than shell strings:
+
+```yaml
+preflight:
+  steps:
+    - name: openspec
+      kind: validation
+      argv: ["openspec", "validate", "--all"]
+      when_path_exists: "openspec"
+      timeout_seconds: 300
+    - name: tests
+      kind: tests
+      argv: ["python3", "-m", "pytest", "-q"]
+      timeout_seconds: 1200
+```
+
+`--skip-tests` skips only `kind: tests`; `--policy-only` skips every
+repository-owned step while preserving engine resolution and the policy gate.
+The effective head must match the current checkout branch, and `origin/<base>`
+must exist with a valid merge base; otherwise preflight stops instead of
+silently evaluating an empty changed-file set.
+Configuration/input errors exit 2, a failed gate exits 1, and only complete
+success exits 0.
+
+#### 3. CI integration (downstream repos)
 
 **GitHub reusable workflow** — call this repo's reusable workflow from `.github/workflows/policy-check.yml`:
 
@@ -261,11 +323,11 @@ conventions_engine:
   mode: pip
 ```
 
-#### 3. Helper scripts
+#### 4. Helper scripts
 
 `scripts/update-cli-help.sh` — actually runs each command declared in `.paul-project.yml.cli` and rewrites the marker blocks in the docs (the R-16 sync mechanism). CI does **not** auto-fix; developers run it locally and commit the updated docs. The script fixes `LC_ALL=C` to avoid locale-dependent output.
 
-#### 4. New-project bootstrap
+#### 5. New-project bootstrap
 
 Use `hamanpaul/new-project-template` to create a new repo that automatically includes `.paul-project.yml`, the README / CHANGELOG / VERSION skeleton, the four agent convention files, and a `.github/workflows/policy-check.yml` calling this repo's reusable workflow:
 
@@ -294,6 +356,30 @@ options:
   --repo-visibility {public,private,internal,unknown}
   --only ONLY           Comma-separated rule IDs (e.g. R-01,R-09)
 <!-- END: cli-help marker="policy-check-help" -->
+
+<!-- BEGIN: cli-help marker="policy-preflight-help" -->
+usage: policy-preflight [-h] [--repo REPO] [--pr PR | --offline]
+                        [--pr-title PR_TITLE] [--pr-body-file PR_BODY_FILE]
+                        [--pr-labels PR_LABELS] [--base BASE] [--head HEAD]
+                        [--repo-visibility {public,private,internal,unknown}]
+                        [--skip-tests] [--policy-only] [--cache-dir CACHE_DIR]
+
+options:
+  -h, --help            show this help message and exit
+  --repo REPO           Repository root
+  --pr PR               GitHub PR number or URL
+  --offline             Disable network-capable resolver operations
+  --pr-title PR_TITLE
+  --pr-body-file PR_BODY_FILE
+  --pr-labels PR_LABELS
+                        Comma-separated; empty means no labels
+  --base BASE
+  --head HEAD
+  --repo-visibility {public,private,internal,unknown}
+  --skip-tests
+  --policy-only
+  --cache-dir CACHE_DIR
+<!-- END: cli-help marker="policy-preflight-help" -->
 
 ### Versioning
 
@@ -533,7 +619,67 @@ python3 -m policy_check --repo .
 python3 -m policy_check --repo . --only R-01,R-02,R-03
 ```
 
-#### 2. CI 整合（下游 repo）
+#### 2. 本地／離線 Preflight
+
+`policy-preflight` 會依序執行 policy gate，以及 `.paul-project.yml`
+宣告的 repo-owned validation/test steps。手動模式必須明確提供 PR title 與
+body file，確保 PR-only 規則拿到完整脈絡：
+
+```bash
+policy-preflight \
+  --repo . \
+  --pr-title "feat(preflight): 新增 canonical local preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/local-preflight \
+  --repo-visibility public
+```
+
+可連 GitHub 時，可直接讀取 PR metadata：
+
+```bash
+policy-preflight --repo . --pr 46
+```
+
+離線模式只禁止 preflight 的 **engine resolver** 執行可連網操作，並只接受
+版本相符的 installed distribution 或通過驗證的 exact-SHA cache；PR metadata
+必須由手動參數／檔案提供。Repo-owned commands 仍受該 repo 自身 authority
+管轄，可能另有自己的網路行為：
+
+```bash
+policy-preflight \
+  --repo . \
+  --offline \
+  --pr-title "fix(policy): 驗證離線 preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/offline-preflight \
+  --repo-visibility private
+```
+
+下游 repo 以 typed argv 宣告命令，不使用 shell 字串：
+
+```yaml
+preflight:
+  steps:
+    - name: openspec
+      kind: validation
+      argv: ["openspec", "validate", "--all"]
+      when_path_exists: "openspec"
+      timeout_seconds: 300
+    - name: tests
+      kind: tests
+      argv: ["python3", "-m", "pytest", "-q"]
+      timeout_seconds: 1200
+```
+
+`--skip-tests` 只跳過 `kind: tests`；`--policy-only` 會跳過所有 repo-owned
+steps，但仍執行 engine resolution 與 policy gate。參數／設定錯誤回 exit 2，
+effective head 必須等於目前 checkout branch，且 `origin/<base>` 必須存在並可建立
+merge base；否則會直接停止，不會用空 changed-files 集合繼續。
+任一 gate 失敗回 exit 1，全部通過才回 exit 0。
+
+#### 3. CI 整合（下游 repo）
 
 ##### GitHub reusable workflow
 
@@ -596,7 +742,7 @@ policy-check:
 
 此範例假設 runner 在 gate-time 已取得 build-time 產出的 `vendor/` 內容。若要讓 MR gate 不碰外部網路，請把 `universal-ctags` 預裝進 runner image；否則至少需接公司內部 APT / package mirror。換言之，這裡的離線保證只涵蓋 **Python wheel / vendored 相依安裝** 這一段。**Artifactory / 內部 PyPI / GitLab Package Registry** 哪一條作為正式發行管道，仍屬需由公司決定的 follow-up。
 
-#### 3. Helper Scripts
+#### 4. Helper Scripts
 
 ##### `scripts/update-cli-help.sh`
 
@@ -613,7 +759,7 @@ bash /path/to/paulsha-conventions/scripts/update-cli-help.sh
 - 開發者在本地跑，commit 更新後的 docs
 - 此 script 固定 `LC_ALL=C` 避免多語系輸出差異
 
-#### 4. 新專案 Bootstrap
+#### 5. 新專案 Bootstrap
 
 使用 `hamanpaul/new-project-template` 建立新 repo，自動包含：
 - `.paul-project.yml`（需填入 profile / version）
