@@ -387,7 +387,36 @@ def _attest_installed_release(release: Path) -> None:
     )
 
 
-def _install_launcher(root: Path) -> None:
+def _install_launcher(root: Path, release: Path) -> None:
+    expected_manifest_sha256 = _sha256(
+        release / "artifact" / "manifest.json"
+    )
+    if re.fullmatch(r"[0-9a-f]{64}", expected_manifest_sha256) is None:
+        raise RuntimeBundleError("active manifest digest is invalid")
+    trust_prelude = (
+        f'EXPECTED_MANIFEST_SHA256="{expected_manifest_sha256}"\n'
+        'ACTIVE_MANIFEST="$RUNTIME_ROOT/current/artifact/manifest.json"\n'
+        '[[ -f "$ACTIVE_MANIFEST" ]] || { '
+        'echo "ERROR: active runtime manifest is missing" >&2; exit 2; }\n'
+        'ACTUAL_MANIFEST_SHA256="$("$PYTHON_BIN" -I -B -c '
+        '\'import hashlib, sys; print(hashlib.sha256('
+        'open(sys.argv[1], "rb").read()).hexdigest())\' "$ACTIVE_MANIFEST")"\n'
+        '[[ "$ACTUAL_MANIFEST_SHA256" == "$EXPECTED_MANIFEST_SHA256" ]] || { '
+        'echo "ERROR: active runtime manifest does not match launcher anchor" >&2; '
+        'exit 2; }\n'
+        'MANAGER_SHA256="$("$PYTHON_BIN" -I -B -c '
+        '\'import json, re, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); '
+        'runtime=data.get("runtime"); '
+        'ok=isinstance(runtime, dict) and '
+        'runtime.get("path") == "runtime/runtime_manager.py" and '
+        're.fullmatch(r"[0-9a-f]{64}", str(runtime.get("sha256") or "")); '
+        'sys.exit(2) if not ok else print(runtime["sha256"])\' '
+        '"$ACTIVE_MANIFEST")" || { '
+        'echo "ERROR: active runtime manifest identity is invalid" >&2; exit 2; }\n'
+        'printf "%s  %s\\n" "$MANAGER_SHA256" "$MANAGER" | '
+        'sha256sum --check --strict - >/dev/null || { '
+        'echo "ERROR: active runtime manager checksum mismatch" >&2; exit 2; }\n'
+    )
     launcher = root / "bin" / "policy-preflight"
     launcher.parent.mkdir(parents=True, exist_ok=True)
     text = (
@@ -411,7 +440,8 @@ def _install_launcher(root: Path) -> None:
         '"$PYTHON_BIN" -I -c \'import sys; raise SystemExit(0 if '
         'sys.version_info >= (3, 11) else 1)\' || { '
         'echo "ERROR: Python 3.11+ is required by the runtime bundle" >&2; exit 2; }\n'
-        'exec "$PYTHON_BIN" -I -B "$MANAGER" exec --root "$RUNTIME_ROOT" '
+        + trust_prelude
+        + 'exec "$PYTHON_BIN" -I -B "$MANAGER" exec --root "$RUNTIME_ROOT" '
         '--repo "$TARGET_REPO" -- "$@"\n'
     )
     temporary = launcher.with_name(f".{launcher.name}.tmp-{uuid.uuid4().hex}")
@@ -440,7 +470,8 @@ def _install_launcher(root: Path) -> None:
         '"$PYTHON_BIN" -I -c \'import sys; raise SystemExit(0 if '
         'sys.version_info >= (3, 11) else 1)\' || { '
         'echo "ERROR: Python 3.11+ is required by the runtime bundle" >&2; exit 2; }\n'
-        'exec "$PYTHON_BIN" -I -B "$MANAGER" "$COMMAND" --root "$RUNTIME_ROOT" "$@"\n'
+        + trust_prelude
+        + 'exec "$PYTHON_BIN" -I -B "$MANAGER" "$COMMAND" --root "$RUNTIME_ROOT" "$@"\n'
     )
     temporary = lifecycle.with_name(
         f".{lifecycle.name}.tmp-{uuid.uuid4().hex}"
@@ -470,7 +501,7 @@ def _switch_active_release(
     try:
         _write_json_atomic(state_path, state)
         _atomic_symlink(release, current_link)
-        _install_launcher(runtime_root)
+        _install_launcher(runtime_root, release)
         _atomic_symlink(
             release / "artifact" / "skills" / "preflight-ci",
             skill_target,

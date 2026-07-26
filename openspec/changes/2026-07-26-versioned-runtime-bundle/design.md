@@ -66,6 +66,9 @@ Launcher 必須清除 `PYTHONPATH`／`PYTHONHOME`、啟用 safe-path/isolated im
 驗證 selected manifest、所有 wheel/skill identity、實際 installed distribution
 version 與 RECORD payload，
 不得 fallback source checkout、workflow cache、default branch 或 `current`。
+Stable launcher 在 activation 時內嵌 active manifest digest；每次啟動先用 isolated
+host Python核對 manifest，再依 anchored manifest 的 runtime hash 核對 current
+manager，防止 bootstrap manager 先執行後自驗。
 
 ## 3. Installer、activation、rollback 與 uninstall
 

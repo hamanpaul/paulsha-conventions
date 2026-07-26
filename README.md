@@ -369,7 +369,9 @@ and full preflight smoke. The install host must also provide `venv/ensurepip`
 `PYTHONPATH`/`PYTHONHOME`; installed attestation verifies every wheel
 distribution and RECORD payload before the selected venv imports third-party
 code, rejects startup customization/module shadows, and removes bootstrap-only
-pip/setuptools after installation. The deployed stable lifecycle wrapper repairs
+pip/setuptools after installation. Stable launchers also anchor the active
+manifest digest and verify the current manager before executing it. The deployed
+stable lifecycle wrapper repairs
 links or switches to an already verified release:
 
 ```bash
@@ -859,7 +861,9 @@ policy-runtime-bundle extract \
 也必須命中 exact constraint。bootstrap/selector 不採用 ambient
 `PYTHONPATH`/`PYTHONHOME`，installed attestation 會驗證每個 wheel distribution
 與 RECORD payload，且在 selected venv import 第三方 code 前拒絕 startup
-customization/module shadow；安裝後也會移除僅供 bootstrap 的 pip/setuptools。既有未受管
+customization/module shadow；安裝後也會移除僅供 bootstrap 的 pip/setuptools。
+stable launcher 另會錨定 active manifest digest，並在執行 current manager 前
+核對其 hash。既有未受管
 `preflight-ci` 目錄或 source-checkout symlink 須先移到可逆 backup，installer
 不會自動接管；rollback 只切到既有 VERIFIED release。active release 若被竄改，
 可用同一份已核對外部 digest 的 artifact 執行 `install --force-reinstall`；

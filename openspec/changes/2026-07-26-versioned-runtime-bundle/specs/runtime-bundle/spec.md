@@ -80,6 +80,11 @@ source checkout，亦 MUST NOT 讀/執行 GitHub Actions workflow或執行 netwo
   site/user customization、同名 module shadow
 - **THEN** stdlib selector MUST 在啟動 selected venv/import 第三方 code 前 FAIL
 
+#### Scenario: active bootstrap manager 被竄改
+- **WHEN** current release 的 manifest 或 runtime manager 不符合 activation 時
+  stable launcher 的 digest anchor
+- **THEN** launcher MUST 在執行 current manager 前 FAIL
+
 #### Scenario: fresh offline HOME
 - **WHEN** 全新暫存 HOME 僅有已驗證 bundle且 network/source checkout 不可用
 - **THEN** install 後對 fixture target repo 的 full preflight PASS

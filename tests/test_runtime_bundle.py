@@ -1087,8 +1087,11 @@ def test_launcher_derives_root_and_rejects_forwarded_repo(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    runtime_root = tmp_path / 'runtime-$("unsafe")'
-    manager._install_launcher(runtime_root)
+    scope = tmp_path / 'scope-$("unsafe")'
+    release = _install_fake_release(scope, "1.0.13")
+    runtime_root = scope / "runtime"
+    (runtime_root / "current").symlink_to(release)
+    manager._install_launcher(runtime_root, release)
     text = (runtime_root / "bin" / "policy-preflight").read_text(encoding="utf-8")
     assert str(runtime_root) not in text
     assert 'dirname "${BASH_SOURCE[0]}"' in text
@@ -1113,6 +1116,48 @@ def test_launcher_derives_root_and_rejects_forwarded_repo(
         ]
     ) == 1
     assert "conflicts" in capsys.readouterr().err
+
+
+def test_launcher_refuses_tampered_active_manager_before_execution(
+    tmp_path: Path,
+) -> None:
+    release = _install_fake_release(tmp_path, "1.0.13")
+    runtime_root = tmp_path / "runtime"
+    (runtime_root / "current").symlink_to(release)
+    manager._install_launcher(runtime_root, release)
+    lifecycle = runtime_root / "bin" / "policy-runtime-bundle"
+    env = dict(os.environ)
+    env["PYTHON_BIN"] = sys.executable
+
+    baseline = subprocess.run(
+        [str(lifecycle), "activate", "--version", "1.0.13"],
+        cwd=runtime_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert baseline.returncode == 0, baseline.stderr
+
+    active_manager = (
+        release / "artifact" / "runtime" / "runtime_manager.py"
+    )
+    active_manager.write_text(
+        "raise RuntimeError('executed tampered manager')\n",
+        encoding="utf-8",
+    )
+    tampered = subprocess.run(
+        [str(lifecycle), "activate", "--version", "1.0.13"],
+        cwd=runtime_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert tampered.returncode == 2
+    assert "manager checksum mismatch" in tampered.stderr
+    assert "executed tampered manager" not in tampered.stderr
 
 
 @pytest.mark.parametrize(

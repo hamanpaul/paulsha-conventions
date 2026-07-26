@@ -144,7 +144,9 @@ stable launcher 以自身實體位置決定 runtime root，不接受 ambient
 定案 root 傳給 launcher。兩者與 source wrapper 都以 Python isolated mode 執行，
 不消費 ambient `PYTHONPATH`/`PYTHONHOME`。selector 在啟動 selected venv 前先由
 active stdlib manager 重做 installed wheel attestation，避免竄改的第三方 module
-在驗證前被 import。selector 只從目標 repo 的
+在驗證前被 import。兩個 stable launcher 亦內嵌 activation 時的 active manifest
+SHA-256 anchor，先由 isolated host Python核對 manifest，再用其中的 runtime hash
+核對 manager，通過前不執行 current manager。selector 只從目標 repo 的
 `.project-policy.yml`（legacy alias 相容）
 讀 exact `policy_version`，要求 `releases/<version>/VERIFIED`、artifact checksum、
 manifest、每個 installed wheel 的 distribution version/RECORD payload 全部相符。
