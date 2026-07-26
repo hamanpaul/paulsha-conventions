@@ -4,11 +4,14 @@
 
 **Dependency:** Issue 45 engine slice 已整合到 `feature/42-46-open-issues-batch`，避免同時修改 CLI/config/README。
 
-**Builder boundary:** 本 repo 的 preflight engine、typed config schema、CLI entrypoint、tests、OpenSpec、README/CLAUDE、self-dogfood config 與 changelog fragment。`custom-skills` wrapper 另作下游 phase。
+**Builder boundary:** 本 repo 的 canonical `preflight-ci` skill、安裝入口、preflight engine、typed config schema、CLI entrypoint、tests、OpenSpec、README/CLAUDE、self-dogfood config 與 changelog fragment；舊 skill authority 另以 source repo PR 移除。
 
 ## Authority
 
 - `paulsha-conventions` 擁有 pinned-engine resolution、PR context completeness、gate orchestration 與整體 exit verdict。
+- `paulsha-conventions/skills/preflight-ci` 擁有 agent-facing routing 與落地安裝；skill
+  直接使用相鄰的 conventions source checkout，不依賴 GitHub Actions workflow
+  作為主要 resolver 或過濾入口。
 - 下游 repo 透過 `.paul-project.yml` 擁有要執行的 validation/test command 與 timeout。
 - preflight 不猜 `pytest`、Gradle、Make 或 OpenSpec；本 repo 可在自己的 config 宣告 pytest/OpenSpec 以 dogfood。
 - GitHub/GitLab 最終 merge gate仍是 authority；local preflight 只提供 CI-parity 的前移證據。
@@ -36,6 +39,7 @@ python3 -m policy_check.preflight
 --policy-only
 --offline
 --cache-dir
+--engine-source
 ```
 
 規則：
@@ -45,6 +49,8 @@ python3 -m policy_check.preflight
 3. labels 可明確為空；base/head 可由 git 安全推導，輸出需列出 effective context。
 4. 參數/設定錯誤 exit 2；任一 gate失敗 exit 1；全通過 exit 0。
 5. 不以 shell 字串執行 repo-owned command。
+6. Skill wrapper 固定注入相鄰的 canonical `--engine-source`；source checkout
+   remote、VERSION、HEAD 與 clean status 任一不符即 fail-closed。
 
 ## Repo-owned config
 
@@ -125,14 +131,18 @@ R-08 驗證：
 6. 修復本 repo 既有 OpenSpec baseline：`account-defaults` 與 `new-project-bootstrap` canonical spec 補齊實質 `## Purpose`，使 self-dogfood 的 `openspec validate --all` 可通過；不得以 skip 隱藏。
 7. 新增 `changelog.d/46-local-preflight.md`，`type: feat`、`issue: 46`。
 
-## 下游 custom-skills phase
+## Skill ownership migration
 
-engine release 後，在 `hamanpaul/custom-skills` 獨立 branch：
-
-1. `preflight-ci/scripts/preflight.sh` 改成只解析 skill UX 必需內容後 `exec policy-preflight "$@"`，或直接無邏輯轉送。
-2. 移除 clone/fetch/checkout/pytest/OpenSpec orchestration複本。
-3. 更新 skill 文件與 smoke tests，證明 wrapper 與 canonical CLI argv/exit code一致。
-4. 不在兩個 repo 間共用 worktree 或 commit。
+1. canonical skill 位於 `skills/preflight-ci/`，wrapper 只定位 target repo 與相鄰
+   engine source，再委派 `policy_check.preflight`。
+2. `scripts/install-preflight-skill.sh` 將 `~/.agents/skills/preflight-ci` 指向本
+   repo；只允許替換 symlink，不刪除真目錄。
+3. 舊 source repo 以獨立 branch/PR 移除 `preflight-ci`，並把 migration 指向
+   `hamanpaul/paulsha-conventions`；不得在兩個 repo 共用 commit。
+4. 遷移順序固定為：新 authority 通過測試 → 切換 symlink 並 smoke → 舊
+   authority removal PR。Rollback 只需把 symlink 指回舊 checkout。
+5. 舊 working tree 尚未提交的 `PSC_PREFLIGHT_PYTHON` 相容需求由新 wrapper
+   承接；project test interpreter 則改由 repo-owned step `argv` 擁有。
 
 ## 驗收
 

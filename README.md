@@ -238,6 +238,32 @@ python3 -m policy_check --repo . --only R-01,R-02,R-03
 steps declared in `.paul-project.yml`. Manual mode requires an explicit PR title
 and body file so PR-only rules are evaluated with complete context:
 
+The canonical agent-facing entrypoint is the `preflight-ci` skill owned by this
+repository. Install or migrate the user-level skill symlink from a conventions
+checkout:
+
+```bash
+scripts/install-preflight-skill.sh --replace
+```
+
+Then run it from the target repository:
+
+```bash
+~/.agents/skills/preflight-ci/scripts/preflight.sh \
+  --pr-title "feat(preflight): add canonical local preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/local-preflight \
+  --repo-visibility public
+```
+
+The skill supplies its adjacent `paulsha-conventions` checkout as the verified
+source engine. It does not inspect or execute a GitHub Actions workflow, and it
+does not clone/fetch an engine. The target repo's `policy_version` must match
+the deployed conventions checkout. A full skill-driven run requires explicit
+`.paul-project.yml.preflight.steps`; use `--policy-only` only when that reduced
+scope is intentional.
+
 ```bash
 policy-preflight \
   --repo . \
@@ -363,6 +389,7 @@ usage: policy-preflight [-h] [--repo REPO] [--pr PR | --offline]
                         [--pr-labels PR_LABELS] [--base BASE] [--head HEAD]
                         [--repo-visibility {public,private,internal,unknown}]
                         [--skip-tests] [--policy-only] [--cache-dir CACHE_DIR]
+                        [--engine-source ENGINE_SOURCE]
 
 options:
   -h, --help            show this help message and exit
@@ -379,6 +406,9 @@ options:
   --skip-tests
   --policy-only
   --cache-dir CACHE_DIR
+  --engine-source ENGINE_SOURCE
+                        Canonical paulsha-conventions checkout supplied by the
+                        owning skill
 <!-- END: cli-help marker="policy-preflight-help" -->
 
 ### Versioning
@@ -624,6 +654,30 @@ python3 -m policy_check --repo . --only R-01,R-02,R-03
 `policy-preflight` 會依序執行 policy gate，以及 `.paul-project.yml`
 宣告的 repo-owned validation/test steps。手動模式必須明確提供 PR title 與
 body file，確保 PR-only 規則拿到完整脈絡：
+
+Agent-facing canonical 入口是由本 repo 擁有的 `preflight-ci` skill。從
+`paulsha-conventions` checkout 安裝或遷移 user-level skill symlink：
+
+```bash
+scripts/install-preflight-skill.sh --replace
+```
+
+之後在目標 repo 執行：
+
+```bash
+~/.agents/skills/preflight-ci/scripts/preflight.sh \
+  --pr-title "feat(preflight): 新增 canonical local preflight" \
+  --pr-body-file /path/to/pr-body.md \
+  --base main \
+  --head feature/local-preflight \
+  --repo-visibility public
+```
+
+Skill 直接把相鄰的 `paulsha-conventions` checkout 當作經驗證 source engine，
+不讀取或執行 GitHub Actions workflow，也不 clone/fetch engine。目標 repo 的
+`policy_version` 必須與已部署的 conventions checkout 一致。Skill-driven 完整
+執行要求明確宣告 `.paul-project.yml.preflight.steps`；只有刻意縮成 policy-only
+時才使用 `--policy-only`。
 
 ```bash
 policy-preflight \

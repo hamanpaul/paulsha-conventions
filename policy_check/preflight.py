@@ -392,14 +392,7 @@ def _version_matches(installed: str | None, policy_version: str) -> bool:
     )
 
 
-def _self_engine(repo_root: Path, config: Mapping[str, Any]) -> EngineIdentity | None:
-    engine_config = config.get("conventions_engine")
-    if engine_config is not None and not isinstance(engine_config, dict):
-        raise PreflightUsageError("conventions_engine must be a mapping")
-    if isinstance(engine_config, dict) and engine_config.get("repo"):
-        return None
-    if not (repo_root / "policy_check" / "preflight.py").is_file():
-        return None
+def _is_canonical_checkout(repo_root: Path) -> bool:
     try:
         remote = _run_command(
             ["git", "remote", "get-url", "origin"],
@@ -414,23 +407,70 @@ def _self_engine(repo_root: Path, config: Mapping[str, Any]) -> EngineIdentity |
         f"ssh://git@github.com/{CANONICAL_ENGINE_REPO}",
         f"git@github.com:{CANONICAL_ENGINE_REPO}",
     }
-    if remote.returncode != 0 or normalized_remote not in canonical_remotes:
-        return None
-    version_file = repo_root / "VERSION"
+    return remote.returncode == 0 and normalized_remote in canonical_remotes
+
+
+def _source_engine(
+    engine_root: Path,
+    config: Mapping[str, Any],
+    *,
+    display_prefix: str,
+) -> EngineIdentity:
+    engine_config = config.get("conventions_engine")
+    if engine_config is not None and not isinstance(engine_config, dict):
+        raise PreflightUsageError("conventions_engine must be a mapping")
+    configured_repo = engine_config.get("repo") if isinstance(engine_config, dict) else None
+    if configured_repo and configured_repo != CANONICAL_ENGINE_REPO:
+        raise PreflightGateError(
+            "source engine disagrees with conventions_engine.repo"
+        )
+    if not (engine_root / "policy_check" / "preflight.py").is_file():
+        raise PreflightGateError("source engine is missing policy_check/preflight.py")
+    if not _is_canonical_checkout(engine_root):
+        raise PreflightGateError(
+            f"source engine must be a checkout of {CANONICAL_ENGINE_REPO}"
+        )
+    version_file = engine_root / "VERSION"
     if not version_file.is_file():
-        return None
+        raise PreflightGateError("source engine is missing VERSION")
     actual = version_file.read_text(encoding="utf-8").strip()
     expected = str(config.get("policy_version") or "").strip()
     if actual != expected:
         raise PreflightGateError(
-            f"self engine VERSION mismatch: expected {expected!r}, got {actual!r}"
+            f"source engine VERSION mismatch: expected {expected!r}, got {actual!r}"
         )
-    head = _run_or_error(
-        ["git", "rev-parse", "HEAD"],
-        cwd=repo_root,
+    status = _run_or_error(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=engine_root,
         timeout=30,
     ).stdout.strip()
-    return EngineIdentity("source", f"self@{head}", repo_root)
+    if status:
+        raise PreflightGateError("source engine checkout must be clean")
+    head = _run_or_error(
+        ["git", "rev-parse", "HEAD"],
+        cwd=engine_root,
+        timeout=30,
+    ).stdout.strip()
+    if FULL_SHA_RE.fullmatch(head) is None:
+        raise PreflightGateError("source engine HEAD is not a full SHA")
+    return EngineIdentity(
+        "source",
+        f"{display_prefix}:{CANONICAL_ENGINE_REPO}@{head}",
+        engine_root,
+    )
+
+
+def _self_engine(repo_root: Path, config: Mapping[str, Any]) -> EngineIdentity | None:
+    engine_config = config.get("conventions_engine")
+    if engine_config is not None and not isinstance(engine_config, dict):
+        raise PreflightUsageError("conventions_engine must be a mapping")
+    if isinstance(engine_config, dict) and engine_config.get("repo"):
+        return None
+    if not (repo_root / "policy_check" / "preflight.py").is_file():
+        return None
+    if not _is_canonical_checkout(repo_root):
+        return None
+    return _source_engine(repo_root, config, display_prefix="self")
 
 
 def _workflow_pin(repo_root: Path, config: Mapping[str, Any]) -> tuple[str, str]:
@@ -599,7 +639,14 @@ def _resolve_engine(
     *,
     offline: bool,
     cache_dir: Path,
+    engine_source: Path | None = None,
 ) -> EngineIdentity:
+    if engine_source is not None:
+        return _source_engine(
+            engine_source.resolve(),
+            config,
+            display_prefix="skill",
+        )
     self_identity = _self_engine(repo_root, config)
     if self_identity is not None:
         return self_identity
@@ -756,6 +803,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-tests", action="store_true")
     parser.add_argument("--policy-only", action="store_true")
     parser.add_argument("--cache-dir")
+    parser.add_argument(
+        "--engine-source",
+        help="Canonical paulsha-conventions checkout supplied by the owning skill",
+    )
     return parser
 
 
@@ -774,6 +825,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         config = policy_config.load(repo_root)
         context = _load_context(args, repo_root)
         _validate_git_context(repo_root, context)
+        if (
+            args.engine_source
+            and "preflight" not in config
+            and not args.policy_only
+        ):
+            raise PreflightUsageError(
+                "skill-driven full preflight requires .paul-project.yml "
+                "preflight.steps; use --policy-only for an explicit policy-only run"
+            )
         steps = _parse_steps(config, repo_root)
     except (policy_config.ConfigError, PreflightUsageError) as exc:
         print(f"PREFLIGHT ERROR: {exc}", file=sys.stderr)
@@ -791,6 +851,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             config,
             offline=args.offline,
             cache_dir=cache_dir,
+            engine_source=(
+                Path(args.engine_source).expanduser()
+                if args.engine_source
+                else None
+            ),
         )
     except PreflightUsageError as exc:
         print(f"PREFLIGHT ERROR: {exc}", file=sys.stderr)

@@ -301,6 +301,53 @@ def test_self_engine_requires_canonical_origin(monkeypatch, tmp_path) -> None:
     assert preflight._self_engine(tmp_path, config) is None
 
 
+def test_resolve_engine_prefers_skill_source_without_workflow(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    engine_root = tmp_path / "engine"
+    engine_root.mkdir()
+    expected = preflight.EngineIdentity(
+        "source",
+        "skill:hamanpaul/paulsha-conventions@" + "a" * 40,
+        engine_root,
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_source_engine",
+        lambda root, _config, *, display_prefix: (
+            expected
+            if root == engine_root.resolve() and display_prefix == "skill"
+            else pytest.fail("unexpected source engine arguments")
+        ),
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_workflow_pin",
+        lambda *_a: pytest.fail("skill source must not inspect GitHub Actions workflow"),
+    )
+
+    identity = preflight._resolve_engine(
+        tmp_path,
+        _config(),
+        offline=True,
+        cache_dir=tmp_path / "cache",
+        engine_source=engine_root,
+    )
+    assert identity == expected
+
+
+def test_source_engine_rejects_version_skew(monkeypatch, tmp_path) -> None:
+    package = tmp_path / "policy_check"
+    package.mkdir()
+    (package / "preflight.py").write_text("# engine\n", encoding="utf-8")
+    (tmp_path / "VERSION").write_text("1.0.11\n", encoding="utf-8")
+    monkeypatch.setattr(preflight, "_is_canonical_checkout", lambda _root: True)
+
+    with pytest.raises(preflight.PreflightGateError, match="VERSION mismatch"):
+        preflight._source_engine(tmp_path, _config(), display_prefix="skill")
+
+
 def test_verified_cache_requires_manifest_hash_and_clean_checkout(tmp_path) -> None:
     artifact = tmp_path / "cache" / "hamanpaul" / "paulsha-conventions" / ("a" * 40)
     checkout = artifact / "repo"
@@ -501,6 +548,34 @@ def test_main_returns_one_when_any_gate_fails(monkeypatch, tmp_path) -> None:
         ]
     )
     assert rc == 1
+
+
+def test_main_skill_mode_requires_repo_owned_steps(monkeypatch, tmp_path) -> None:
+    body = tmp_path / "body.md"
+    body.write_text("Fixes #46\n", encoding="utf-8")
+    monkeypatch.setattr(
+        preflight.policy_config,
+        "load",
+        lambda _repo: {"policy_profile": "flat", "policy_version": "1.0.12"},
+    )
+    monkeypatch.setattr(preflight, "_validate_git_context", lambda *_a: None)
+    rc = preflight.main(
+        [
+            "--repo",
+            str(tmp_path),
+            "--engine-source",
+            str(tmp_path / "engine"),
+            "--pr-title",
+            "feat: x",
+            "--pr-body-file",
+            str(body),
+            "--base",
+            "main",
+            "--head",
+            "feature/x",
+        ]
+    )
+    assert rc == 2
 
 
 def test_main_prints_pass_only_when_all_selected_gates_pass(
