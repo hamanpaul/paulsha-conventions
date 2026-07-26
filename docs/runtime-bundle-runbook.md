@@ -149,7 +149,7 @@ SHA-256 anchor，先由 isolated host Python核對 manifest，再用其中的 ru
 核對 manager，通過前不執行 current manager。selector 只從目標 repo 的
 `.project-policy.yml`（legacy alias 相容）
 讀 exact `policy_version`，要求 `releases/<version>/VERIFIED`、artifact checksum、
-manifest、venv interpreter/`pyvenv.cfg` activation hash、每個 installed wheel 的
+manifest、venv interpreter/`pyvenv.cfg` activation hash、<!-- doc-drift-ignore --> 每個 installed wheel 的
 distribution version/RECORD payload 全部相符。
 `current` 僅供 agent skill discoverability，
 不是 engine version fallback。目標版本未安裝時應安裝該精確 release，不應切換
