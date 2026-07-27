@@ -5,6 +5,7 @@
 
 | policy_version | engine tag | engine SHA | 摘要 |
 |----------------|-----------|------------|------|
+| 1.0.15 | `v1.0.15` | `a764806046c410eb4f254ac0b6a8aec8b7559dab` | tag 觸發的 release workflow：依支援的 Python minor version 逐一建置 runtime bundle、驗證 archive digest 與離線安裝，全數通過才發布 GitHub Release；release notes 由該版 CHANGELOG 段落、archive SHA-256 對照與前版 compare 連結組成。本版為首個由 workflow 自動發行的 release |
 | 1.0.14 | `v1.0.14` | `451c2680fb3a1f977fcbc8007baaa7dbe415cf03` | #48 建立 clean-tag versioned runtime bundle、exact-version selector、offline install/activate/rollback、installed wheel/venv identity attestation，並將 `.project-policy.yml` 升格為 canonical public manifest；公司 artifact authority 仍由 #39 決策 |
 | 1.0.13 | `v1.0.13` | `57dc4e8d54697be3400d4f58ee34c2e0c5681411` | #42 修正 release ledger tag SHA 與自我檢測；#45 將 R-21 改為 visibility-aware 並擴充 credential detectors／減敏輸出；#46 建立 canonical local CI-parity `preflight-ci` skill、pinned/source/offline engine 驗證與 fail-closed gate orchestration |
 | 1.0.12 | `v1.0.12` | `25d31e021e45c2991c718923ae2dd49bc3d0b542` | #30（提案 A）`.paul-project.yml` 新增 optional `auto_build:` 區塊（LLM auto build 慣例欄位 description/setup/steps/artifacts/verify）；R-08 lenient 形狀驗證（未知 subkey 放行、顯式 null 視同未宣告、engine 永不執行其中命令）。提案 B（paul-scans 注入機制）於 hamanpaul/custom-skills#16 交付 |
