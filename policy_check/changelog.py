@@ -154,6 +154,27 @@ def collate(repo_root: Path, version: str, date: str) -> int:
     return len(loaded)
 
 
+def extract_section(changelog_text: str, version: str) -> str:
+    """Return the body of the dated ``## [version] - <date>`` section, heading excluded.
+
+    Release automation reads this as the authored summary for one tag. Only dated
+    sections qualify: an undated bucket such as ``## [pre-fragment backlog]`` is not
+    a release. Raises FragmentError when the version is absent or its body is empty.
+    """
+    heading = re.compile(
+        r"(?m)^##\s+\[" + re.escape(version) + r"\]\s+-\s+\d\S*\s*$"
+    )
+    match = heading.search(changelog_text)
+    if match is None:
+        raise FragmentError(f"no dated CHANGELOG section for version {version!r}")
+    rest = changelog_text[match.end():]
+    next_heading = re.compile(r"(?m)^##\s").search(rest)
+    body = (rest[: next_heading.start()] if next_heading else rest).strip()
+    if not body:
+        raise FragmentError(f"CHANGELOG section for version {version!r} is empty")
+    return body
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="policy-check-changelog")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -162,10 +183,27 @@ def main(argv: list[str] | None = None) -> int:
     collate_p.add_argument("--repo", default=".")
     collate_p.add_argument("--version", required=True)
     collate_p.add_argument("--date", required=True)
+    extract_p = sub.add_parser(
+        "extract", help="Print one dated CHANGELOG section body (release notes source)")
+    extract_p.add_argument("--repo", default=".")
+    extract_p.add_argument("--version", required=True)
     args = parser.parse_args(argv)
     if args.cmd == "collate":
         count = collate(Path(args.repo), args.version, args.date)
         print(f"collated {count} fragment(s) into [{args.version}] - {args.date}")
+        return 0
+    if args.cmd == "extract":
+        changelog_path = Path(args.repo) / "CHANGELOG.md"
+        try:
+            text = changelog_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            print(f"ERROR: CHANGELOG.md not found at {changelog_path}", file=sys.stderr)
+            return 2
+        try:
+            print(extract_section(text, args.version))
+        except FragmentError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
         return 0
     return 2
 

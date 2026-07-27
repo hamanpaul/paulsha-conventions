@@ -202,10 +202,38 @@ manager 會先完成全新 staging/venv/smoke，再原子交換 state-owned 同�
 `releases/.replaced-<version>-<uuid>` 且不是 active/current 後人工清理。不得以
 手動刪除 active directory 或整個 runtime root 代替。
 
+## Automated release
+
+推送符合 policy 版本格式的 annotated tag（`vX.Y.Z` 或 `vX.Y.Z-fix.N`）會觸發
+`.github/workflows/release.yml`，全程不需人工介入：
+
+1. **bundle**（matrix，每個支援的 Python minor version 各一輪）：以 clean-tag
+   attestation 建置 bundle、依 ABI 命名 archive、以外部 digest 驗證並解包、
+   跑完整 payload verify，再於隔離 HOME 執行 `install.sh` 並實跑安裝出的
+   engine。
+2. **publish**：等全部 bundle job 成功後才執行；組出 release notes（本版
+   CHANGELOG 段落、各 archive 的 SHA-256 對照表、與前一 tag 的 compare 連結），
+   建立 release、上傳 archive 與 `.sha256`，最後重新下載回驗 digest。
+
+任一驗證步驟失敗即不發布。寫入權限只授予 publish job，建置階段唯讀。
+
+Bundle 內含 C extension wheel，ABI 綁建置用的 Python minor version，因此**同一個
+tag 在不同 Python 版本下的 archive digest 必然不同**，這是預期行為而非重現性缺陷；
+可重現性的成立條件是「同一 tag ＋ 同一 Python minor version」。matrix 涵蓋的版本
+即本專案對外支援的安裝主機版本，其他版本請依上文自行 build。
+
+已發布的 tag 可用 `workflow_dispatch` 帶 `tag` input 重跑，asset 以 `--clobber`
+覆寫、notes 重新產生。
+
+發行用的 release notes 取自 `CHANGELOG.md` 該版段落（`policy-check-changelog
+extract`），因此 release commit 必須已完成 fragment collation；缺少對應 dated
+section 時 publish 會失敗，而非發出空白 notes。
+
 ## Publication boundary
 
-#48 的正式 artifact 可先作本機/CI evidence，但在 #39 決定公司 authority 前，
-不得把任一任意位置宣稱為公司 production registry。#39 仍需明確決定：
+GitHub Release 是本 repo 的**公開**發行管道，供外部取得可驗證的 bundle；它不
+等同公司內部 artifact authority。在 #39 決定公司 authority 前，不得把任一任意
+位置宣稱為公司 production registry。#39 仍需明確決定：
 
 - artifact service 與 owner；
 - runner/network reachability；

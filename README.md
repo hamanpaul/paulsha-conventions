@@ -387,8 +387,19 @@ release that fails tamper verification can be reconstructed from the same
 externally verified artifact with `install --force-reinstall`; the
 replacement is staged and smoked before the state-owned release is exchanged.
 
+Pushing an annotated tag in the policy version format (`vX.Y.Z` or
+`vX.Y.Z-fix.N`) triggers `.github/workflows/release.yml`, which builds one
+bundle per supported Python minor version, verifies each archive digest,
+smoke-installs it into an isolated HOME, and only then publishes a GitHub
+Release carrying the archives, their `.sha256` files, and release notes composed
+from that version's `CHANGELOG.md` section. Any failed check stops the release.
+Because the dependency closure contains ABI-specific wheels, archives for the
+same tag differ per Python minor version by design; reproducibility holds for a
+given tag *and* interpreter version, not across versions.
+
 See [the runtime bundle runbook](docs/runtime-bundle-runbook.md) for layout,
-state, rollback, tamper diagnosis, and the publication boundary owned by #39.
+state, rollback, tamper diagnosis, the automated release flow, and the
+publication boundary owned by #39.
 
 #### 4. CI integration (downstream repos)
 
