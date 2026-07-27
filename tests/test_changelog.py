@@ -150,3 +150,76 @@ def test_parse_fragment_rejects_bool_issue():
 def test_parse_fragment_rejects_float_issue():
     with pytest.raises(cl.FragmentError):
         cl.parse_fragment("---\ntype: feat\nissue: 24.7\n---\nbody。\n")
+
+
+# --- extract_section (release notes source) ---
+
+_CHANGELOG = """# Changelog
+
+前言段落，不屬於任何版本。
+
+## [1.0.14] - 2026-07-26
+
+### Added
+- 新增 runtime bundle。
+
+## [1.0.13] - 2026-07-20
+
+### Fixed
+- 修 A。
+
+## [pre-fragment backlog]
+
+- 舊格式桶。
+"""
+
+
+def test_extract_section_returns_body_without_heading():
+    out = cl.extract_section(_CHANGELOG, "1.0.14")
+    assert out == "### Added\n- 新增 runtime bundle。"
+
+
+def test_extract_section_stops_at_next_version():
+    out = cl.extract_section(_CHANGELOG, "1.0.13")
+    assert "修 A。" in out
+    assert "pre-fragment backlog" not in out
+    assert "runtime bundle" not in out
+
+
+def test_extract_section_reads_last_section_to_end_of_file():
+    text = "# Changelog\n\n## [1.0.1] - 2026-01-01\n\n### Added\n- 只有一版。\n"
+    assert cl.extract_section(text, "1.0.1") == "### Added\n- 只有一版。"
+
+
+def test_extract_section_unknown_version_raises():
+    with pytest.raises(cl.FragmentError):
+        cl.extract_section(_CHANGELOG, "9.9.9")
+
+
+def test_extract_section_does_not_match_version_as_substring():
+    # 1.0.1 不得命中 [1.0.14]／[1.0.13]。
+    with pytest.raises(cl.FragmentError):
+        cl.extract_section(_CHANGELOG, "1.0.1")
+
+
+def test_extract_section_rejects_undated_section():
+    # 未標日期的桶不是 release section，不可作為 release notes 來源。
+    with pytest.raises(cl.FragmentError):
+        cl.extract_section(_CHANGELOG, "pre-fragment backlog")
+
+
+def test_extract_section_empty_body_raises():
+    text = "# Changelog\n\n## [1.0.1] - 2026-01-01\n\n## [1.0.0] - 2025-12-01\n\n### Added\n- x。\n"
+    with pytest.raises(cl.FragmentError):
+        cl.extract_section(text, "1.0.1")
+
+
+def test_extract_cli_main(tmp_path, capsys):
+    (tmp_path / "CHANGELOG.md").write_text(_CHANGELOG, encoding="utf-8")
+    assert cl.main(["extract", "--repo", str(tmp_path), "--version", "1.0.14"]) == 0
+    assert "新增 runtime bundle。" in capsys.readouterr().out
+
+
+def test_extract_cli_missing_changelog_returns_error(tmp_path, capsys):
+    assert cl.main(["extract", "--repo", str(tmp_path), "--version", "1.0.14"]) == 2
+    assert "CHANGELOG.md" in capsys.readouterr().err

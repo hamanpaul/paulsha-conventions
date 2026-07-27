@@ -1,0 +1,240 @@
+name: release
+
+# Tag push → 建置 runtime bundle、離線安裝驗證、發布 GitHub Release。
+# 任一驗證步驟失敗即不 publish；release 內容一律由 clean annotated tag 產生。
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-fix.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "已存在的 release tag（重跑用，例如 v1.0.14）"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    name: bundle (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        # bundle 內含 C extension wheel（PyYAML），ABI 綁建置用的 Python minor
+        # version，因此每個支援的版本各出一份 archive。
+        python: ["3.11", "3.12"]
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          # builder 的 clean-tag attestation 需要 annotated tag object 與完整歷史。
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install install-time prerequisites
+        run: sudo apt-get update -qq && sudo apt-get install -y universal-ctags
+
+      - name: Create builder venv outside the checkout
+        # checkout 必須保持乾淨：builder 會拒絕任何未追蹤檔案，因此 venv 與
+        # 產出目錄都放在 RUNNER_TEMP，不碰 workspace。
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/buildenv"
+          "$RUNNER_TEMP/buildenv/bin/pip" install -q --upgrade pip build
+
+      - name: Build bundle from clean tag
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/out"
+          PYTHONPATH="$GITHUB_WORKSPACE" "$RUNNER_TEMP/buildenv/bin/python" \
+            -m policy_check.runtime_bundle.cli build \
+            --repo "$GITHUB_WORKSPACE" \
+            --tag "$TAG" \
+            --output-dir "$RUNNER_TEMP/out"
+
+      - name: Name archive by ABI
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          PYVER: ${{ matrix.python }}
+        run: |
+          set -euo pipefail
+          abi="cp${PYVER//./}"
+          mkdir -p "$RUNNER_TEMP/dist"
+          src="$RUNNER_TEMP/out/paulsha-conventions-${TAG}.tar.gz"
+          dest="paulsha-conventions-${TAG}-${abi}.tar.gz"
+          cp "$src" "$RUNNER_TEMP/dist/$dest"
+          ( cd "$RUNNER_TEMP/dist" && sha256sum "$dest" > "$dest.sha256" )
+          echo "ARCHIVE=$dest" >> "$GITHUB_ENV"
+
+      - name: Verify archive digest and payload
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/dist"
+          sha256sum --check --strict "$ARCHIVE.sha256"
+          digest="$(cut -d' ' -f1 < "$ARCHIVE.sha256")"
+          PYTHONPATH="$GITHUB_WORKSPACE" "$RUNNER_TEMP/buildenv/bin/python" \
+            -m policy_check.runtime_bundle.cli extract \
+            --archive "$RUNNER_TEMP/dist/$ARCHIVE" \
+            --sha256 "$digest" \
+            --output-dir "$RUNNER_TEMP/staging"
+          PYTHONPATH="$GITHUB_WORKSPACE" "$RUNNER_TEMP/buildenv/bin/python" \
+            -m policy_check.runtime_bundle.cli verify \
+            --bundle "$RUNNER_TEMP/staging/paulsha-conventions-${TAG}"
+
+      - name: Offline install smoke in an isolated HOME
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          fake_home="$RUNNER_TEMP/fakehome"
+          mkdir -p "$fake_home"
+          # PYTHON_BIN 明確指向 matrix interpreter，確保驗的是這份 bundle 的目標 ABI。
+          env HOME="$fake_home" PYTHON_BIN="$(command -v python)" \
+            bash "$RUNNER_TEMP/staging/paulsha-conventions-${TAG}/install.sh" \
+            --root "$fake_home/.local/share/paulsha-conventions" \
+            --skill-target "$fake_home/.agents/skills/preflight-ci"
+          # 安裝出來的 runtime 必須能實際跑起來，不是只有檔案就位。
+          "$fake_home/.local/share/paulsha-conventions/current/venv/bin/python" \
+            -m policy_check --repo "$GITHUB_WORKSPACE" > /dev/null
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-py${{ matrix.python }}
+          path: ${{ runner.temp }}/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish release
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          # release notes 需要前一個 tag 才能算出 compare 範圍。
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install changelog dependencies
+        run: python -m pip install -q pyyaml
+
+      - name: Download bundle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bundle-py*
+          merge-multiple: true
+          path: dist
+
+      - name: Compose release notes
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          commit="$(git rev-parse "${TAG}^{commit}")"
+          notes="$RUNNER_TEMP/notes.md"
+
+          {
+            echo "policy_version \`${version}\`。"
+            echo
+            echo "## 本版變更"
+            echo
+            python -m policy_check.changelog extract --repo . --version "$version"
+            echo
+            echo "## Release artifacts"
+            echo
+            echo "Bundle 內含 C extension wheel（PyYAML），ABI 綁建置時的 Python minor version。**請依安裝主機的 Python 版本選擇對應 archive**："
+            echo
+            echo "| Archive | 主機 Python | SHA-256 |"
+            echo "|---------|------------|---------|"
+          } > "$notes"
+
+          for archive in dist/*.tar.gz; do
+            name="$(basename "$archive")"
+            abi="$(printf '%s' "$name" | sed -E 's/.*-(cp[0-9]+)\.tar\.gz$/\1/')"
+            pyver="$(printf '%s' "$abi" | sed -E 's/^cp([0-9])([0-9]+)$/\1.\2/')"
+            digest="$(sha256sum "$archive" | cut -d' ' -f1)"
+            echo "| \`${name}\` | ${pyver} | \`${digest}\` |" >> "$notes"
+          done
+
+          {
+            echo
+            echo "全部 archive 由同一個 clean annotated tag 建置，release commit 均為 \`${commit}\`；policy／skill／engine 內容一致，差異僅在 dependency wheel 的 ABI。ABI 不符時 installer 會 fail-closed。"
+            echo
+            echo "## 安裝"
+            echo
+            echo '```bash'
+            echo "sha256sum -c <archive>.sha256"
+            echo "tar -xzf <archive>"
+            echo "./paulsha-conventions-${TAG}/install.sh"
+            echo '```'
+            echo
+            echo "預設安裝到 \`~/.local/share/paulsha-conventions\`，skill 部署到 \`~/.agents/skills/preflight-ci\`，皆可用 \`--root\` / \`--skill-target\` 覆寫。既有 skill 目錄請先自行備份。完整說明見 [\`docs/runtime-bundle-runbook.md\`](https://github.com/${REPO}/blob/${TAG}/docs/runtime-bundle-runbook.md)。"
+            echo
+            echo "Archive digest 只保證內容完整，不等同 registry authentication。"
+          } >> "$notes"
+
+          # 前一個 release tag 存在時附上 compare 範圍；首發 tag 則略過。
+          previous="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${TAG}^" 2>/dev/null || true)"
+          if [ -n "$previous" ]; then
+            {
+              echo
+              echo "**完整差異**：[\`${previous}...${TAG}\`](https://github.com/${REPO}/compare/${previous}...${TAG})"
+            } >> "$notes"
+          fi
+
+          cat "$notes"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/notes.md"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file "$notes" --latest
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* \
+              --title "$TAG" \
+              --notes-file "$notes" \
+              --latest
+          fi
+
+      - name: Verify published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/verify"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/verify" --clobber
+          cd "$RUNNER_TEMP/verify"
+          sha256sum -c ./*.sha256
