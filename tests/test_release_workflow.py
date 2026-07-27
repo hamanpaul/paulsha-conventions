@@ -102,3 +102,33 @@ def test_bundle_job_verifies_before_upload():
     verify = next(index for index, name in enumerate(names) if "Verify" in name)
     smoke = next(index for index, name in enumerate(names) if "install smoke" in name)
     assert verify < upload and smoke < upload, "digest 驗證與安裝 smoke 必須在上傳前完成"
+
+
+def _smoke_run() -> str:
+    return next(
+        str(step["run"])
+        for step in _workflow()["jobs"]["bundle"]["steps"]
+        if "install smoke" in str(step.get("name", ""))
+    )
+
+
+def test_install_smoke_does_not_gate_on_a_policy_verdict():
+    # `policy_check --repo <path>` 的 exit code 表達 policy 判定，不是 runtime 健康度。
+    # tag push 沒有 PR context，判定本來就不會過；拿它當 smoke 會把「engine 正常但
+    # repo 不符 policy」誤報成建置失敗，擋掉合法的 release。
+    assert "-m policy_check --repo" not in _smoke_run()
+
+
+def test_install_smoke_checks_the_installed_artifact_in_isolated_mode():
+    run = _smoke_run()
+    # 少了 -I，cwd 的 source 樹與 egg-info 會蓋過 venv 裡安裝的套件，
+    # smoke 就變成在驗 checkout 而不是驗 bundle 產物。
+    for command in ("-I -m policy_check --help", "-I -m policy_check.preflight --help"):
+        assert command in run, f"smoke 缺少隔離模式指令：{command}"
+    assert "-I -c 'from importlib.metadata import version" in run
+
+
+def test_install_smoke_asserts_installed_version_matches_the_tag():
+    run = _smoke_run()
+    assert 'version("policy-check")' in run
+    assert "VERSION" in run and 'if [ "$installed" != "$expected" ]' in run

@@ -110,8 +110,24 @@ jobs:
             --root "$fake_home/.local/share/paulsha-conventions" \
             --skill-target "$fake_home/.agents/skills/preflight-ci"
           # 安裝出來的 runtime 必須能實際跑起來，不是只有檔案就位。
-          "$fake_home/.local/share/paulsha-conventions/current/venv/bin/python" \
-            -m policy_check --repo "$GITHUB_WORKSPACE" > /dev/null
+          #
+          # 這裡刻意不執行 `policy_check --repo <path>`：那條指令的 exit code 表達的是
+          # policy 判定結果，不是 runtime 健康度。tag push 沒有 PR context，判定本來就
+          # 不會過，拿它當 smoke 會把「engine 正常但 repo 不符 policy」誤報成建置失敗。
+          venv_python="$fake_home/.local/share/paulsha-conventions/current/venv/bin/python"
+          # 一律用 isolated mode（-I），與 runtime manager 執行 engine 的方式一致：
+          # 否則 cwd 的 source 樹與 egg-info 會蓋過 venv 裡真正安裝的套件，smoke 就變成
+          # 在驗 checkout 而不是驗 bundle 產物。
+          # CLI 能啟動 → 模組樹與相依（PyYAML）完整可 import。
+          "$venv_python" -I -m policy_check --help > /dev/null
+          "$venv_python" -I -m policy_check.preflight --help > /dev/null
+          # 安裝的套件版本必須就是這個 tag 的版本。
+          installed="$("$venv_python" -I -c 'from importlib.metadata import version; print(version("policy-check"))')"
+          expected="$(cat "$GITHUB_WORKSPACE/VERSION")"
+          if [ "$installed" != "$expected" ]; then
+            echo "ERROR: installed policy-check $installed != tag VERSION $expected" >&2
+            exit 1
+          fi
 
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v4
