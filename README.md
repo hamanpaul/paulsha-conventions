@@ -1,3 +1,5 @@
+> **Fact:** `paulsha-conventions` 是 repo policy 與 change-integrity rule 的唯一 authority，負責跨 repo 文件、版號、分支、PR、generated facts 與 policy drift 的 deterministic enforcement。
+
 # paulsha-conventions
 
 > **[English](#english)** ｜ **[繁體中文](#繁體中文)**
