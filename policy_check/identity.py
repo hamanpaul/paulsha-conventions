@@ -49,10 +49,24 @@ class DistributionIdentity:
 
 
 def _load_raw() -> dict[str, Any]:
-    raw = files("policy_check.data").joinpath("distribution.yml").read_text(
-        encoding="utf-8"
-    )
-    return yaml.safe_load(raw) or {}
+    try:
+        raw = files("policy_check.data").joinpath("distribution.yml").read_text(
+            encoding="utf-8"
+        )
+    except (OSError, UnicodeError) as exc:
+        raise IdentityError(f"cannot read distribution.yml: {exc}") from exc
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        raise IdentityError(f"distribution.yml is not valid YAML: {exc}") from exc
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise IdentityError(
+            "distribution.yml must be a mapping at the top level, got "
+            f"{type(data).__name__}"
+        )
+    return data
 
 
 @lru_cache(maxsize=1)

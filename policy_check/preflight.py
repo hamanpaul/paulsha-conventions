@@ -17,7 +17,7 @@ from typing import Any, Mapping, Sequence
 import yaml
 
 from policy_check import config as policy_config
-from policy_check.identity import identity
+from policy_check.identity import DistributionIdentity, IdentityError, identity
 from policy_check.runtime_bundle.integrity import (
     BundleError,
     load_and_verify_bundle,
@@ -45,6 +45,22 @@ class PreflightUsageError(ValueError):
 
 class PreflightGateError(RuntimeError):
     """A resolver or execution gate failed (exit 1)."""
+
+
+def _identity() -> DistributionIdentity:
+    """Load distribution identity, normalizing failures to `PreflightGateError`.
+
+    `identity()` is fail-closed by design: a missing/unreadable/invalid
+    `distribution.yml` raises `IdentityError`. That type is not one
+    `main()` catches, so left unguarded it would surface as a raw
+    traceback instead of a clean `PREFLIGHT FAIL`. Every call site in this
+    module should go through this wrapper rather than calling `identity()`
+    directly.
+    """
+    try:
+        return identity()
+    except IdentityError as exc:
+        raise PreflightGateError(f"distribution identity unavailable: {exc}") from exc
 
 
 @dataclass(frozen=True)
@@ -447,7 +463,7 @@ def _is_canonical_checkout(repo_root: Path) -> bool:
     except (OSError, UnicodeError, subprocess.TimeoutExpired):
         return False
     normalized_remote = remote.stdout.strip().removesuffix(".git")
-    return remote.returncode == 0 and normalized_remote in identity().remote_urls()
+    return remote.returncode == 0 and normalized_remote in _identity().remote_urls()
 
 
 def _source_engine(
@@ -460,7 +476,7 @@ def _source_engine(
     if engine_config is not None and not isinstance(engine_config, dict):
         raise PreflightUsageError("conventions_engine must be a mapping")
     configured_repo = engine_config.get("repo") if isinstance(engine_config, dict) else None
-    engine_repo = identity().engine_repo
+    engine_repo = _identity().engine_repo
     if configured_repo and configured_repo != engine_repo:
         raise PreflightGateError(
             "source engine disagrees with conventions_engine.repo: "
@@ -633,7 +649,7 @@ def _cache_artifact(cache_dir: Path, engine_repo: str, sha: str) -> Path:
 
 
 def _populate_cache(cache_dir: Path, engine_repo: str, sha: str) -> Path:
-    remote_base = identity().remote_base
+    remote_base = _identity().remote_base
     artifact = _cache_artifact(cache_dir, engine_repo, sha)
     if artifact.exists():
         raise PreflightGateError(
@@ -696,7 +712,7 @@ def _installed_manifest_engine(
         raise PreflightGateError("installed manifest path is invalid")
     try:
         manifest = load_and_verify_bundle(
-            path.parent, expected_repository=identity().engine_repo
+            path.parent, expected_repository=_identity().engine_repo
         )
     except BundleError as exc:
         raise PreflightGateError(f"installed bundle verification failed: {exc}") from exc
@@ -752,7 +768,7 @@ def _verify_installed_wheel_payload(
             bundle_root,
             installed_root,
             dict(manifest),
-            expected_repository=identity().engine_repo,
+            expected_repository=_identity().engine_repo,
         )
     except BundleError as exc:
         raise PreflightGateError(str(exc)) from exc

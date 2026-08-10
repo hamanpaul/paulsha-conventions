@@ -7,7 +7,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-from policy_check.identity import identity
+from policy_check.identity import DistributionIdentity, IdentityError, identity
 
 from .verification import (
     SHA256_RE,
@@ -20,9 +20,24 @@ from .verification import (
 )
 
 
+def _identity() -> DistributionIdentity:
+    """Load distribution identity, normalizing failures to `BundleError`.
+
+    `identity()` is fail-closed by design and raises `IdentityError` on a
+    missing/unreadable/invalid `distribution.yml`. Callers in this module
+    only translate `(OSError, tarfile.TarError)` into `BundleError`; left
+    unguarded, a broken identity would surface as a raw `IdentityError`
+    instead. Every call site here should go through this wrapper.
+    """
+    try:
+        return identity()
+    except IdentityError as exc:
+        raise BundleError(f"distribution identity unavailable: {exc}") from exc
+
+
 def _bundle_dir_re() -> re.Pattern[str]:
     return re.compile(
-        r"^" + re.escape(identity().distribution_name)
+        r"^" + re.escape(_identity().distribution_name)
         + r"-v\d+\.\d+\.\d+(?:-fix\.\d+)?$"
     )
 
@@ -93,7 +108,7 @@ def extract_verified_archive(
                     bundle_tar.extractall(stage)
                 extracted = stage / root_name
                 load_and_verify_bundle(
-                    extracted, expected_repository=identity().engine_repo
+                    extracted, expected_repository=_identity().engine_repo
                 )
                 os.replace(extracted, target)
     except (OSError, tarfile.TarError) as exc:

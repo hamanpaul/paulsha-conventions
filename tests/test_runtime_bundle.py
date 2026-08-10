@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from policy_check import identity as ident
 from policy_check.runtime_bundle import builder, cli, integrity, manager, verification
 
 
@@ -424,6 +425,33 @@ def test_extract_archive_verifies_digest_members_and_payload(tmp_path: Path) -> 
     )["policy_version"] == "1.0.13"
     with pytest.raises(integrity.BundleError, match="already exists"):
         integrity.extract_verified_archive(archive, tmp_path / "output", digest)
+
+
+def test_extract_archive_broken_identity_is_bundle_error(monkeypatch, tmp_path: Path) -> None:
+    """identity() 壞掉時（distribution.yml 缺欄位）extract_verified_archive 只攔
+    (OSError, tarfile.TarError)，目前會讓 IdentityError 原封不動爆出去
+    （見 integrity.py:97 一帶）；壞掉時必須正規化為 BundleError。"""
+    archive = tmp_path / "bundle.tar.gz"
+    root = "paulsha-conventions-v1.0.13"
+    with tarfile.open(archive, mode="w:gz") as bundle_tar:
+        directory = tarfile.TarInfo(root)
+        directory.type = tarfile.DIRTYPE
+        bundle_tar.addfile(directory)
+        member = tarfile.TarInfo(f"{root}/manifest.json")
+        member.size = 2
+        bundle_tar.addfile(member, io.BytesIO(b"{}"))
+
+    ident.identity.cache_clear()
+    monkeypatch.setattr(ident, "_load_raw", lambda: {"canonical_org": "hamanpaul"})
+    try:
+        with pytest.raises(integrity.BundleError):
+            integrity.extract_verified_archive(
+                archive,
+                tmp_path / "output",
+                integrity.sha256_file(archive),
+            )
+    finally:
+        ident.identity.cache_clear()
 
 
 def test_deterministic_archive_normalizes_umask_sensitive_modes(
