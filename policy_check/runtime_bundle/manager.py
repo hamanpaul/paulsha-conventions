@@ -127,15 +127,42 @@ def _run(argv: Sequence[str], *, cwd: Path, env: dict[str, str] | None = None) -
     return result.stdout.strip()
 
 
-def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
+def _atomic_write_bytes(
+    path: Path,
+    content: bytes,
+    *,
+    mode: int | None = None,
+    temp_prefix: str = "tmp",
+) -> None:
+    """Publish ``content`` at ``path`` with a power-loss-safe replace.
+
+    The temporary file's content is flushed and fsync'd to disk *before* the
+    rename that publishes it, so a crash between rename and content flush can
+    never leave the published file empty or truncated. The containing
+    directory is fsync'd afterwards so the rename itself is durable too. On
+    any failure the temporary file is always removed; nothing is ever left
+    behind for a caller to trip over.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp-{uuid.uuid4().hex}")
-    temporary.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    os.replace(temporary, path)
-    _fsync_directory(path.parent)
+    temporary = path.with_name(f".{path.name}.{temp_prefix}-{uuid.uuid4().hex}")
+    try:
+        with temporary.open("wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if mode is not None:
+            temporary.chmod(mode)
+        os.replace(temporary, path)
+        _fsync_directory(path.parent)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
+    content = (
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    _atomic_write_bytes(path, content)
 
 
 def _fsync_directory(path: Path) -> None:
@@ -151,18 +178,7 @@ def _fsync_directory(path: Path) -> None:
 
 
 def _write_bytes_atomic(path: Path, content: bytes, *, mode: int = 0o600) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp-{uuid.uuid4().hex}")
-    try:
-        with temporary.open("wb") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.chmod(mode)
-        os.replace(temporary, path)
-        _fsync_directory(path.parent)
-    finally:
-        temporary.unlink(missing_ok=True)
+    _atomic_write_bytes(path, content, mode=mode)
 
 
 def _canonical_json(value: dict[str, Any]) -> bytes:
@@ -383,12 +399,7 @@ def _restore_regular_file(
         path.unlink(missing_ok=True)
         return
     content, mode = snapshot
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.restore-{uuid.uuid4().hex}")
-    temporary.write_bytes(content)
-    temporary.chmod(mode)
-    os.replace(temporary, path)
-    _fsync_directory(path.parent)
+    _atomic_write_bytes(path, content, mode=mode, temp_prefix="restore")
 
 
 def _snapshot_symlink(path: Path) -> str | None:
@@ -704,16 +715,7 @@ def _install_launcher(
         else ((only, launchers[only]),)
     )
     for _name, (destination, text) in selected:
-        temporary = destination.with_name(
-            f".{destination.name}.tmp-{uuid.uuid4().hex}"
-        )
-        try:
-            temporary.write_text(text, encoding="utf-8")
-            temporary.chmod(0o755)
-            os.replace(temporary, destination)
-            _fsync_directory(destination.parent)
-        finally:
-            temporary.unlink(missing_ok=True)
+        _atomic_write_bytes(destination, text.encode("utf-8"), mode=0o755)
 
 
 def _restore_activation_snapshot(
@@ -756,14 +758,15 @@ def recover(root: Path, skill_target: Path | None = None) -> bool:
     ):
         raise RuntimeBundleError("activation journal ownership is invalid")
     journal_skill_target = Path(recorded_skill_target)
-    if (
-        skill_target is not None
-        and skill_target.absolute() != journal_skill_target.absolute()
-    ):
-        raise RuntimeBundleError("activation journal skill target does not match request")
 
     terminal = records[-1]["event"]
     if terminal in {"commit", "aborted", "recovered"}:
+        # A finished journal (committed, aborted, or already recovered) only
+        # ever deletes its own journal/anchor files under the trusted,
+        # caller-resolved runtime_root; it never writes to skill_target. The
+        # journal's recorded skill_target is therefore inert here, so this
+        # cleanup-only path is safe to take even when the caller (e.g.
+        # uninstall()) has no opinion on skill_target.
         if terminal == "commit":
             completed = {
                 record["payload"].get("step")
@@ -774,6 +777,27 @@ def recover(root: Path, skill_target: Path | None = None) -> bool:
                 raise RuntimeBundleError("activation journal commit is incomplete")
         _clear_activation_journal(runtime_root)
         return True
+
+    # An interrupted activation restores the previous generation by writing
+    # to journal_skill_target (via _restore_activation_snapshot). The journal
+    # is a user-writable file: an attacker able to write it can rebuild a
+    # fully self-consistent hash chain around any skill_target of their
+    # choosing. Trusting that recorded value when the caller left
+    # skill_target unspecified would let a forged journal alone decide which
+    # writable path automatic recovery overwrites. So even the "unspecified"
+    # case is pinned to a concrete, caller-independent expectation (the
+    # conventional default) and verified against the journal *before* any
+    # restore write happens — fail closed on any mismatch, never let the
+    # journal decide on its own.
+    expected_skill_target = (
+        skill_target if skill_target is not None else _default_skill_target()
+    )
+    if expected_skill_target.absolute() != journal_skill_target.absolute():
+        raise RuntimeBundleError(
+            "activation journal skill target does not match the trusted "
+            "recovery target; refusing to let the journal alone decide "
+            "which path to overwrite"
+        )
 
     for record in records[1:]:
         if record["event"] not in {"prepare", "complete"}:
