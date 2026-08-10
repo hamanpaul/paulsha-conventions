@@ -153,7 +153,7 @@ declared 的 AI 系統有關」「誰以非作者身分核准了它」「資料�
 
 ### 3.3 小結：新增面
 
-Stage 3 落地時，新增面 = **3 條新 rule_id（ISO-01/02/03/04；ISO-02 需 `RuleContext` 擴充，
+Stage 3 落地時，新增面 = **4 條新 rule_id（ISO-01/02/03/04；ISO-02 需 `RuleContext` 擴充，
 排在最後）+ 1 個既有 R-25 extractor kind（`config_list`，涵蓋原 ISO-05 想法）**。全部 opt-in，
 未宣告 `iso42001` 的既有 repo 零行為變更。
 
