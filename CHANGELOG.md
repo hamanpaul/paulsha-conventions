@@ -5,6 +5,24 @@
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
 本專案遵循 hamanpaul project policy v1.0.4。
 
+## [1.0.16] - 2026-08-10
+
+### Added
+- activation 新增 fsync hash-chain journal、明確 recover 入口與逐步 hard-exit recovery，讓斷電後 managed state 自動收斂至完整舊世代或已提交的新世代。
+- 新增 distribution identity（`policy_check/identity.py` + `policy_check/data/distribution.yml`），把 canonical authority 從原始碼常數下移為安裝期決定、執行期唯讀的發行身分，讓同一份 codebase 能以不同發行身分部署；`.project-policy.yml` 只能宣告一致、不能改指向的既有信任邊界不變。
+
+### Changed
+- 新增 ISO/IEC 42001 opt-in engineering-evidence profile 設計文件（`docs/superpowers/specs/2026-08-10-iso42001-profile-design.md`）：opt-in 機制、既有規則（R-09/14/15/16/19/20/22/23/25/26）證據對映表、新規則規劃（ISO-01～04 + R-25 extractor 擴充）、六原則落實、著作權安全邊界與分階段 follow-up issue 草稿；本次僅文件交付，不含任何 `policy_check/**` 程式碼變更。
+
+### Fixed
+- 修補 activation journal 的兩則審查缺陷：（1）三處 atomic-write 站點統一抽成共用 helper，temporary 檔內容在 `os.replace()` 前先 flush + `os.fsync()`，避免斷電時 rename 已提交但內容未落盤；（2）`recover()` 在需要改寫 skill_target 的還原路徑上，未指定時改為預設 `_default_skill_target()` 並強制與 journal 記錄比對，不一致即 fail-closed 拒絕，避免可寫 journal 單方決定改寫任意路徑。
+- `policy_check` 在 CLI 啟動時新增引擎版本 gate：比對執行中引擎版本（優先讀已安裝套件的 metadata，source checkout 則 fallback 讀引擎自身的 `VERSION`）與 repo 宣告的 `policy_version`，不符時以 configuration error 等級 fail-loud（訊息含雙方版本與建議重裝指令），並在報告表頭標示執行中引擎版本；帶 `release:*` label 的 release PR 視窗降為 WARN，無法取得引擎版本時 fail-closed 不靜默跳過。
+- R-19 改以 workflow YAML 結構與實際 `run` 指令偵測測試執行，並提供 strict 模式、反例 fixtures 與 canonical tests workflow 骨架。
+- R-19：`run` 行的 shell 分隔符不再把單一 `|` 當分隔（只保留 `&&`/`||`/`;`），修正含引號 pipe（如 `pytest -k "a|b"`）被切成無法 shlex 解析的片段、導致漏判實際測試執行的 false negative。
+- `verify_installed_wheel_payload` 的 `policy_check/data/distribution.yml` 檢查改以 manifest（`verification.canonical_distribution_identity`）為完整性錨，不再比對 wheel RECORD 的 size/sha256；修正安裝期身分寫入（`_write_distribution_identity`）與安裝後 attestation 之間必然衝突、導致 install 永遠失敗的問題。`manager.py` 的寫入端改為呼叫同一個 `verification.py` 函式，寫入與驗證不再有漂移風險。
+- `TYPE_TO_SECTION` 新增 `docs` type（映射至 Changed），docs-only 交付的 fragment 不再於 release collate 時拋 unknown fragment type。
+- 修正 release workflow 的安裝 smoke：改以隔離模式（`-I`）啟動安裝出的 CLI 並核對套件版本，不再拿 `policy_check --repo` 的 policy 判定 exit code 當 runtime 健康度依據（tag push 無 PR context，判定必然不過，會擋掉合法 release），同時避免 cwd 的 source 樹與 egg-info 蓋過 venv 中真正安裝的產物。
+
 ## [1.0.15] - 2026-07-27
 
 ### Added
