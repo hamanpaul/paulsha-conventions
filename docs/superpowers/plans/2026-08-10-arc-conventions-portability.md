@@ -105,7 +105,30 @@ def test_invalid_provider_is_rejected(monkeypatch):
     })
     with pytest.raises(ident.IdentityError):
         ident.identity()
+
+
+def test_distribution_build_is_optional_and_int(monkeypatch):
+    base = {
+        "canonical_org": "hamanpaul",
+        "engine_repo": "hamanpaul/arc-conventions",
+        "remote_base": "https://github.com",
+        "distribution_name": "arc-conventions",
+        "provider": "github",
+    }
+    monkeypatch.setattr(ident, "_load_raw", lambda: dict(base))
+    assert ident.identity().distribution_build is None
+
+    ident.identity.cache_clear()
+    monkeypatch.setattr(ident, "_load_raw", lambda: {**base, "distribution_build": 3})
+    assert ident.identity().distribution_build == 3
+
+    ident.identity.cache_clear()
+    monkeypatch.setattr(ident, "_load_raw", lambda: {**base, "distribution_build": "x"})
+    with pytest.raises(ident.IdentityError):
+        ident.identity()
 ```
+
+`distribution_build` 是**選填**的發行編號（決策 A′）。內建的 upstream `distribution.yml` 不設此欄，因此 upstream 行為與 artifact 名稱完全不變。
 
 - [ ] **Step 2: 執行測試確認失敗**
 
@@ -169,6 +192,9 @@ class DistributionIdentity:
     remote_base: str
     distribution_name: str
     provider: str
+    # 選填：發行編號。只進 manifest 與報告，不進 artifact 檔名
+    # （integrity.py:23 的目錄名正則內嵌版號語法，階段一不得更動）。
+    distribution_build: int | None = None
 
     def remote_urls(self) -> set[str]:
         base = self.remote_base.rstrip("/")
@@ -201,19 +227,28 @@ def identity() -> DistributionIdentity:
             "distribution identity provider must be one of "
             f"{sorted(VALID_PROVIDERS)}, got {provider!r}"
         )
+    build = data.get("distribution_build")
+    if build is not None:
+        try:
+            build = int(build)
+        except (TypeError, ValueError):
+            raise IdentityError(
+                f"distribution_build must be an integer, got {build!r}"
+            ) from None
     return DistributionIdentity(
         canonical_org=str(data["canonical_org"]).strip(),
         engine_repo=str(data["engine_repo"]).strip(),
         remote_base=str(data["remote_base"]).strip(),
         distribution_name=str(data["distribution_name"]).strip(),
         provider=provider,
+        distribution_build=build,
     )
 ```
 
 - [ ] **Step 5: 執行測試確認通過**
 
 Run: `python3 -m pytest tests/test_identity.py -q`
-Expected: PASS，5 passed
+Expected: PASS，6 passed
 
 - [ ] **Step 6: 建立 changelog fragment**
 
@@ -565,7 +600,21 @@ Expected: FAIL，`TypeError: _require_manifest_shape() takes 1 positional argume
 
 - [ ] **Step 5: bundle artifact 命名與 manifest distribution 區塊**
 
-1. `policy_check/runtime_bundle/builder.py:455` 目前寫死 bundle 目錄名：
+發行名稱出現在 **3 處**，三處都要改；**版號語法部分一律逐字保留**（決策 A′：發行編號不進檔名）。
+
+1. `policy_check/runtime_bundle/builder.py:393` 的封存檔名：
+
+```python
+    archive = destination / f"paulsha-conventions-v{version}.tar.gz"
+```
+
+改為：
+
+```python
+    archive = destination / f"{identity().distribution_name}-v{version}.tar.gz"
+```
+
+2. `policy_check/runtime_bundle/builder.py:455` 的 bundle 目錄名：
 
 ```python
         bundle = temp / f"paulsha-conventions-v{version}"
@@ -577,7 +626,29 @@ Expected: FAIL，`TypeError: _require_manifest_shape() takes 1 positional argume
         bundle = temp / f"{identity().distribution_name}-v{version}"
 ```
 
-2. 在同檔 manifest 字典（`"repository"` 那一項附近）新增 distribution 區塊，供安裝期取用：
+3. `policy_check/runtime_bundle/integrity.py:23` 有一條解析目錄名的正則：
+
+```python
+    r"^paulsha-conventions-v\d+\.\d+\.\d+(?:-fix\.\d+)?$"
+```
+
+**只把前綴參數化，`v\d+\.\d+\.\d+(?:-fix\.\d+)?` 的部分一字不動**（那是版號語法，屬 Global Constraints 禁區）。改為在使用處以 identity 組出：
+
+```python
+import re
+
+from policy_check.identity import identity
+
+def _bundle_dir_re() -> re.Pattern[str]:
+    return re.compile(
+        r"^" + re.escape(identity().distribution_name)
+        + r"-v\d+\.\d+\.\d+(?:-fix\.\d+)?$"
+    )
+```
+
+並把原本引用該模組層常數的地方改為呼叫 `_bundle_dir_re()`。用函式而非模組層常數，是為了讓 identity 在 import 期之後才被解析。
+
+4. 在 `builder.py` 的 manifest 字典（`"repository"` 那一項附近）新增 distribution 區塊，供安裝期取用；`distribution_build` 僅在有設定時寫入：
 
 ```python
             "distribution": {
@@ -586,10 +657,20 @@ Expected: FAIL，`TypeError: _require_manifest_shape() takes 1 positional argume
                 "remote_base": identity().remote_base,
                 "distribution_name": identity().distribution_name,
                 "provider": identity().provider,
+                **(
+                    {"distribution_build": identity().distribution_build}
+                    if identity().distribution_build is not None
+                    else {}
+                ),
             },
 ```
 
 `_require_manifest_shape` 只檢查特定鍵，新增鍵不影響既有驗證。
+
+- [ ] **Step 5b: 驗證 upstream artifact 名稱未改變**
+
+Run: `python3 -m pytest tests/test_runtime_bundle.py -q`
+Expected: PASS —— 內建 identity 的 `distribution_name` 就是 `paulsha-conventions`，且未設 `distribution_build`，故 upstream 的檔名、目錄名與正則行為與改動前完全相同。若有測試因名稱改變而失敗，表示某處誤用了 `distribution_build`。
 
 - [ ] **Step 6: 執行測試確認通過**
 

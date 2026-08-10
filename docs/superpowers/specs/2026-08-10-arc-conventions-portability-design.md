@@ -164,9 +164,22 @@ ARC 發行版**不直接落在 ARC GitLab**，分兩步走：
 
 其中 R-23 是信任鏈的版本比對。在同一階段同時改信任模型與其版本比對語意，風險疊加，因此不併入階段一。
 
-兩個候選（待定案）：
+**決策：採 A′ — 發行編號放進 identity，不進版號字串。**
 
-- **A — 版號帶發行後綴**：`VERSION` = `1.0.15`、tag = `v1.0.15-arc.1`。需改上表 5 處。發行編號在 `pip show` 可見。
-- **A′ — 發行編號放進 identity**：`VERSION` 與 tag 完全比照 upstream，發行編號改放 `distribution.yml` 的 `distribution_build`，僅出現在 bundle artifact 名稱與報告。上表 5 處**一行都不用改**。代價是版本字串看不出發行編號。
+`VERSION` 與 git tag 完全比照 upstream（`1.0.15` / `v1.0.15`），發行編號放在 `distribution.yml` 的選填欄位 `distribution_build`。上表 5 處一行都不用改。代價是版本字串（`pip show`）看不出發行編號。
 
-**階段一的實作不得觸及上表任何位置**，版號策略以獨立工作項推進。
+被否決的 A（版號帶 `-arc.N` 後綴）需改上表全部 5 處，其中 `r23_engine_pin_attestation.py` 是信任鏈的版本比對 —— 在同一階段同時改信任模型與其版本比對語意，風險疊加。
+
+### `distribution_build` 的邊界
+
+**只進 manifest 與報告，不進 artifact 檔名。**
+
+理由是 `runtime_bundle/integrity.py:23` 有一條解析 bundle 目錄名的正則：
+
+```python
+r"^paulsha-conventions-v\d+\.\d+\.\d+(?:-fix\.\d+)?$"
+```
+
+它同時寫死發行名稱**並內嵌版號語法**。發行編號若進檔名，就得改動這條正則的版號部分，違反本階段約束。因此階段一只把該正則的**前綴**參數化（版號部分逐字保留），發行編號留在 manifest 的 `distribution` 區塊。
+
+**階段一的實作仍不得觸及上表任何位置。**
