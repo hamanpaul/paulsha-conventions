@@ -21,6 +21,7 @@
 - R-19：`run` 行的 shell 分隔符不再把單一 `|` 當分隔（只保留 `&&`/`||`/`;`），修正含引號 pipe（如 `pytest -k "a|b"`）被切成無法 shlex 解析的片段、導致漏判實際測試執行的 false negative。
 - `verify_installed_wheel_payload` 的 `policy_check/data/distribution.yml` 檢查改以 manifest（`verification.canonical_distribution_identity`）為完整性錨，不再比對 wheel RECORD 的 size/sha256；修正安裝期身分寫入（`_write_distribution_identity`）與安裝後 attestation 之間必然衝突、導致 install 永遠失敗的問題。`manager.py` 的寫入端改為呼叫同一個 `verification.py` 函式，寫入與驗證不再有漂移風險。
 - `TYPE_TO_SECTION` 新增 `docs` type（映射至 Changed），docs-only 交付的 fragment 不再於 release collate 時拋 unknown fragment type。
+- release workflow 的 buildenv 補裝 PyYAML，且 `policy_check/identity.py` 的 `yaml` import 延後至實際解析時（缺依賴時 fail-closed 轉 `IdentityError`）；修正 distribution identity 引入後 runtime_bundle 在最小建置環境 import 期即因缺 PyYAML 失敗、導致 v1.0.16 首次 release workflow 建置中斷的問題。
 - 修正 release workflow 的安裝 smoke：改以隔離模式（`-I`）啟動安裝出的 CLI 並核對套件版本，不再拿 `policy_check --repo` 的 policy 判定 exit code 當 runtime 健康度依據（tag push 無 PR context，判定必然不過，會擋掉合法 release），同時避免 cwd 的 source 樹與 egg-info 蓋過 venv 中真正安裝的產物。
 
 ## [1.0.15] - 2026-07-27
