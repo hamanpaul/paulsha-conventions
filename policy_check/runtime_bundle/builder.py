@@ -383,6 +383,45 @@ def _prepare_output_directory(source: Path, output_dir: Path) -> Path:
     return destination
 
 
+_VENDORED_EXPECTED_REPOSITORY_PLACEHOLDER = (
+    "_VENDORED_EXPECTED_REPOSITORY: str | None = None"
+)
+
+
+def _vendor_runtime_manager(
+    source: Path,
+    destination: Path,
+    *,
+    expected_repository: str,
+) -> None:
+    """Copy `manager.py` into a bundle as `runtime_manager.py`, baking in
+    the distribution's expected repository as a build-time constant.
+
+    The vendored copy runs standalone (`python3 -I`/`-P`) where
+    `policy_check.identity` is not importable, so it cannot resolve its own
+    expected repository at runtime. Baking the value in here — rather than
+    letting the vendored copy read it back out of the bundle's own
+    `manifest.json` — keeps the manifest `repository` check from being
+    self-referential: the constant lives in this sibling file, whose own
+    checksum is independently pinned by `manifest["runtime"]["sha256"]` and,
+    once activated, by the deployed launcher script's embedded checksum.
+    """
+    text = source.read_text(encoding="utf-8")
+    if text.count(_VENDORED_EXPECTED_REPOSITORY_PLACEHOLDER) != 1:
+        raise BundleError(
+            "runtime manager source is missing the expected vendoring placeholder"
+        )
+    destination.write_text(
+        text.replace(
+            _VENDORED_EXPECTED_REPOSITORY_PLACEHOLDER,
+            "_VENDORED_EXPECTED_REPOSITORY: str | None = "
+            f"{expected_repository!r}",
+        ),
+        encoding="utf-8",
+    )
+    shutil.copymode(source, destination)
+
+
 def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
     source = repo.resolve()
     version, commit, epoch = attest_clean_tag(source, tag)
@@ -462,7 +501,11 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
         )
         if not manager_source.is_file() or not verifier_source.is_file():
             raise BundleError("tag snapshot is missing runtime bootstrap sources")
-        shutil.copy2(manager_source, runtime_dir / "runtime_manager.py")
+        _vendor_runtime_manager(
+            manager_source,
+            runtime_dir / "runtime_manager.py",
+            expected_repository=identity().engine_repo,
+        )
         shutil.copy2(verifier_source, runtime_dir / "runtime_verifier.py")
         installer = bundle / "install.sh"
         installer.write_text(INSTALLER, encoding="utf-8")

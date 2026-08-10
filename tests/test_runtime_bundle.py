@@ -15,7 +15,12 @@ import pytest
 from policy_check.runtime_bundle import builder, cli, integrity, manager
 
 
-def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
+def _fake_bundle(
+    root: Path,
+    version: str = "1.0.13",
+    *,
+    repository: str = "hamanpaul/paulsha-conventions",
+) -> Path:
     bundle = root / f"paulsha-conventions-v{version}"
     package_version = integrity.normalized_package_version(version)
     wheel = bundle / "wheels" / f"policy_check-{package_version}-py3-none-any.whl"
@@ -44,7 +49,7 @@ def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
             "version": package_version,
             "requires_python": ">=3.11",
         },
-        "repository": "hamanpaul/paulsha-conventions",
+        "repository": repository,
         "release_tag": f"v{version}",
         "release_commit": "a" * 40,
         "wheels": [
@@ -159,18 +164,34 @@ def test_checksums_include_nested_file_named_sha256sums(tmp_path: Path) -> None:
     )["policy_version"] == "1.0.13"
 
 
+def _vendor_bootstrap(bootstrap: Path, *, expected_repository: str) -> Path:
+    """Build a standalone runtime_manager.py + runtime_verifier.py pair the
+    way `builder.build_bundle` vendors them into a real bundle, so tests
+    that execute the pair under `python3 -I`/`-P` (where policy_check is not
+    importable) exercise the same build-time-baked repository constant that
+    production bundles carry, instead of a raw, unvendored copy."""
+    manager_source = Path(manager.__file__).resolve()
+    verifier_source = manager_source.with_name("verification.py")
+    runtime_manager = bootstrap / "runtime_manager.py"
+    runtime_verifier = bootstrap / "runtime_verifier.py"
+    builder._vendor_runtime_manager(
+        manager_source,
+        runtime_manager,
+        expected_repository=expected_repository,
+    )
+    runtime_verifier.write_bytes(verifier_source.read_bytes())
+    return runtime_manager
+
+
 def test_vendored_manager_loads_the_shared_verifier_under_safe_path(
     tmp_path: Path,
 ) -> None:
     bundle = _fake_bundle(tmp_path / "bundle")
     bootstrap = tmp_path / "bootstrap"
     bootstrap.mkdir()
-    manager_source = Path(manager.__file__).resolve()
-    verifier_source = manager_source.with_name("verification.py")
-    runtime_manager = bootstrap / "runtime_manager.py"
-    runtime_verifier = bootstrap / "runtime_verifier.py"
-    runtime_manager.write_bytes(manager_source.read_bytes())
-    runtime_verifier.write_bytes(verifier_source.read_bytes())
+    runtime_manager = _vendor_bootstrap(
+        bootstrap, expected_repository="hamanpaul/paulsha-conventions"
+    )
 
     result = subprocess.run(
         [
@@ -189,6 +210,56 @@ def test_vendored_manager_loads_the_shared_verifier_under_safe_path(
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "BUNDLE VERIFIED 1.0.13"
+
+
+def test_vendored_manager_rejects_foreign_manifest_repository_when_identity_unavailable(
+    tmp_path: Path,
+) -> None:
+    """A bundle whose manifest declares a repository other than the one
+    baked into the vendored runtime manager at build time must still be
+    rejected when `policy_check.identity` is unimportable (`-I`/`-P`), not
+    silently accepted by comparing the manifest against itself."""
+    bundle = _fake_bundle(
+        tmp_path / "bundle",
+        repository="evil-org/not-canonical-at-all",
+    )
+    bootstrap = tmp_path / "bootstrap"
+    bootstrap.mkdir()
+    runtime_manager = _vendor_bootstrap(
+        bootstrap, expected_repository="hamanpaul/paulsha-conventions"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-P",
+            str(runtime_manager),
+            "verify",
+            "--bundle",
+            str(bundle),
+        ],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "manifest repository is not canonical" in result.stderr
+
+
+def test_expected_repository_fails_closed_without_identity_or_vendored_constant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Neither `policy_check.identity` nor a build-time vendored constant
+    available must raise, never silently read the expected value back out
+    of the bundle under verification."""
+    monkeypatch.setattr(manager, "_identity", None)
+    monkeypatch.setattr(manager, "_VENDORED_EXPECTED_REPOSITORY", None)
+    with pytest.raises(
+        manager.RuntimeBundleError, match="distribution identity is unavailable"
+    ):
+        manager._expected_repository()
 
 
 def test_installer_reports_python_311_requirement_before_using_safe_path(

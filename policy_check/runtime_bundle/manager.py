@@ -48,46 +48,56 @@ except ImportError:
 
 # `policy_check.identity` is not vendored alongside this module (only
 # verification.py travels into the bundle as runtime_verifier.py), so it is
-# unavailable in the narrow pre-install bootstrap window where this exact
-# file runs standalone as runtime_manager.py before any policy-check wheel
-# is installed. `_expected_repository` degrades gracefully for that window
-# only; see its docstring for why that does not weaken bundle authenticity.
+# unavailable whenever this exact file runs standalone as runtime_manager.py
+# under `python3 -I`/`-P` — which is every deployed `policy-preflight` and
+# `policy-runtime-bundle` invocation (install/verify/exec/activate/rollback/
+# uninstall), not just a one-off pre-install moment. `_expected_repository`
+# falls back to `_VENDORED_EXPECTED_REPOSITORY` for that path; see its
+# comment for why that does not weaken bundle authenticity the way reading
+# the value back out of the bundle's own manifest would.
 try:
     from policy_check.identity import identity as _identity
 except ImportError:
     _identity = None
 
 
-def _expected_repository(bundle_root: Path) -> str:
-    """The repository this manager should require a bundle's manifest to match.
+# Populated only in the *vendored copy* of this file (runtime/runtime_
+# manager.py inside a built bundle): `builder.py`'s `_vendor_runtime_manager`
+# rewrites this exact assignment to the distribution's `identity().
+# engine_repo` at build time, before the file is copied into the bundle.
+# It stays None in the source module (this file, imported normally as
+# policy_check.runtime_bundle.manager), where `_identity` above resolves the
+# value instead — so this constant is never itself read back from the
+# bundle under verification: it lives in a *sibling* file whose own
+# checksum is independently pinned by manifest["runtime"]["sha256"] and,
+# once activated, by the deployed launcher script's own embedded checksum
+# (see `_install_launcher`). A manifest that lies about its `repository`
+# cannot rewrite this constant without also changing runtime_manager.py's
+# checksum, which those independent anchors would then catch.
+_VENDORED_EXPECTED_REPOSITORY: str | None = None
 
-    Prefers the currently installed engine's distribution identity, which is
-    what every non-bootstrap call site (the source package, and any release
-    venv after `install()` has placed the policy-check wheel into it) has
-    available. The one exception is `install()`'s very first verification of
-    an incoming bundle, executed by the vendored runtime_manager.py before
-    policy-check exists anywhere on sys.path: there this falls back to the
-    bundle's own declared `repository` field. That does not weaken the
-    bundle's real integrity guarantee — per docs/runtime-bundle-runbook.md
-    the archive's externally published SHA-256 digest, not this manifest
-    field, is the authenticity anchor for that path, and every checksum and
-    schema check in `load_and_verify_bundle`/`verify_installed_wheel_payload`
-    still applies in full.
+
+def _expected_repository() -> str:
+    """The repository this manager requires every bundle manifest to match.
+
+    Prefers the currently installed engine's distribution identity when
+    `policy_check.identity` is importable (the source package, and any
+    release venv once its own copy of policy-check is on sys.path). When it
+    is not — the normal case for the vendored, `-I`/`-P`-executed
+    runtime_manager.py — this falls back to the build-time constant baked in
+    by `builder.py`. It deliberately never reads the expected value out of
+    the bundle's own manifest.json: that would compare the manifest's
+    declared `repository` field against itself and accept anything.
     """
     if _identity is not None:
         return _identity().engine_repo
-    try:
-        manifest = json.loads(
-            (bundle_root / "manifest.json").read_text(encoding="utf-8")
-        )
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise RuntimeBundleError(
-            "manifest.json is unreadable or invalid JSON"
-        ) from exc
-    repository = manifest.get("repository") if isinstance(manifest, dict) else None
-    if not isinstance(repository, str) or not repository:
-        raise RuntimeBundleError("manifest.json is missing a repository identity")
-    return repository
+    if _VENDORED_EXPECTED_REPOSITORY:
+        return _VENDORED_EXPECTED_REPOSITORY
+    raise RuntimeBundleError(
+        "distribution identity is unavailable: policy_check.identity could "
+        "not be imported and this runtime manager was not vendored with a "
+        "build-time repository constant"
+    )
 
 
 def _default_root() -> Path:
@@ -428,7 +438,7 @@ def _attest_installed_release(release: Path) -> None:
     _verify_installed_wheels(
         release / "artifact",
         _venv_site_packages(release / "venv"),
-        expected_repository=_expected_repository(release / "artifact"),
+        expected_repository=_expected_repository(),
     )
 
 
@@ -598,7 +608,7 @@ def install(
     *,
     force_reinstall: bool = False,
 ) -> str:
-    manifest = verify_bundle(bundle, expected_repository=_expected_repository(bundle))
+    manifest = verify_bundle(bundle, expected_repository=_expected_repository())
     compatibility = manifest["runtime_compatibility"]
     current = {
         "implementation": sys.implementation.name,
@@ -660,7 +670,7 @@ def install(
         shutil.copytree(bundle.resolve(), staging / "artifact")
         verify_bundle(
             staging / "artifact",
-            expected_repository=_expected_repository(staging / "artifact"),
+            expected_repository=_expected_repository(),
         )
         try:
             venv.EnvBuilder(with_pip=True, clear=False).create(staging / "venv")
@@ -795,7 +805,7 @@ def _verified_release(root: Path, version: str) -> Path:
         raise RuntimeBundleError(f"verified release is not installed: {version}")
     manifest = verify_bundle(
         release / "artifact",
-        expected_repository=_expected_repository(release / "artifact"),
+        expected_repository=_expected_repository(),
     )
     try:
         marker = json.loads(verified.read_text(encoding="utf-8"))
@@ -999,7 +1009,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "verify":
             manifest = verify_bundle(
                 Path(args.bundle),
-                expected_repository=_expected_repository(Path(args.bundle)),
+                expected_repository=_expected_repository(),
             )
             print(f"BUNDLE VERIFIED {manifest['policy_version']}")
         elif args.command == "install":
