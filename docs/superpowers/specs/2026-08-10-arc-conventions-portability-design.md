@@ -1,7 +1,7 @@
 # arc-conventions portability — design
 
 - Issue: [#63](https://github.com/hamanpaul/paulsha-conventions/issues/63)
-- 狀態：設計待審
+- 狀態：已實作（見 `docs/superpowers/plans/2026-08-10-arc-conventions-portability.md`）
 - 範圍：階段一（去硬編碼 + 信任模型重構）；階段二（rule plugin 介面）僅列介面草案
 
 ## 背景

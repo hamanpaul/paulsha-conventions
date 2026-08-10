@@ -105,8 +105,33 @@ if missing:
     )
     raise SystemExit(2)
 PY
-exec "$PYTHON_BIN" -I -B "$BUNDLE_ROOT/runtime/runtime_manager.py" \
+"$PYTHON_BIN" -I -B "$BUNDLE_ROOT/runtime/runtime_manager.py" \
   install --bundle "$BUNDLE_ROOT" "$@"
+python3 - "$(dirname "$0")/manifest.json" <<'PY'
+import json, pathlib, sys, importlib.util
+
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+dist = manifest.get("distribution")
+if not dist:
+    raise SystemExit("manifest is missing distribution identity")
+spec = importlib.util.find_spec("policy_check.data")
+if spec is None or not spec.submodule_search_locations:
+    raise SystemExit("installed policy_check.data not found")
+target = pathlib.Path(spec.submodule_search_locations[0]) / "distribution.yml"
+target.write_text(
+    "".join(
+        f"{key}: {dist[key]}\\n"
+        for key in (
+            "canonical_org",
+            "engine_repo",
+            "remote_base",
+            "distribution_name",
+            "provider",
+        )
+    ),
+    encoding="utf-8",
+)
+PY
 """
 
 
