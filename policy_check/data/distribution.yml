@@ -1,0 +1,7 @@
+# 這份被安裝的引擎的發行身分。執行期唯讀。
+# runtime bundle 的 install.sh 會在安裝期覆寫本檔以切換發行身分。
+canonical_org: hamanpaul
+engine_repo: hamanpaul/paulsha-conventions
+remote_base: https://github.com
+distribution_name: paulsha-conventions
+provider: github

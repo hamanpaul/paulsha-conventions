@@ -72,6 +72,23 @@ class R08PolicyConfigSchema:
                 ),
             )
 
+        # 驗證 R-19 區塊：strict 為 optional boolean；未知 subkey 保持 lenient。
+        r19 = data.get("r19")
+        if r19 is not None:
+            if not isinstance(r19, dict):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="r19 must be a mapping",
+                )
+            strict = r19.get("strict")
+            if strict is not None and not isinstance(strict, bool):
+                return RuleResult(
+                    rule_id=self.rule_id,
+                    status=Status.FAIL,
+                    message="r19.strict must be a boolean",
+                )
+
         # 驗證 secret_scan 區塊：allow/markers/public_names 須為 list[str]
         secret_scan = data.get("secret_scan")
         if secret_scan is not None:

@@ -62,7 +62,9 @@ def _build_and_extract(repo: Path, root: Path, version: str) -> tuple[Path, str]
         root / f"extract-{version}",
         digest,
     )
-    manifest = integrity.load_and_verify_bundle(extracted)
+    manifest = integrity.load_and_verify_bundle(
+        extracted, expected_repository="hamanpaul/paulsha-conventions"
+    )
     assert manifest["policy_version"] == version
     assert manifest["release_commit"] == _run(["git", "rev-parse", "HEAD"], cwd=repo)
     return extracted, digest

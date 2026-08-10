@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import io
 import os
@@ -12,10 +14,16 @@ from pathlib import Path
 
 import pytest
 
-from policy_check.runtime_bundle import builder, cli, integrity, manager
+from policy_check import identity as ident
+from policy_check.runtime_bundle import builder, cli, integrity, manager, verification
 
 
-def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
+def _fake_bundle(
+    root: Path,
+    version: str = "1.0.13",
+    *,
+    repository: str = "hamanpaul/paulsha-conventions",
+) -> Path:
     bundle = root / f"paulsha-conventions-v{version}"
     package_version = integrity.normalized_package_version(version)
     wheel = bundle / "wheels" / f"policy_check-{package_version}-py3-none-any.whl"
@@ -44,9 +52,16 @@ def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
             "version": package_version,
             "requires_python": ">=3.11",
         },
-        "repository": integrity.CANONICAL_REPOSITORY,
+        "repository": repository,
         "release_tag": f"v{version}",
         "release_commit": "a" * 40,
+        "distribution": {
+            "canonical_org": "hamanpaul",
+            "engine_repo": "hamanpaul/paulsha-conventions",
+            "remote_base": "https://github.com",
+            "distribution_name": "paulsha-conventions",
+            "provider": "github",
+        },
         "wheels": [
             {
                 "path": f"wheels/{wheel.name}",
@@ -132,13 +147,23 @@ def _write_fake_venv(path: Path) -> None:
         "include-system-site-packages = false\n",
         encoding="utf-8",
     )
+    # Mirrors the layout `pip install` leaves behind for the real
+    # `policy_check.data` package, so `manager._write_distribution_identity`
+    # finds a target to write into during install() tests below.
+    (manager._venv_site_packages(path) / "policy_check" / "data").mkdir(
+        parents=True
+    )
 
 
 def test_verify_bundle_accepts_closed_file_set(tmp_path: Path) -> None:
     bundle = _fake_bundle(tmp_path)
-    manifest = integrity.load_and_verify_bundle(bundle)
+    manifest = integrity.load_and_verify_bundle(
+        bundle, expected_repository="hamanpaul/paulsha-conventions"
+    )
     assert manifest["policy_version"] == "1.0.13"
-    assert manager.verify_bundle(bundle)["skill_version"] == "1.0.13"
+    assert manager.verify_bundle(
+        bundle, expected_repository="hamanpaul/paulsha-conventions"
+    )["skill_version"] == "1.0.13"
 
 
 def test_checksums_include_nested_file_named_sha256sums(tmp_path: Path) -> None:
@@ -150,7 +175,28 @@ def test_checksums_include_nested_file_named_sha256sums(tmp_path: Path) -> None:
 
     checksums = (bundle / "SHA256SUMS").read_text(encoding="utf-8")
     assert "payload/SHA256SUMS" in checksums
-    assert integrity.load_and_verify_bundle(bundle)["policy_version"] == "1.0.13"
+    assert integrity.load_and_verify_bundle(
+        bundle, expected_repository="hamanpaul/paulsha-conventions"
+    )["policy_version"] == "1.0.13"
+
+
+def _vendor_bootstrap(bootstrap: Path, *, expected_repository: str) -> Path:
+    """Build a standalone runtime_manager.py + runtime_verifier.py pair the
+    way `builder.build_bundle` vendors them into a real bundle, so tests
+    that execute the pair under `python3 -I`/`-P` (where policy_check is not
+    importable) exercise the same build-time-baked repository constant that
+    production bundles carry, instead of a raw, unvendored copy."""
+    manager_source = Path(manager.__file__).resolve()
+    verifier_source = manager_source.with_name("verification.py")
+    runtime_manager = bootstrap / "runtime_manager.py"
+    runtime_verifier = bootstrap / "runtime_verifier.py"
+    builder._vendor_runtime_manager(
+        manager_source,
+        runtime_manager,
+        expected_repository=expected_repository,
+    )
+    runtime_verifier.write_bytes(verifier_source.read_bytes())
+    return runtime_manager
 
 
 def test_vendored_manager_loads_the_shared_verifier_under_safe_path(
@@ -159,12 +205,9 @@ def test_vendored_manager_loads_the_shared_verifier_under_safe_path(
     bundle = _fake_bundle(tmp_path / "bundle")
     bootstrap = tmp_path / "bootstrap"
     bootstrap.mkdir()
-    manager_source = Path(manager.__file__).resolve()
-    verifier_source = manager_source.with_name("verification.py")
-    runtime_manager = bootstrap / "runtime_manager.py"
-    runtime_verifier = bootstrap / "runtime_verifier.py"
-    runtime_manager.write_bytes(manager_source.read_bytes())
-    runtime_verifier.write_bytes(verifier_source.read_bytes())
+    runtime_manager = _vendor_bootstrap(
+        bootstrap, expected_repository="hamanpaul/paulsha-conventions"
+    )
 
     result = subprocess.run(
         [
@@ -183,6 +226,56 @@ def test_vendored_manager_loads_the_shared_verifier_under_safe_path(
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "BUNDLE VERIFIED 1.0.13"
+
+
+def test_vendored_manager_rejects_foreign_manifest_repository_when_identity_unavailable(
+    tmp_path: Path,
+) -> None:
+    """A bundle whose manifest declares a repository other than the one
+    baked into the vendored runtime manager at build time must still be
+    rejected when `policy_check.identity` is unimportable (`-I`/`-P`), not
+    silently accepted by comparing the manifest against itself."""
+    bundle = _fake_bundle(
+        tmp_path / "bundle",
+        repository="evil-org/not-canonical-at-all",
+    )
+    bootstrap = tmp_path / "bootstrap"
+    bootstrap.mkdir()
+    runtime_manager = _vendor_bootstrap(
+        bootstrap, expected_repository="hamanpaul/paulsha-conventions"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-P",
+            str(runtime_manager),
+            "verify",
+            "--bundle",
+            str(bundle),
+        ],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "manifest repository is not canonical" in result.stderr
+
+
+def test_expected_repository_fails_closed_without_identity_or_vendored_constant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Neither `policy_check.identity` nor a build-time vendored constant
+    available must raise, never silently read the expected value back out
+    of the bundle under verification."""
+    monkeypatch.setattr(manager, "_identity", None)
+    monkeypatch.setattr(manager, "_VENDORED_EXPECTED_REPOSITORY", None)
+    with pytest.raises(
+        manager.RuntimeBundleError, match="distribution identity is unavailable"
+    ):
+        manager._expected_repository()
 
 
 def test_installer_reports_python_311_requirement_before_using_safe_path(
@@ -267,10 +360,14 @@ def test_verify_bundle_accepts_fix_suffix_as_post_package_version(
     tmp_path: Path,
 ) -> None:
     bundle = _fake_bundle(tmp_path, "1.0.13-fix.2")
-    manifest = integrity.load_and_verify_bundle(bundle)
+    manifest = integrity.load_and_verify_bundle(
+        bundle, expected_repository="hamanpaul/paulsha-conventions"
+    )
     assert manifest["policy_version"] == "1.0.13-fix.2"
     assert manifest["package"]["version"] == "1.0.13.post2"
-    assert manager.verify_bundle(bundle)["package"]["version"] == "1.0.13.post2"
+    assert manager.verify_bundle(
+        bundle, expected_repository="hamanpaul/paulsha-conventions"
+    )["package"]["version"] == "1.0.13.post2"
 
 
 @pytest.mark.parametrize(
@@ -288,20 +385,28 @@ def test_verify_bundle_rejects_payload_tamper(tmp_path: Path, relative: str) -> 
     with (bundle / relative).open("ab") as stream:
         stream.write(b"tampered")
     with pytest.raises(integrity.BundleError, match="checksum mismatch"):
-        integrity.load_and_verify_bundle(bundle)
+        integrity.load_and_verify_bundle(
+            bundle, expected_repository="hamanpaul/paulsha-conventions"
+        )
     with pytest.raises(manager.RuntimeBundleError, match="checksum mismatch"):
-        manager.verify_bundle(bundle)
+        manager.verify_bundle(
+            bundle, expected_repository="hamanpaul/paulsha-conventions"
+        )
 
 
 def test_verify_bundle_rejects_unlisted_file_and_symlink(tmp_path: Path) -> None:
     bundle = _fake_bundle(tmp_path)
     (bundle / "extra").write_text("unlisted\n", encoding="utf-8")
     with pytest.raises(integrity.BundleError, match="file set mismatch"):
-        integrity.load_and_verify_bundle(bundle)
+        integrity.load_and_verify_bundle(
+            bundle, expected_repository="hamanpaul/paulsha-conventions"
+        )
     (bundle / "extra").unlink()
     (bundle / "escape").symlink_to("../outside")
     with pytest.raises(integrity.BundleError, match="symlink"):
-        integrity.load_and_verify_bundle(bundle)
+        integrity.load_and_verify_bundle(
+            bundle, expected_repository="hamanpaul/paulsha-conventions"
+        )
 
 
 def test_extract_archive_verifies_digest_members_and_payload(tmp_path: Path) -> None:
@@ -315,9 +420,38 @@ def test_extract_archive_verifies_digest_members_and_payload(tmp_path: Path) -> 
         digest,
     )
     assert extracted.name == "paulsha-conventions-v1.0.13"
-    assert integrity.load_and_verify_bundle(extracted)["policy_version"] == "1.0.13"
+    assert integrity.load_and_verify_bundle(
+        extracted, expected_repository="hamanpaul/paulsha-conventions"
+    )["policy_version"] == "1.0.13"
     with pytest.raises(integrity.BundleError, match="already exists"):
         integrity.extract_verified_archive(archive, tmp_path / "output", digest)
+
+
+def test_extract_archive_broken_identity_is_bundle_error(monkeypatch, tmp_path: Path) -> None:
+    """identity() 壞掉時（distribution.yml 缺欄位）extract_verified_archive 只攔
+    (OSError, tarfile.TarError)，目前會讓 IdentityError 原封不動爆出去
+    （見 integrity.py:97 一帶）；壞掉時必須正規化為 BundleError。"""
+    archive = tmp_path / "bundle.tar.gz"
+    root = "paulsha-conventions-v1.0.13"
+    with tarfile.open(archive, mode="w:gz") as bundle_tar:
+        directory = tarfile.TarInfo(root)
+        directory.type = tarfile.DIRTYPE
+        bundle_tar.addfile(directory)
+        member = tarfile.TarInfo(f"{root}/manifest.json")
+        member.size = 2
+        bundle_tar.addfile(member, io.BytesIO(b"{}"))
+
+    ident.identity.cache_clear()
+    monkeypatch.setattr(ident, "_load_raw", lambda: {"canonical_org": "hamanpaul"})
+    try:
+        with pytest.raises(integrity.BundleError):
+            integrity.extract_verified_archive(
+                archive,
+                tmp_path / "output",
+                integrity.sha256_file(archive),
+            )
+    finally:
+        ident.identity.cache_clear()
 
 
 def test_deterministic_archive_normalizes_umask_sensitive_modes(
@@ -798,6 +932,95 @@ def test_install_upgrade_rollback_and_uninstall_are_scoped(
     assert (runtime_root / "current").resolve().name == "1.0.13"
     manager.uninstall(runtime_root, "1.0.14")
     assert not (runtime_root / "releases" / "1.0.14").exists()
+
+
+def test_install_writes_distribution_identity_into_the_installed_venv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for a plan-mandated defect found in review: the identity
+    write must resolve the venv `install()` itself just created (`staging /
+    "venv"`, which becomes `releases/<version>/venv`) rather than a bare
+    `python3` / ambient `importlib.util.find_spec("policy_check.data")`
+    lookup on the invoking interpreter. On a real host — and in this very
+    test process, since `policy_check` is importable here as an editable
+    checkout — an ambient lookup would resolve to this repo's own tracked
+    `policy_check/data/distribution.yml`, not the release being installed.
+    """
+    bundle = _fake_bundle(tmp_path / "source")
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+
+    class FakeEnvBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, path):
+            _write_fake_venv(Path(path))
+
+    monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
+    monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
+
+    assert manager.install(bundle, runtime_root, skill_target) == "1.0.13"
+
+    release_venv = runtime_root / "releases" / "1.0.13" / "venv"
+    written = (
+        manager._venv_site_packages(release_venv)
+        / "policy_check"
+        / "data"
+        / "distribution.yml"
+    )
+    assert written.is_file()
+    text = written.read_text(encoding="utf-8")
+    for key, value in manifest["distribution"].items():
+        assert f"{key}: {value}" in text
+
+    import policy_check.data as _ambient_data
+
+    ambient = Path(_ambient_data.__file__).resolve().parent / "distribution.yml"
+    assert written.resolve() != ambient
+
+
+def test_install_fails_closed_when_manifest_lacks_distribution_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["distribution"]
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+    integrity.write_checksums(bundle)
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+
+    class FakeEnvBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, path):
+            _write_fake_venv(Path(path))
+
+    monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
+    monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
+
+    with pytest.raises(manager.RuntimeBundleError, match="distribution identity"):
+        manager.install(bundle, runtime_root, skill_target)
+    assert not (runtime_root / "releases" / "1.0.13").exists()
+    assert not list((runtime_root / "releases").glob(".staging-*"))
 
 
 def test_force_reinstall_recovers_tampered_active_release(
@@ -1340,3 +1563,242 @@ def test_uninstall_removes_tampered_but_state_owned_inactive_release(
     )
     manager.uninstall(runtime_root, "1.0.13")
     assert not release.exists()
+
+
+def test_verification_module_stays_stdlib_only():
+    """verification.py 由 vendored bootstrap manager 共用，不得引入第三方或套件內依賴。"""
+    from pathlib import Path
+
+    source = Path("policy_check/runtime_bundle/verification.py").read_text(encoding="utf-8")
+    assert "import yaml" not in source
+    assert "policy_check.identity" not in source
+
+
+def test_manifest_repository_is_checked_against_argument():
+    from policy_check.runtime_bundle import verification
+
+    manifest = {
+        "schema_version": verification.SCHEMA_VERSION,
+        "policy_version": "1.0.15",
+        "skill_version": "1.0.15",
+        "repository": "hamanpaul/arc-conventions",
+        "release_tag": "v1.0.15",
+        "release_commit": "0" * 40,
+        "package": {
+            "name": "policy-check",
+            "version": "1.0.15",
+            "requires_python": ">=3.11",
+        },
+        "wheels": [{"path": "wheels/policy_check-1.0.15-py3-none-any.whl", "sha256": "a" * 64}],
+        "skill": {"path": "skills/preflight-ci", "sha256": "a" * 64},
+        "runtime": {
+            "path": "runtime/runtime_manager.py",
+            "sha256": "a" * 64,
+            "verifier_path": "runtime/runtime_verifier.py",
+            "verifier_sha256": "a" * 64,
+        },
+        "runtime_compatibility": {
+            "implementation": "cpython",
+            "python": "3.11",
+            "abi": "cp311",
+            "platform": "linux",
+        },
+        "prerequisites": ["git"],
+    }
+    with pytest.raises(verification.BundleError):
+        verification._require_manifest_shape(manifest, "hamanpaul/paulsha-conventions")
+    verification._require_manifest_shape(manifest, "hamanpaul/arc-conventions")
+
+
+# --- distribution.yml attestation is anchored to the manifest, not the
+# wheel RECORD (issue #63 CI regression): `manager._write_distribution_
+# identity` overwrites `policy_check/data/distribution.yml` at install
+# time, so its installed bytes never match the wheel's own RECORD entry
+# by construction. `verify_installed_wheel_payload` must check that one
+# path against `verification.canonical_distribution_identity(manifest
+# ["distribution"])` instead of the RECORD size/sha256 it uses for every
+# other file. Fixture style follows
+# `test_installed_wheel_payload_attests_imported_files` in
+# tests/test_preflight.py (build a real wheel zip with a real RECORD).
+
+
+def _wheel_record_digest(content: bytes) -> str:
+    encoded = base64.urlsafe_b64encode(hashlib.sha256(content).digest())
+    return encoded.decode("ascii").rstrip("=")
+
+
+def _write_installed_wheel(
+    bundle_root: Path,
+    installed_root: Path,
+    *,
+    wheel_name: str,
+    distribution_name: str,
+    version: str,
+    files: dict[str, bytes],
+) -> Path:
+    dist_info = f"{distribution_name.replace('-', '_')}-{version}.dist-info"
+    metadata_name = f"{dist_info}/METADATA"
+    metadata = f"Name: {distribution_name}\nVersion: {version}\n".encode()
+    payload = {**files, metadata_name: metadata}
+    for name, content in payload.items():
+        path = installed_root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    record_name = f"{dist_info}/RECORD"
+    record = "".join(
+        f"{name},sha256={_wheel_record_digest(content)},{len(content)}\n"
+        for name, content in payload.items()
+    ) + f"{record_name},,\n"
+    wheel = bundle_root / "wheels" / wheel_name
+    wheel.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(wheel, mode="w") as archive:
+        for name, content in payload.items():
+            archive.writestr(name, content)
+        archive.writestr(record_name, record)
+    return wheel
+
+
+_DISTRIBUTION_FIXTURE = {
+    "canonical_org": "hamanpaul",
+    "engine_repo": "hamanpaul/arc-conventions",
+    "remote_base": "https://github.com",
+    "distribution_name": "arc-conventions",
+    "provider": "github",
+}
+
+
+def test_verify_installed_wheel_payload_accepts_distribution_identity_anchored_to_manifest(
+    tmp_path: Path,
+) -> None:
+    """(a) Installed `distribution.yml` bytes equal the manifest's
+    canonical serialization but diverge from the wheel's own RECORD entry
+    (exactly what `manager._write_distribution_identity` leaves behind)
+    -> verification succeeds.
+    """
+    bundle_root = tmp_path / "bundle"
+    installed_root = tmp_path / "site-packages"
+    wheel = _write_installed_wheel(
+        bundle_root,
+        installed_root,
+        wheel_name="policy_check-1.0.15-py3-none-any.whl",
+        distribution_name="policy-check",
+        version="1.0.15",
+        files={
+            "policy_check/__init__.py": b"",
+            "policy_check/data/distribution.yml": (
+                b"# wheel-shipped default identity; never kept as-is\n"
+                b"canonical_org: hamanpaul\n"
+            ),
+        },
+    )
+    # Simulate the install-time overwrite: its bytes now disagree with the
+    # wheel's own RECORD entry above.
+    (installed_root / "policy_check" / "data" / "distribution.yml").write_bytes(
+        verification.canonical_distribution_identity(
+            _DISTRIBUTION_FIXTURE
+        ).encode("utf-8")
+    )
+    manifest = {
+        "distribution": _DISTRIBUTION_FIXTURE,
+        "wheels": [{"path": f"wheels/{wheel.name}", "sha256": "a" * 64}],
+    }
+    verified = verification.verify_installed_wheel_payload(
+        bundle_root,
+        installed_root,
+        manifest,
+        expected_repository="hamanpaul/arc-conventions",
+    )
+    assert verified is manifest
+
+
+def test_verify_installed_wheel_payload_rejects_distribution_identity_mismatch(
+    tmp_path: Path,
+) -> None:
+    """(b) Installed `distribution.yml` disagrees with the manifest's
+    `distribution` block -> BundleError.
+    """
+    bundle_root = tmp_path / "bundle"
+    installed_root = tmp_path / "site-packages"
+    wheel = _write_installed_wheel(
+        bundle_root,
+        installed_root,
+        wheel_name="policy_check-1.0.15-py3-none-any.whl",
+        distribution_name="policy-check",
+        version="1.0.15",
+        files={
+            "policy_check/__init__.py": b"",
+            "policy_check/data/distribution.yml": b"# wheel-shipped default\n",
+        },
+    )
+    (installed_root / "policy_check" / "data" / "distribution.yml").write_bytes(
+        verification.canonical_distribution_identity(_DISTRIBUTION_FIXTURE).encode(
+            "utf-8"
+        )
+        + b"\ntampered\n"
+    )
+    manifest = {
+        "distribution": _DISTRIBUTION_FIXTURE,
+        "wheels": [{"path": f"wheels/{wheel.name}", "sha256": "a" * 64}],
+    }
+    with pytest.raises(
+        verification.BundleError, match="installed distribution identity"
+    ):
+        verification.verify_installed_wheel_payload(
+            bundle_root,
+            installed_root,
+            manifest,
+            expected_repository="hamanpaul/arc-conventions",
+        )
+
+
+def test_verify_installed_wheel_payload_fails_closed_without_manifest_distribution(
+    tmp_path: Path,
+) -> None:
+    """(c) The manifest has no `distribution` block at all and the
+    installed file disagrees with the wheel RECORD (the historical RECORD
+    size/sha256 comparison this file used to go through would also
+    reject it) -> BundleError raised fail-closed rather than silently
+    falling back to a RECORD comparison.
+    """
+    bundle_root = tmp_path / "bundle"
+    installed_root = tmp_path / "site-packages"
+    wheel = _write_installed_wheel(
+        bundle_root,
+        installed_root,
+        wheel_name="policy_check-1.0.15-py3-none-any.whl",
+        distribution_name="policy-check",
+        version="1.0.15",
+        files={
+            "policy_check/__init__.py": b"",
+            "policy_check/data/distribution.yml": b"# wheel-shipped default\n",
+        },
+    )
+    (installed_root / "policy_check" / "data" / "distribution.yml").write_bytes(
+        verification.canonical_distribution_identity(_DISTRIBUTION_FIXTURE).encode(
+            "utf-8"
+        )
+    )
+    manifest = {
+        "wheels": [{"path": f"wheels/{wheel.name}", "sha256": "a" * 64}],
+    }
+    with pytest.raises(verification.BundleError, match="distribution identity"):
+        verification.verify_installed_wheel_payload(
+            bundle_root,
+            installed_root,
+            manifest,
+            expected_repository="hamanpaul/arc-conventions",
+        )
+
+
+def test_canonical_distribution_identity_fails_closed_on_missing_key() -> None:
+    """(d) `canonical_distribution_identity` itself fails closed when a
+    required field is missing from the `distribution` mapping.
+    """
+    incomplete = dict(_DISTRIBUTION_FIXTURE)
+    del incomplete["provider"]
+    with pytest.raises(verification.BundleError, match="provider"):
+        verification.canonical_distribution_identity(incomplete)
+    with pytest.raises(verification.BundleError, match="distribution identity"):
+        verification.canonical_distribution_identity(None)
+    with pytest.raises(verification.BundleError, match="distribution identity"):
+        verification.canonical_distribution_identity({})

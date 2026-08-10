@@ -1,0 +1,12 @@
+name: Tests
+on:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: pytest -q (documentation only)
+        run: |
+          # pytest -q tests/
+          echo "test command is documented only"
