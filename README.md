@@ -512,6 +512,16 @@ options:
   -h, --help            show this help message and exit
 <!-- END: cli-help marker="policy-runtime-bundle-help" -->
 
+### Distribution identity
+
+The engine's distribution identity (canonical org, engine repo, remote base, distribution
+name, provider) lives in `policy_check/data/distribution.yml`, fixed at **install time**
+and **read-only at runtime**. It belongs to "this installed copy of the engine", not to
+"the repo being checked" — a checked repo's `.project-policy.yml`
+`conventions_engine.repo` may only declare a value that matches it, never redirect it;
+any mismatch always raises `PreflightGateError`. Missing or invalid identity fails
+closed — it never falls back to a default.
+
 ### Versioning
 
 `VERSION` (repo root) is the single source of truth for the project version.
@@ -984,6 +994,14 @@ gh repo create hamanpaul/<new-project> --template hamanpaul/new-project-template
 #### CLI Help
 
 （見 [English → Command-line help](#command-line-help)）
+
+### Distribution identity
+
+引擎的發行身分（canonical org、engine repo、remote base、distribution name、provider）
+記於 `policy_check/data/distribution.yml`，於**安裝期**決定、**執行期唯讀**。
+它屬於「被安裝的這份引擎」，不屬於「被檢查的 repo」——`.project-policy.yml` 的
+`conventions_engine.repo` 只能宣告與其一致，不能改指向；不一致一律
+`PreflightGateError`。缺漏或不合法時 fail-closed，不回退預設值。
 
 ### 版本
 `VERSION` 檔（repo root）為專案版號 single source of truth。

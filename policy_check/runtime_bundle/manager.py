@@ -23,6 +23,7 @@ try:
     from .verification import (
         VERSION_RE,
         BundleError as RuntimeBundleError,
+        canonical_distribution_identity as _canonical_distribution_identity,
         load_and_verify_bundle as verify_bundle,
         normalized_package_version as _normalized_package_version,
         sha256_file as _sha256,
@@ -40,10 +41,65 @@ except ImportError:
     _verifier_spec.loader.exec_module(_verifier)
     VERSION_RE = _verifier.VERSION_RE
     RuntimeBundleError = _verifier.BundleError
+    _canonical_distribution_identity = _verifier.canonical_distribution_identity
     verify_bundle = _verifier.load_and_verify_bundle
     _normalized_package_version = _verifier.normalized_package_version
     _sha256 = _verifier.sha256_file
     _verify_installed_wheels = _verifier.verify_installed_wheel_payload
+
+
+# `policy_check.identity` is not vendored alongside this module (only
+# verification.py travels into the bundle as runtime_verifier.py), so it is
+# unavailable whenever this exact file runs standalone as runtime_manager.py
+# under `python3 -I`/`-P` — which is every deployed `policy-preflight` and
+# `policy-runtime-bundle` invocation (install/verify/exec/activate/rollback/
+# uninstall), not just a one-off pre-install moment. `_expected_repository`
+# falls back to `_VENDORED_EXPECTED_REPOSITORY` for that path; see its
+# comment for why that does not weaken bundle authenticity the way reading
+# the value back out of the bundle's own manifest would.
+try:
+    from policy_check.identity import identity as _identity
+except ImportError:
+    _identity = None
+
+
+# Populated only in the *vendored copy* of this file (runtime/runtime_
+# manager.py inside a built bundle): `builder.py`'s `_vendor_runtime_manager`
+# rewrites this exact assignment to the distribution's `identity().
+# engine_repo` at build time, before the file is copied into the bundle.
+# It stays None in the source module (this file, imported normally as
+# policy_check.runtime_bundle.manager), where `_identity` above resolves the
+# value instead — so this constant is never itself read back from the
+# bundle under verification: it lives in a *sibling* file whose own
+# checksum is independently pinned by manifest["runtime"]["sha256"] and,
+# once activated, by the deployed launcher script's own embedded checksum
+# (see `_install_launcher`). A manifest that lies about its `repository`
+# cannot rewrite this constant without also changing runtime_manager.py's
+# checksum, which those independent anchors would then catch.
+_VENDORED_EXPECTED_REPOSITORY: str | None = None
+
+
+def _expected_repository() -> str:
+    """The repository this manager requires every bundle manifest to match.
+
+    Prefers the currently installed engine's distribution identity when
+    `policy_check.identity` is importable (the source package, and any
+    release venv once its own copy of policy-check is on sys.path). When it
+    is not — the normal case for the vendored, `-I`/`-P`-executed
+    runtime_manager.py — this falls back to the build-time constant baked in
+    by `builder.py`. It deliberately never reads the expected value out of
+    the bundle's own manifest.json: that would compare the manifest's
+    declared `repository` field against itself and accept anything.
+    """
+    if _identity is not None:
+        return _identity().engine_repo
+    if _VENDORED_EXPECTED_REPOSITORY:
+        return _VENDORED_EXPECTED_REPOSITORY
+    raise RuntimeBundleError(
+        "distribution identity is unavailable: policy_check.identity could "
+        "not be imported and this runtime manager was not vendored with a "
+        "build-time repository constant"
+    )
 
 
 def _default_root() -> Path:
@@ -73,6 +129,39 @@ def _venv_site_packages(root: Path) -> Path:
         / f"python{sys.version_info.major}.{sys.version_info.minor}"
         / "site-packages"
     )
+
+
+def _write_distribution_identity(venv_root: Path, manifest: dict[str, Any]) -> None:
+    """Write the bundle's own distribution identity into the venv this
+    install just created (`staging / "venv"`), so the freshly installed
+    release's `policy_check.identity` reports the identity that governs it
+    instead of whatever the wheel happened to ship as its built-in default.
+
+    Resolves the target through `venv_root` — the exact venv this call
+    built — never through a bare `python3` looked up on PATH or
+    `importlib.util.find_spec` run from the invoking interpreter. The
+    invoking interpreter is not the installed release: it could be a
+    system `python3`, or (in a dev/editable checkout) one that already
+    happens to import an unrelated `policy_check.data`, which would make
+    this silently overwrite the wrong package's data file instead of the
+    one this install produced.
+
+    Fail-closed: a manifest missing `distribution` (or missing any of its
+    required fields), or a target site-packages tree that does not
+    actually contain an installed `policy_check.data` package, aborts the
+    install instead of silently keeping the wheel's built-in identity.
+
+    Serializes through `verification.canonical_distribution_identity` —
+    the same single source of truth `verify_installed_wheel_payload` reads
+    back at attestation time — so the write here and the check there can
+    never drift apart.
+    """
+    content = _canonical_distribution_identity(manifest.get("distribution"))
+    target_dir = _venv_site_packages(venv_root) / "policy_check" / "data"
+    if not target_dir.is_dir():
+        raise RuntimeBundleError("installed policy_check.data package not found")
+    target = target_dir / "distribution.yml"
+    target.write_text(content, encoding="utf-8")
 
 
 def _isolated_subprocess_env() -> dict[str, str]:
@@ -384,6 +473,7 @@ def _attest_installed_release(release: Path) -> None:
     _verify_installed_wheels(
         release / "artifact",
         _venv_site_packages(release / "venv"),
+        expected_repository=_expected_repository(),
     )
 
 
@@ -553,7 +643,7 @@ def install(
     *,
     force_reinstall: bool = False,
 ) -> str:
-    manifest = verify_bundle(bundle)
+    manifest = verify_bundle(bundle, expected_repository=_expected_repository())
     compatibility = manifest["runtime_compatibility"]
     current = {
         "implementation": sys.implementation.name,
@@ -613,7 +703,10 @@ def install(
     try:
         (staging / "artifact").parent.mkdir(parents=True)
         shutil.copytree(bundle.resolve(), staging / "artifact")
-        verify_bundle(staging / "artifact")
+        verify_bundle(
+            staging / "artifact",
+            expected_repository=_expected_repository(),
+        )
         try:
             venv.EnvBuilder(with_pip=True, clear=False).create(staging / "venv")
         except (OSError, subprocess.SubprocessError) as exc:
@@ -639,6 +732,7 @@ def install(
             cwd=staging,
             env=_isolated_subprocess_env(),
         )
+        _write_distribution_identity(staging / "venv", manifest)
         _run(
             [
                 str(python),
@@ -745,7 +839,10 @@ def _verified_release(root: Path, version: str) -> Path:
     verified = release / "VERIFIED"
     if not release.is_dir() or not verified.is_file():
         raise RuntimeBundleError(f"verified release is not installed: {version}")
-    manifest = verify_bundle(release / "artifact")
+    manifest = verify_bundle(
+        release / "artifact",
+        expected_repository=_expected_repository(),
+    )
     try:
         marker = json.loads(verified.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
@@ -946,7 +1043,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     try:
         if args.command == "verify":
-            manifest = verify_bundle(Path(args.bundle))
+            manifest = verify_bundle(
+                Path(args.bundle),
+                expected_repository=_expected_repository(),
+            )
             print(f"BUNDLE VERIFIED {manifest['policy_version']}")
         elif args.command == "install":
             version = install(

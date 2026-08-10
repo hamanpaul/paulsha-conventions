@@ -303,7 +303,9 @@ def test_installed_manifest_engine_is_exact_and_does_not_resolve_source(
         "release_commit": "a" * 40,
         "wheels": [{"sha256": "b" * 64}],
     }
-    monkeypatch.setattr(preflight, "load_and_verify_bundle", lambda _root: manifest)
+    monkeypatch.setattr(
+        preflight, "load_and_verify_bundle", lambda _root, **_kw: manifest
+    )
     monkeypatch.setattr(preflight, "_installed_version", lambda: "1.0.12")
     monkeypatch.setattr(
         preflight,

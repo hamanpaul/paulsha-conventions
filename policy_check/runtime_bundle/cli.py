@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from policy_check.identity import identity
+
 from .builder import build_bundle
 from .integrity import (
     BundleError,
@@ -62,7 +64,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"BUNDLE {archive}")
             print(f"SHA256 {digest}")
         elif args.command == "verify":
-            manifest = load_and_verify_bundle(Path(args.bundle))
+            manifest = load_and_verify_bundle(
+                Path(args.bundle), expected_repository=identity().engine_repo
+            )
             print(json.dumps(manifest, ensure_ascii=False, sort_keys=True))
         elif args.command == "extract":
             extracted = extract_verified_archive(
