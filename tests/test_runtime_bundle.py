@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import io
 import os
@@ -12,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from policy_check.runtime_bundle import builder, cli, integrity, manager
+from policy_check.runtime_bundle import builder, cli, integrity, manager, verification
 
 
 def _fake_bundle(
@@ -1578,3 +1580,197 @@ def test_manifest_repository_is_checked_against_argument():
     with pytest.raises(verification.BundleError):
         verification._require_manifest_shape(manifest, "hamanpaul/paulsha-conventions")
     verification._require_manifest_shape(manifest, "hamanpaul/arc-conventions")
+
+
+# --- distribution.yml attestation is anchored to the manifest, not the
+# wheel RECORD (issue #63 CI regression): `manager._write_distribution_
+# identity` overwrites `policy_check/data/distribution.yml` at install
+# time, so its installed bytes never match the wheel's own RECORD entry
+# by construction. `verify_installed_wheel_payload` must check that one
+# path against `verification.canonical_distribution_identity(manifest
+# ["distribution"])` instead of the RECORD size/sha256 it uses for every
+# other file. Fixture style follows
+# `test_installed_wheel_payload_attests_imported_files` in
+# tests/test_preflight.py (build a real wheel zip with a real RECORD).
+
+
+def _wheel_record_digest(content: bytes) -> str:
+    encoded = base64.urlsafe_b64encode(hashlib.sha256(content).digest())
+    return encoded.decode("ascii").rstrip("=")
+
+
+def _write_installed_wheel(
+    bundle_root: Path,
+    installed_root: Path,
+    *,
+    wheel_name: str,
+    distribution_name: str,
+    version: str,
+    files: dict[str, bytes],
+) -> Path:
+    dist_info = f"{distribution_name.replace('-', '_')}-{version}.dist-info"
+    metadata_name = f"{dist_info}/METADATA"
+    metadata = f"Name: {distribution_name}\nVersion: {version}\n".encode()
+    payload = {**files, metadata_name: metadata}
+    for name, content in payload.items():
+        path = installed_root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    record_name = f"{dist_info}/RECORD"
+    record = "".join(
+        f"{name},sha256={_wheel_record_digest(content)},{len(content)}\n"
+        for name, content in payload.items()
+    ) + f"{record_name},,\n"
+    wheel = bundle_root / "wheels" / wheel_name
+    wheel.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(wheel, mode="w") as archive:
+        for name, content in payload.items():
+            archive.writestr(name, content)
+        archive.writestr(record_name, record)
+    return wheel
+
+
+_DISTRIBUTION_FIXTURE = {
+    "canonical_org": "hamanpaul",
+    "engine_repo": "hamanpaul/arc-conventions",
+    "remote_base": "https://github.com",
+    "distribution_name": "arc-conventions",
+    "provider": "github",
+}
+
+
+def test_verify_installed_wheel_payload_accepts_distribution_identity_anchored_to_manifest(
+    tmp_path: Path,
+) -> None:
+    """(a) Installed `distribution.yml` bytes equal the manifest's
+    canonical serialization but diverge from the wheel's own RECORD entry
+    (exactly what `manager._write_distribution_identity` leaves behind)
+    -> verification succeeds.
+    """
+    bundle_root = tmp_path / "bundle"
+    installed_root = tmp_path / "site-packages"
+    wheel = _write_installed_wheel(
+        bundle_root,
+        installed_root,
+        wheel_name="policy_check-1.0.15-py3-none-any.whl",
+        distribution_name="policy-check",
+        version="1.0.15",
+        files={
+            "policy_check/__init__.py": b"",
+            "policy_check/data/distribution.yml": (
+                b"# wheel-shipped default identity; never kept as-is\n"
+                b"canonical_org: hamanpaul\n"
+            ),
+        },
+    )
+    # Simulate the install-time overwrite: its bytes now disagree with the
+    # wheel's own RECORD entry above.
+    (installed_root / "policy_check" / "data" / "distribution.yml").write_bytes(
+        verification.canonical_distribution_identity(
+            _DISTRIBUTION_FIXTURE
+        ).encode("utf-8")
+    )
+    manifest = {
+        "distribution": _DISTRIBUTION_FIXTURE,
+        "wheels": [{"path": f"wheels/{wheel.name}", "sha256": "a" * 64}],
+    }
+    verified = verification.verify_installed_wheel_payload(
+        bundle_root,
+        installed_root,
+        manifest,
+        expected_repository="hamanpaul/arc-conventions",
+    )
+    assert verified is manifest
+
+
+def test_verify_installed_wheel_payload_rejects_distribution_identity_mismatch(
+    tmp_path: Path,
+) -> None:
+    """(b) Installed `distribution.yml` disagrees with the manifest's
+    `distribution` block -> BundleError.
+    """
+    bundle_root = tmp_path / "bundle"
+    installed_root = tmp_path / "site-packages"
+    wheel = _write_installed_wheel(
+        bundle_root,
+        installed_root,
+        wheel_name="policy_check-1.0.15-py3-none-any.whl",
+        distribution_name="policy-check",
+        version="1.0.15",
+        files={
+            "policy_check/__init__.py": b"",
+            "policy_check/data/distribution.yml": b"# wheel-shipped default\n",
+        },
+    )
+    (installed_root / "policy_check" / "data" / "distribution.yml").write_bytes(
+        verification.canonical_distribution_identity(_DISTRIBUTION_FIXTURE).encode(
+            "utf-8"
+        )
+        + b"\ntampered\n"
+    )
+    manifest = {
+        "distribution": _DISTRIBUTION_FIXTURE,
+        "wheels": [{"path": f"wheels/{wheel.name}", "sha256": "a" * 64}],
+    }
+    with pytest.raises(
+        verification.BundleError, match="installed distribution identity"
+    ):
+        verification.verify_installed_wheel_payload(
+            bundle_root,
+            installed_root,
+            manifest,
+            expected_repository="hamanpaul/arc-conventions",
+        )
+
+
+def test_verify_installed_wheel_payload_fails_closed_without_manifest_distribution(
+    tmp_path: Path,
+) -> None:
+    """(c) The manifest has no `distribution` block at all and the
+    installed file disagrees with the wheel RECORD (the historical RECORD
+    size/sha256 comparison this file used to go through would also
+    reject it) -> BundleError raised fail-closed rather than silently
+    falling back to a RECORD comparison.
+    """
+    bundle_root = tmp_path / "bundle"
+    installed_root = tmp_path / "site-packages"
+    wheel = _write_installed_wheel(
+        bundle_root,
+        installed_root,
+        wheel_name="policy_check-1.0.15-py3-none-any.whl",
+        distribution_name="policy-check",
+        version="1.0.15",
+        files={
+            "policy_check/__init__.py": b"",
+            "policy_check/data/distribution.yml": b"# wheel-shipped default\n",
+        },
+    )
+    (installed_root / "policy_check" / "data" / "distribution.yml").write_bytes(
+        verification.canonical_distribution_identity(_DISTRIBUTION_FIXTURE).encode(
+            "utf-8"
+        )
+    )
+    manifest = {
+        "wheels": [{"path": f"wheels/{wheel.name}", "sha256": "a" * 64}],
+    }
+    with pytest.raises(verification.BundleError, match="distribution identity"):
+        verification.verify_installed_wheel_payload(
+            bundle_root,
+            installed_root,
+            manifest,
+            expected_repository="hamanpaul/arc-conventions",
+        )
+
+
+def test_canonical_distribution_identity_fails_closed_on_missing_key() -> None:
+    """(d) `canonical_distribution_identity` itself fails closed when a
+    required field is missing from the `distribution` mapping.
+    """
+    incomplete = dict(_DISTRIBUTION_FIXTURE)
+    del incomplete["provider"]
+    with pytest.raises(verification.BundleError, match="provider"):
+        verification.canonical_distribution_identity(incomplete)
+    with pytest.raises(verification.BundleError, match="distribution identity"):
+        verification.canonical_distribution_identity(None)
+    with pytest.raises(verification.BundleError, match="distribution identity"):
+        verification.canonical_distribution_identity({})

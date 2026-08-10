@@ -23,6 +23,7 @@ try:
     from .verification import (
         VERSION_RE,
         BundleError as RuntimeBundleError,
+        canonical_distribution_identity as _canonical_distribution_identity,
         load_and_verify_bundle as verify_bundle,
         normalized_package_version as _normalized_package_version,
         sha256_file as _sha256,
@@ -40,6 +41,7 @@ except ImportError:
     _verifier_spec.loader.exec_module(_verifier)
     VERSION_RE = _verifier.VERSION_RE
     RuntimeBundleError = _verifier.BundleError
+    _canonical_distribution_identity = _verifier.canonical_distribution_identity
     verify_bundle = _verifier.load_and_verify_bundle
     _normalized_package_version = _verifier.normalized_package_version
     _sha256 = _verifier.sha256_file
@@ -129,15 +131,6 @@ def _venv_site_packages(root: Path) -> Path:
     )
 
 
-_DISTRIBUTION_IDENTITY_FIELDS = (
-    "canonical_org",
-    "engine_repo",
-    "remote_base",
-    "distribution_name",
-    "provider",
-)
-
-
 def _write_distribution_identity(venv_root: Path, manifest: dict[str, Any]) -> None:
     """Write the bundle's own distribution identity into the venv this
     install just created (`staging / "venv"`), so the freshly installed
@@ -157,24 +150,18 @@ def _write_distribution_identity(venv_root: Path, manifest: dict[str, Any]) -> N
     required fields), or a target site-packages tree that does not
     actually contain an installed `policy_check.data` package, aborts the
     install instead of silently keeping the wheel's built-in identity.
+
+    Serializes through `verification.canonical_distribution_identity` —
+    the same single source of truth `verify_installed_wheel_payload` reads
+    back at attestation time — so the write here and the check there can
+    never drift apart.
     """
-    dist = manifest.get("distribution")
-    if not isinstance(dist, dict) or not dist:
-        raise RuntimeBundleError("bundle manifest is missing distribution identity")
-    missing = [key for key in _DISTRIBUTION_IDENTITY_FIELDS if key not in dist]
-    if missing:
-        raise RuntimeBundleError(
-            "bundle manifest distribution identity is missing: "
-            + ", ".join(missing)
-        )
+    content = _canonical_distribution_identity(manifest.get("distribution"))
     target_dir = _venv_site_packages(venv_root) / "policy_check" / "data"
     if not target_dir.is_dir():
         raise RuntimeBundleError("installed policy_check.data package not found")
     target = target_dir / "distribution.yml"
-    target.write_text(
-        "".join(f"{key}: {dist[key]}\n" for key in _DISTRIBUTION_IDENTITY_FIELDS),
-        encoding="utf-8",
-    )
+    target.write_text(content, encoding="utf-8")
 
 
 def _isolated_subprocess_env() -> dict[str, str]:

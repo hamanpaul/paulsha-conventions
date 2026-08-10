@@ -18,9 +18,49 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:-fix\.\d+)?$")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
+# The relative path, inside the installed policy-check distribution, of the
+# file the runtime manager overwrites at install time with the bundle's own
+# distribution identity (see `manager._write_distribution_identity`). Its
+# installed bytes can never match the wheel's built-in RECORD entry by
+# construction, so `verify_installed_wheel_payload` verifies this one path
+# against the manifest instead of the wheel RECORD (see
+# `canonical_distribution_identity`).
+DISTRIBUTION_IDENTITY_RECORD_PATH = "policy_check/data/distribution.yml"
+
+# Single source of truth for the distribution-identity file's field order
+# and "key: value\n" serialization. `manager._write_distribution_identity`
+# (install time) and `verify_installed_wheel_payload` (attestation time)
+# both call `canonical_distribution_identity` so the two can never drift.
+DISTRIBUTION_IDENTITY_FIELDS = (
+    "canonical_org",
+    "engine_repo",
+    "remote_base",
+    "distribution_name",
+    "provider",
+)
+
 
 class BundleError(RuntimeError):
     """The bundle is unsafe, incomplete, or inconsistent."""
+
+
+def canonical_distribution_identity(dist: Any) -> str:
+    """Render a manifest `distribution` mapping into the exact text the
+    installed `policy_check/data/distribution.yml` must contain.
+
+    Fail-closed: anything other than a `dict` with every
+    `DISTRIBUTION_IDENTITY_FIELDS` key present raises `BundleError` rather
+    than silently producing a partial or empty identity.
+    """
+    if not isinstance(dist, dict) or not dist:
+        raise BundleError("bundle manifest is missing distribution identity")
+    missing = [key for key in DISTRIBUTION_IDENTITY_FIELDS if key not in dist]
+    if missing:
+        raise BundleError(
+            "bundle manifest distribution identity is missing: "
+            + ", ".join(missing)
+        )
+    return "".join(f"{key}: {dist[key]}\n" for key in DISTRIBUTION_IDENTITY_FIELDS)
 
 
 def normalized_package_version(value: str) -> str:
@@ -367,18 +407,47 @@ def verify_installed_wheel_payload(
                     f"installed file is missing: {distribution_name}: {name}"
                 )
             content = installed_path.read_bytes()
-            if len(content) != int(encoded_size):
-                raise BundleError(
-                    f"installed file size changed: {distribution_name}: {name}"
-                )
-            actual = base64.urlsafe_b64encode(
-                hashlib.sha256(content).digest()
-            ).decode("ascii").rstrip("=")
-            expected = encoded_digest[len("sha256="):].rstrip("=")
-            if actual != expected:
-                raise BundleError(
-                    f"installed file was modified: {distribution_name}: {name}"
-                )
+            if (
+                normalized_name == "policy-check"
+                and relative.as_posix() == DISTRIBUTION_IDENTITY_RECORD_PATH
+            ):
+                # The runtime manager overwrites this exact file at install
+                # time with the bundle's own distribution identity (see
+                # `manager._write_distribution_identity`), so its installed
+                # bytes never match the wheel's built-in RECORD entry by
+                # construction. Anchor its integrity to the digest-verified
+                # manifest instead: `verified_manifest` is either produced
+                # by `load_and_verify_bundle` in this same call, or was
+                # handed in already verified by the caller, and — once
+                # activated — is additionally pinned by the launcher's own
+                # `EXPECTED_MANIFEST_SHA256` prelude. That anchor makes this
+                # branch strictly narrower than the RECORD check it
+                # replaces, not a relaxation of it: tampering with the
+                # installed file is still caught (bytes must equal the
+                # canonical serialization of the manifest's `distribution`
+                # block), and tampering with the manifest itself is caught
+                # by those independent digest checks.
+                expected_identity = canonical_distribution_identity(
+                    verified_manifest.get("distribution")
+                ).encode("utf-8")
+                if content != expected_identity:
+                    raise BundleError(
+                        "installed distribution identity does not match "
+                        f"manifest: {distribution_name}: {name}"
+                    )
+            else:
+                if len(content) != int(encoded_size):
+                    raise BundleError(
+                        f"installed file size changed: {distribution_name}: {name}"
+                    )
+                actual = base64.urlsafe_b64encode(
+                    hashlib.sha256(content).digest()
+                ).decode("ascii").rstrip("=")
+                expected = encoded_digest[len("sha256="):].rstrip("=")
+                if actual != expected:
+                    raise BundleError(
+                        f"installed file was modified: {distribution_name}: {name}"
+                    )
             checked += 1
             recorded_paths.add(relative.as_posix())
 
