@@ -223,3 +223,11 @@ def test_extract_cli_main(tmp_path, capsys):
 def test_extract_cli_missing_changelog_returns_error(tmp_path, capsys):
     assert cl.main(["extract", "--repo", str(tmp_path), "--version", "1.0.14"]) == 2
     assert "CHANGELOG.md" in capsys.readouterr().err
+
+
+def test_render_section_docs_type_maps_to_changed():
+    """docs-only 交付（如 #60 的設計文件）的 fragment 必須能 collate。"""
+    frags = [cl.Fragment(type="docs", body="新增 ISO 42001 profile 設計文件。")]
+    out = cl.render_section("1.0.16", "2026-08-10", frags)
+    assert "### Changed" in out
+    assert "- 新增 ISO 42001 profile 設計文件。" in out
