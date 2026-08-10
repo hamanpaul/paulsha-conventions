@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -14,6 +16,12 @@ import uuid
 import venv
 from pathlib import Path
 from typing import Any, Sequence
+
+
+_ACTIVATION_STEPS = ("state", "current", "preflight", "lifecycle", "skill")
+_ACTIVATION_JOURNAL = "activation.journal"
+_ACTIVATION_ANCHOR = "activation.journal.anchor"
+_ACTIVATION_SCHEMA_VERSION = 1
 
 
 # The source package and the vendored bootstrap use one stdlib-only verifier.
@@ -208,14 +216,238 @@ def _run(argv: Sequence[str], *, cwd: Path, env: dict[str, str] | None = None) -
     return result.stdout.strip()
 
 
-def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
+def _atomic_write_bytes(
+    path: Path,
+    content: bytes,
+    *,
+    mode: int | None = None,
+    temp_prefix: str = "tmp",
+) -> None:
+    """Publish ``content`` at ``path`` with a power-loss-safe replace.
+
+    The temporary file's content is flushed and fsync'd to disk *before* the
+    rename that publishes it, so a crash between rename and content flush can
+    never leave the published file empty or truncated. The containing
+    directory is fsync'd afterwards so the rename itself is durable too. On
+    any failure the temporary file is always removed; nothing is ever left
+    behind for a caller to trip over.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp-{uuid.uuid4().hex}")
-    temporary.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    temporary = path.with_name(f".{path.name}.{temp_prefix}-{uuid.uuid4().hex}")
+    try:
+        with temporary.open("wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if mode is not None:
+            temporary.chmod(mode)
+        os.replace(temporary, path)
+        _fsync_directory(path.parent)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:
+    content = (
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    _atomic_write_bytes(path, content)
+
+
+def _fsync_directory(path: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _write_bytes_atomic(path: Path, content: bytes, *, mode: int = 0o600) -> None:
+    _atomic_write_bytes(path, content, mode=mode)
+
+
+def _canonical_json(value: dict[str, Any]) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def _journal_paths(runtime_root: Path) -> tuple[Path, Path]:
+    return (
+        runtime_root / _ACTIVATION_JOURNAL,
+        runtime_root / _ACTIVATION_ANCHOR,
     )
-    os.replace(temporary, path)
+
+
+def _encode_regular_snapshot(
+    snapshot: tuple[bytes, int] | None,
+) -> dict[str, Any] | None:
+    if snapshot is None:
+        return None
+    content, mode = snapshot
+    return {
+        "content": base64.b64encode(content).decode("ascii"),
+        "mode": mode,
+    }
+
+
+def _decode_regular_snapshot(value: Any) -> tuple[bytes, int] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise RuntimeBundleError("activation journal snapshot is invalid")
+    content = value.get("content")
+    mode = value.get("mode")
+    if not isinstance(content, str) or not isinstance(mode, int) or not 0 <= mode <= 0o777:
+        raise RuntimeBundleError("activation journal snapshot is invalid")
+    try:
+        decoded = base64.b64decode(content.encode("ascii"), validate=True)
+    except (ValueError, UnicodeError) as exc:
+        raise RuntimeBundleError("activation journal snapshot is invalid") from exc
+    return decoded, mode
+
+
+def _activation_snapshot(
+    runtime_root: Path,
+    skill_target: Path,
+) -> dict[str, Any]:
+    return {
+        "state": _encode_regular_snapshot(
+            _snapshot_regular_file(runtime_root / "state.json")
+        ),
+        "current": _snapshot_symlink(runtime_root / "current"),
+        "preflight": _encode_regular_snapshot(
+            _snapshot_regular_file(runtime_root / "bin" / "policy-preflight")
+        ),
+        "lifecycle": _encode_regular_snapshot(
+            _snapshot_regular_file(runtime_root / "bin" / "policy-runtime-bundle")
+        ),
+        "skill": _snapshot_symlink(skill_target),
+    }
+
+
+def _activation_event(
+    sequence: int,
+    previous_digest: str | None,
+    event: str,
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    unsigned = {
+        "schema_version": _ACTIVATION_SCHEMA_VERSION,
+        "sequence": sequence,
+        "previous_digest": previous_digest or ("0" * 64),
+        "event": event,
+        "payload": payload,
+    }
+    digest = hashlib.sha256(_canonical_json(unsigned)).hexdigest()
+    return {**unsigned, "digest": digest}, digest
+
+
+def _validate_journal_path(path: Path, label: str) -> None:
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise RuntimeBundleError(f"activation journal {label} is not a regular file")
+
+
+def _append_activation_event(
+    journal_path: Path,
+    anchor_path: Path,
+    *,
+    sequence: int,
+    previous_digest: str | None,
+    event: str,
+    payload: dict[str, Any],
+) -> tuple[int, str]:
+    record, digest = _activation_event(sequence, previous_digest, event, payload)
+    _validate_journal_path(journal_path, "file")
+    _validate_journal_path(anchor_path, "anchor")
+    journal_path.parent.mkdir(parents=True, exist_ok=True)
+    with journal_path.open("ab") as stream:
+        stream.write(_canonical_json(record) + b"\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    _fsync_directory(journal_path.parent)
+    _write_bytes_atomic(anchor_path, f"{digest}\n".encode("ascii"))
+    return sequence + 1, digest
+
+
+def _read_activation_records(runtime_root: Path) -> list[dict[str, Any]] | None:
+    journal_path, anchor_path = _journal_paths(runtime_root)
+    _validate_journal_path(journal_path, "file")
+    _validate_journal_path(anchor_path, "anchor")
+    if not journal_path.exists():
+        if anchor_path.exists():
+            anchor_path.unlink()
+            _fsync_directory(runtime_root)
+        return None
+    if not anchor_path.is_file():
+        raise RuntimeBundleError("activation journal anchor is missing")
+    try:
+        anchor = anchor_path.read_text(encoding="ascii").strip()
+        raw = journal_path.read_bytes()
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeBundleError("activation journal cannot be read") from exc
+    if re.fullmatch(r"[0-9a-f]{64}", anchor) is None:
+        raise RuntimeBundleError("activation journal anchor is invalid")
+
+    records: list[dict[str, Any]] = []
+    previous_digest = "0" * 64
+    expected_sequence = 1
+    anchor_index: int | None = None
+    lines = raw.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if not line.endswith(b"\n"):
+            if anchor_index is None:
+                raise RuntimeBundleError("activation journal has an uncommitted partial record")
+            break
+        try:
+            record = json.loads(line.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError) as exc:
+            if anchor_index is not None:
+                raise RuntimeBundleError("activation journal has a tampered record") from exc
+            raise RuntimeBundleError("activation journal is invalid") from exc
+        if not isinstance(record, dict):
+            raise RuntimeBundleError("activation journal record is invalid")
+        digest = record.get("digest")
+        if (
+            record.get("schema_version") != _ACTIVATION_SCHEMA_VERSION
+            or record.get("sequence") != expected_sequence
+            or record.get("previous_digest") != previous_digest
+            or not isinstance(record.get("event"), str)
+            or not isinstance(record.get("payload"), dict)
+            or not isinstance(digest, str)
+        ):
+            raise RuntimeBundleError("activation journal record is invalid")
+        unsigned = dict(record)
+        del unsigned["digest"]
+        calculated = hashlib.sha256(_canonical_json(unsigned)).hexdigest()
+        if digest != calculated:
+            raise RuntimeBundleError("activation journal digest mismatch")
+        records.append(record)
+        previous_digest = digest
+        expected_sequence += 1
+        if digest == anchor:
+            anchor_index = index
+    if anchor_index is None:
+        raise RuntimeBundleError("activation journal anchor does not match journal")
+    trusted = records[: anchor_index + 1]
+    if not trusted or trusted[0].get("event") != "begin":
+        raise RuntimeBundleError("activation journal does not begin with activation")
+    return trusted
+
+
+def _clear_activation_journal(runtime_root: Path) -> None:
+    journal_path, anchor_path = _journal_paths(runtime_root)
+    journal_path.unlink(missing_ok=True)
+    _fsync_directory(runtime_root)
+    anchor_path.unlink(missing_ok=True)
+    _fsync_directory(runtime_root)
 
 
 def _load_state(path: Path, *, required: bool = False) -> dict[str, Any]:
@@ -237,6 +469,7 @@ def _atomic_symlink(target: Path, link: Path) -> None:
     temporary = link.with_name(f".{link.name}.tmp-{uuid.uuid4().hex}")
     temporary.symlink_to(target)
     os.replace(temporary, link)
+    _fsync_directory(link.parent)
 
 
 def _snapshot_regular_file(path: Path) -> tuple[bytes, int] | None:
@@ -255,11 +488,7 @@ def _restore_regular_file(
         path.unlink(missing_ok=True)
         return
     content, mode = snapshot
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.restore-{uuid.uuid4().hex}")
-    temporary.write_bytes(content)
-    temporary.chmod(mode)
-    os.replace(temporary, path)
+    _atomic_write_bytes(path, content, mode=mode, temp_prefix="restore")
 
 
 def _snapshot_symlink(path: Path) -> str | None:
@@ -278,6 +507,7 @@ def _restore_symlink(path: Path, target: str | None) -> None:
     temporary = path.with_name(f".{path.name}.restore-{uuid.uuid4().hex}")
     temporary.symlink_to(target)
     os.replace(temporary, path)
+    _fsync_directory(path.parent)
 
 
 def _ensure_skill_target(target: Path, root: Path) -> None:
@@ -477,7 +707,12 @@ def _attest_installed_release(release: Path) -> None:
     )
 
 
-def _install_launcher(root: Path, release: Path) -> None:
+def _install_launcher(
+    root: Path,
+    release: Path,
+    *,
+    only: str | None = None,
+) -> None:
     expected_manifest_sha256 = _sha256(
         release / "artifact" / "manifest.json"
     )
@@ -509,7 +744,7 @@ def _install_launcher(root: Path, release: Path) -> None:
     )
     launcher = root / "bin" / "policy-preflight"
     launcher.parent.mkdir(parents=True, exist_ok=True)
-    text = (
+    preflight_text = (
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
         'RUNTIME_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"\n'
@@ -534,11 +769,6 @@ def _install_launcher(root: Path, release: Path) -> None:
         + 'exec "$PYTHON_BIN" -I -B "$MANAGER" exec --root "$RUNTIME_ROOT" '
         '--repo "$TARGET_REPO" -- "$@"\n'
     )
-    temporary = launcher.with_name(f".{launcher.name}.tmp-{uuid.uuid4().hex}")
-    temporary.write_text(text, encoding="utf-8")
-    temporary.chmod(0o755)
-    os.replace(temporary, launcher)
-
     lifecycle = root / "bin" / "policy-runtime-bundle"
     lifecycle_text = (
         "#!/usr/bin/env bash\n"
@@ -546,10 +776,10 @@ def _install_launcher(root: Path, release: Path) -> None:
         'RUNTIME_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"\n'
         'COMMAND="${1:-}"\n'
         '[[ -n "$COMMAND" ]] || { '
-        'echo "ERROR: expected install, activate, rollback, or uninstall" >&2; exit 2; }\n'
+        'echo "ERROR: expected install, activate, rollback, recover, or uninstall" >&2; exit 2; }\n'
         "shift\n"
         'case "$COMMAND" in\n'
-        '  install|activate|rollback|uninstall) ;;\n'
+        '  install|activate|rollback|uninstall|recover) ;;\n'
         '  *) echo "ERROR: unsupported deployed lifecycle command: $COMMAND" >&2; exit 2 ;;\n'
         "esac\n"
         'MANAGER="$RUNTIME_ROOT/current/artifact/runtime/runtime_manager.py"\n'
@@ -563,12 +793,125 @@ def _install_launcher(root: Path, release: Path) -> None:
         + trust_prelude
         + 'exec "$PYTHON_BIN" -I -B "$MANAGER" "$COMMAND" --root "$RUNTIME_ROOT" "$@"\n'
     )
-    temporary = lifecycle.with_name(
-        f".{lifecycle.name}.tmp-{uuid.uuid4().hex}"
+    launchers = {
+        "preflight": (launcher, preflight_text),
+        "lifecycle": (lifecycle, lifecycle_text),
+    }
+    if only is not None and only not in launchers:
+        raise RuntimeBundleError(f"unknown launcher activation step: {only}")
+    selected = (
+        launchers.items()
+        if only is None
+        else ((only, launchers[only]),)
     )
-    temporary.write_text(lifecycle_text, encoding="utf-8")
-    temporary.chmod(0o755)
-    os.replace(temporary, lifecycle)
+    for _name, (destination, text) in selected:
+        _atomic_write_bytes(destination, text.encode("utf-8"), mode=0o755)
+
+
+def _restore_activation_snapshot(
+    runtime_root: Path,
+    skill_target: Path,
+    snapshots: dict[str, Any],
+) -> None:
+    _restore_symlink(skill_target, snapshots["skill"])
+    _restore_regular_file(
+        runtime_root / "bin" / "policy-runtime-bundle",
+        _decode_regular_snapshot(snapshots["lifecycle"]),
+    )
+    _restore_regular_file(
+        runtime_root / "bin" / "policy-preflight",
+        _decode_regular_snapshot(snapshots["preflight"]),
+    )
+    _restore_symlink(runtime_root / "current", snapshots["current"])
+    _restore_regular_file(
+        runtime_root / "state.json",
+        _decode_regular_snapshot(snapshots["state"]),
+    )
+
+
+def recover(root: Path, skill_target: Path | None = None) -> bool:
+    runtime_root = root.resolve()
+    records = _read_activation_records(runtime_root)
+    if records is None:
+        return False
+    begin = records[0]["payload"]
+    recorded_root = begin.get("runtime_root")
+    recorded_skill_target = begin.get("skill_target")
+    snapshots = begin.get("snapshots")
+    if (
+        recorded_root != str(runtime_root)
+        or not isinstance(recorded_skill_target, str)
+        or begin.get("steps") != list(_ACTIVATION_STEPS)
+        or not isinstance(begin.get("release"), str)
+        or not isinstance(snapshots, dict)
+        or set(snapshots) != set(_ACTIVATION_STEPS)
+    ):
+        raise RuntimeBundleError("activation journal ownership is invalid")
+    journal_skill_target = Path(recorded_skill_target)
+
+    terminal = records[-1]["event"]
+    if terminal in {"commit", "aborted", "recovered"}:
+        # A finished journal (committed, aborted, or already recovered) only
+        # ever deletes its own journal/anchor files under the trusted,
+        # caller-resolved runtime_root; it never writes to skill_target. The
+        # journal's recorded skill_target is therefore inert here, so this
+        # cleanup-only path is safe to take even when the caller (e.g.
+        # uninstall()) has no opinion on skill_target.
+        if terminal == "commit":
+            completed = {
+                record["payload"].get("step")
+                for record in records
+                if record["event"] == "complete"
+            }
+            if completed != set(_ACTIVATION_STEPS):
+                raise RuntimeBundleError("activation journal commit is incomplete")
+        _clear_activation_journal(runtime_root)
+        return True
+
+    # An interrupted activation restores the previous generation by writing
+    # to journal_skill_target (via _restore_activation_snapshot). The journal
+    # is a user-writable file: an attacker able to write it can rebuild a
+    # fully self-consistent hash chain around any skill_target of their
+    # choosing. Trusting that recorded value when the caller left
+    # skill_target unspecified would let a forged journal alone decide which
+    # writable path automatic recovery overwrites. So even the "unspecified"
+    # case is pinned to a concrete, caller-independent expectation (the
+    # conventional default) and verified against the journal *before* any
+    # restore write happens — fail closed on any mismatch, never let the
+    # journal decide on its own.
+    expected_skill_target = (
+        skill_target if skill_target is not None else _default_skill_target()
+    )
+    if expected_skill_target.absolute() != journal_skill_target.absolute():
+        raise RuntimeBundleError(
+            "activation journal skill target does not match the trusted "
+            "recovery target; refusing to let the journal alone decide "
+            "which path to overwrite"
+        )
+
+    for record in records[1:]:
+        if record["event"] not in {"prepare", "complete"}:
+            raise RuntimeBundleError("activation journal event is invalid")
+        step = record["payload"].get("step")
+        if step not in _ACTIVATION_STEPS:
+            raise RuntimeBundleError("activation journal step is invalid")
+    try:
+        _restore_activation_snapshot(runtime_root, journal_skill_target, snapshots)
+    except (OSError, RuntimeBundleError) as exc:
+        raise RuntimeBundleError(
+            "activation recovery could not restore the previous generation"
+        ) from exc
+    next_sequence = records[-1]["sequence"] + 1
+    _, digest = _append_activation_event(
+        *_journal_paths(runtime_root),
+        sequence=next_sequence,
+        previous_digest=records[-1]["digest"],
+        event="recovered",
+        payload={},
+    )
+    del digest
+    _clear_activation_journal(runtime_root)
+    return True
 
 
 def _switch_active_release(
@@ -577,62 +920,90 @@ def _switch_active_release(
     release: Path,
     state: dict[str, Any],
 ) -> None:
-    state_path = runtime_root / "state.json"
-    current_link = runtime_root / "current"
-    preflight_launcher = runtime_root / "bin" / "policy-preflight"
-    lifecycle_launcher = runtime_root / "bin" / "policy-runtime-bundle"
-    snapshots = {
-        "state": _snapshot_regular_file(state_path),
-        "current": _snapshot_symlink(current_link),
-        "preflight": _snapshot_regular_file(preflight_launcher),
-        "lifecycle": _snapshot_regular_file(lifecycle_launcher),
-        "skill": _snapshot_symlink(skill_target),
-    }
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    snapshots = _activation_snapshot(runtime_root, skill_target)
+    journal_path, anchor_path = _journal_paths(runtime_root)
+    next_sequence, previous_digest = _append_activation_event(
+        journal_path,
+        anchor_path,
+        sequence=1,
+        previous_digest=None,
+        event="begin",
+        payload={
+            "runtime_root": str(runtime_root),
+            "skill_target": str(skill_target.absolute()),
+            "release": str(release.resolve()),
+            "steps": list(_ACTIVATION_STEPS),
+            "snapshots": snapshots,
+        },
+    )
     try:
-        _write_json_atomic(state_path, state)
-        _atomic_symlink(release, current_link)
-        _install_launcher(runtime_root, release)
-        _atomic_symlink(
-            release / "artifact" / "skills" / "preflight-ci",
-            skill_target,
+        mutations = (
+            ("state", lambda: _write_json_atomic(runtime_root / "state.json", state)),
+            ("current", lambda: _atomic_symlink(release, runtime_root / "current")),
+            (
+                "preflight",
+                lambda: _install_launcher(runtime_root, release, only="preflight"),
+            ),
+            (
+                "lifecycle",
+                lambda: _install_launcher(runtime_root, release, only="lifecycle"),
+            ),
+            (
+                "skill",
+                lambda: _atomic_symlink(
+                    release / "artifact" / "skills" / "preflight-ci",
+                    skill_target,
+                ),
+            ),
+        )
+        for step, mutate in mutations:
+            next_sequence, previous_digest = _append_activation_event(
+                journal_path,
+                anchor_path,
+                sequence=next_sequence,
+                previous_digest=previous_digest,
+                event="prepare",
+                payload={"step": step},
+            )
+            mutate()
+            next_sequence, previous_digest = _append_activation_event(
+                journal_path,
+                anchor_path,
+                sequence=next_sequence,
+                previous_digest=previous_digest,
+                event="complete",
+                payload={"step": step},
+            )
+        _append_activation_event(
+            journal_path,
+            anchor_path,
+            sequence=next_sequence,
+            previous_digest=previous_digest,
+            event="commit",
+            payload={},
         )
     except BaseException as exc:
         failures: list[str] = []
-        restorations = (
-            ("skill", lambda: _restore_symlink(skill_target, snapshots["skill"])),
-            (
-                "lifecycle launcher",
-                lambda: _restore_regular_file(
-                    lifecycle_launcher,
-                    snapshots["lifecycle"],
-                ),
-            ),
-            (
-                "preflight launcher",
-                lambda: _restore_regular_file(
-                    preflight_launcher,
-                    snapshots["preflight"],
-                ),
-            ),
-            (
-                "current",
-                lambda: _restore_symlink(current_link, snapshots["current"]),
-            ),
-            (
-                "state",
-                lambda: _restore_regular_file(state_path, snapshots["state"]),
-            ),
-        )
-        for label, restore in restorations:
-            try:
-                restore()
-            except (OSError, RuntimeBundleError) as restore_exc:
-                failures.append(f"{label} ({restore_exc.__class__.__name__})")
+        try:
+            _restore_activation_snapshot(runtime_root, skill_target, snapshots)
+        except (OSError, RuntimeBundleError) as restore_exc:
+            failures.append(f"managed state ({restore_exc.__class__.__name__})")
         if failures:
             raise RuntimeBundleError(
                 "activation failed and managed state rollback was incomplete: "
                 + ", ".join(failures)
             ) from exc
+        next_sequence, previous_digest = _append_activation_event(
+            journal_path,
+            anchor_path,
+            sequence=next_sequence,
+            previous_digest=previous_digest,
+            event="aborted",
+            payload={},
+        )
+        del next_sequence, previous_digest
+        _clear_activation_journal(runtime_root)
         raise
 
 
@@ -658,6 +1029,7 @@ def install(
         )
     version = manifest["policy_version"]
     runtime_root = root.resolve()
+    recover(runtime_root, skill_target)
     releases = runtime_root / "releases"
     destination = releases / version
     _ensure_skill_target(skill_target, runtime_root)
@@ -930,6 +1302,7 @@ def select_release(root: Path, repo: Path) -> tuple[Path, dict[str, Any]]:
 
 def activate(root: Path, skill_target: Path, version: str) -> None:
     runtime_root = root.resolve()
+    recover(runtime_root, skill_target)
     release = _verified_release(runtime_root, version)
     _ensure_skill_target(skill_target, runtime_root)
     state_path = runtime_root / "state.json"
@@ -955,7 +1328,9 @@ def activate(root: Path, skill_target: Path, version: str) -> None:
 
 
 def rollback(root: Path, skill_target: Path, version: str | None) -> str:
-    state_path = root.resolve() / "state.json"
+    runtime_root = root.resolve()
+    recover(runtime_root, skill_target)
+    state_path = runtime_root / "state.json"
     state = _load_state(state_path, required=True)
     target = version or state.get("previous")
     if not isinstance(target, str):
@@ -969,6 +1344,7 @@ def rollback(root: Path, skill_target: Path, version: str | None) -> str:
 
 def uninstall(root: Path, version: str) -> None:
     runtime_root = root.resolve()
+    recover(runtime_root)
     state_path = runtime_root / "state.json"
     state = _load_state(state_path, required=True)
     if state.get("current") == version:
@@ -1023,6 +1399,9 @@ def build_parser() -> argparse.ArgumentParser:
     rollback_parser.add_argument("--root")
     rollback_parser.add_argument("--skill-target")
     rollback_parser.add_argument("--version")
+    recover_parser = subparsers.add_parser("recover")
+    recover_parser.add_argument("--root")
+    recover_parser.add_argument("--skill-target")
     activate_parser = subparsers.add_parser("activate")
     activate_parser.add_argument("--root")
     activate_parser.add_argument("--skill-target")
@@ -1036,10 +1415,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path(args.root).expanduser() if getattr(args, "root", None) else _default_root()
-    skill_target = (
+    requested_skill_target = (
         Path(args.skill_target).expanduser()
         if getattr(args, "skill_target", None)
-        else _default_skill_target()
+        else None
+    )
+    skill_target = (
+        requested_skill_target or _default_skill_target()
     )
     try:
         if args.command == "verify":
@@ -1059,6 +1441,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "rollback":
             version = rollback(root, skill_target, args.version)
             print(f"ROLLED BACK {version}")
+        elif args.command == "recover":
+            recovered = recover(root, requested_skill_target)
+            print("RECOVERED" if recovered else "NO RECOVERY NEEDED")
         elif args.command == "activate":
             activate(root, skill_target, args.version)
             print(f"ACTIVATED {args.version}")

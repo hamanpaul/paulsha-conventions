@@ -81,16 +81,24 @@ verifier；manager 在同一 runtime root 建 staging venv，使用 isolated Pyt
 pip/setuptools。接著由尚未執行 selected venv site-packages 的 stdlib manager
 驗證每個 wheel RECORD payload，並拒絕 `.pth`、site/user customization 與同名
 module shadow；通過後才於暫存 HOME 與獨立 git fixture 執行完整
-`PREFLIGHT PASS`。成功後才 rename 成 immutable release。activation
-會把 `state.json`、`current`、兩個 stable launcher 與 managed skill link 視為
-單一 in-process transaction；任一可捕捉的 step failure 都回復先前 snapshot。
-<!-- doc-drift-ignore -->
+`PREFLIGHT PASS`。成功後才 rename 成 immutable release。
 
-此保證不宣稱涵蓋 `SIGKILL`、主機斷電或 filesystem/kernel 在多個
-`os.replace` 之間終止。這類中斷仍保留新舊 immutable release，digest anchor
-會 fail-closed，但可能需要用已核對 bundle 的 manager 人工修復混合世代；
-斷電後自動收斂與 fault-injection 由
-[#52](https://github.com/hamanpaul/paulsha-conventions/issues/52) 列管。
+### Caught failure transaction guarantee
+
+activation 會把 `state.json`、`current`、兩個 stable launcher 與 managed skill
+link 視為單一 in-process transaction；任一可捕捉的 step failure 都回復先前
+snapshot，並清除已完成或已中止的 activation journal。<!-- doc-drift-ignore -->
+
+### Power-loss recovery guarantee
+
+上述五個切換步驟由 append-only、逐筆 fsync 的 hash-chain journal 記錄，並以
+獨立 atomic digest anchor 驗證 journal 完整性。`SIGKILL`、主機斷電或
+filesystem/kernel 在多個 `os.replace` 之間終止後，下一次 `install`、`activate`、
+`rollback`、`uninstall` 或明確的 `recover` 會依 journal 還原完整舊世代；
+成功提交的世代則保留。恢復完成後 journal 會歸檔清除。新舊 immutable release
+都保留，stable launcher 的 manifest/manager digest anchor 與所有既有
+installed wheel、venv、`pyvenv.cfg`、bundle payload 重驗仍維持 fail-closed。
+<!-- doc-drift-ignore -->
 若 host 的 Python major/minor、implementation、ABI 或 platform 不等於 manifest 的
 `runtime_compatibility`，會在建立 staging 前 fail-closed；這避免把建置主機的
 ABI/platform-specific wheel closure 誤當成任意 Python 3.11+ 通用 bundle。
@@ -106,7 +114,9 @@ ABI/platform-specific wheel closure 誤當成任意 Python 3.11+ 通用 bundle�
 ├── current -> releases/<active-version>
 ├── bin/policy-preflight
 ├── bin/policy-runtime-bundle
-└── state.json
+├── state.json
+├── activation.journal
+└── activation.journal.anchor
 ```
 
 可用 `--root <PATH>`、`XDG_DATA_HOME` 或 `PSC_CONVENTIONS_ROOT` 調整 root，
@@ -176,6 +186,10 @@ rollback 不下載、不重建，只 activation 已驗證 release：
 ~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
   rollback --version X.Y.Z
 ```
+
+若上一個 activation 在程序被硬終止後留下 journal，可明確執行
+`policy-runtime-bundle recover`；其他 lifecycle 命令也會在動工前自動執行同一
+個 recovery gate。
 
 rollback target 已是 current 時會重驗並修復 managed links，回報成功且不改寫
 `previous`。省略 `--version` 時使用 `state.json.previous`。uninstall 必須指定版本，
