@@ -52,6 +52,13 @@ def _fake_bundle(
         "repository": repository,
         "release_tag": f"v{version}",
         "release_commit": "a" * 40,
+        "distribution": {
+            "canonical_org": "hamanpaul",
+            "engine_repo": "hamanpaul/paulsha-conventions",
+            "remote_base": "https://github.com",
+            "distribution_name": "paulsha-conventions",
+            "provider": "github",
+        },
         "wheels": [
             {
                 "path": f"wheels/{wheel.name}",
@@ -136,6 +143,12 @@ def _write_fake_venv(path: Path) -> None:
     (path / "pyvenv.cfg").write_text(
         "include-system-site-packages = false\n",
         encoding="utf-8",
+    )
+    # Mirrors the layout `pip install` leaves behind for the real
+    # `policy_check.data` package, so `manager._write_distribution_identity`
+    # finds a target to write into during install() tests below.
+    (manager._venv_site_packages(path) / "policy_check" / "data").mkdir(
+        parents=True
     )
 
 
@@ -889,6 +902,95 @@ def test_install_upgrade_rollback_and_uninstall_are_scoped(
     assert (runtime_root / "current").resolve().name == "1.0.13"
     manager.uninstall(runtime_root, "1.0.14")
     assert not (runtime_root / "releases" / "1.0.14").exists()
+
+
+def test_install_writes_distribution_identity_into_the_installed_venv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for a plan-mandated defect found in review: the identity
+    write must resolve the venv `install()` itself just created (`staging /
+    "venv"`, which becomes `releases/<version>/venv`) rather than a bare
+    `python3` / ambient `importlib.util.find_spec("policy_check.data")`
+    lookup on the invoking interpreter. On a real host — and in this very
+    test process, since `policy_check` is importable here as an editable
+    checkout — an ambient lookup would resolve to this repo's own tracked
+    `policy_check/data/distribution.yml`, not the release being installed.
+    """
+    bundle = _fake_bundle(tmp_path / "source")
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+
+    class FakeEnvBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, path):
+            _write_fake_venv(Path(path))
+
+    monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
+    monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
+
+    assert manager.install(bundle, runtime_root, skill_target) == "1.0.13"
+
+    release_venv = runtime_root / "releases" / "1.0.13" / "venv"
+    written = (
+        manager._venv_site_packages(release_venv)
+        / "policy_check"
+        / "data"
+        / "distribution.yml"
+    )
+    assert written.is_file()
+    text = written.read_text(encoding="utf-8")
+    for key, value in manifest["distribution"].items():
+        assert f"{key}: {value}" in text
+
+    import policy_check.data as _ambient_data
+
+    ambient = Path(_ambient_data.__file__).resolve().parent / "distribution.yml"
+    assert written.resolve() != ambient
+
+
+def test_install_fails_closed_when_manifest_lacks_distribution_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["distribution"]
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+    integrity.write_checksums(bundle)
+    runtime_root = tmp_path / "runtime"
+    skill_target = tmp_path / "skills" / "preflight-ci"
+
+    class FakeEnvBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, path):
+            _write_fake_venv(Path(path))
+
+    monkeypatch.setattr(manager.venv, "EnvBuilder", FakeEnvBuilder)
+    monkeypatch.setattr(manager, "_run", lambda *_a, **_kw: "")
+    monkeypatch.setattr(manager, "_smoke", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        manager,
+        "_attest_installed_release",
+        lambda *_a, **_kw: None,
+    )
+
+    with pytest.raises(manager.RuntimeBundleError, match="distribution identity"):
+        manager.install(bundle, runtime_root, skill_target)
+    assert not (runtime_root / "releases" / "1.0.13").exists()
+    assert not list((runtime_root / "releases").glob(".staging-*"))
 
 
 def test_force_reinstall_recovers_tampered_active_release(

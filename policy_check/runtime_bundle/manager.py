@@ -129,6 +129,54 @@ def _venv_site_packages(root: Path) -> Path:
     )
 
 
+_DISTRIBUTION_IDENTITY_FIELDS = (
+    "canonical_org",
+    "engine_repo",
+    "remote_base",
+    "distribution_name",
+    "provider",
+)
+
+
+def _write_distribution_identity(venv_root: Path, manifest: dict[str, Any]) -> None:
+    """Write the bundle's own distribution identity into the venv this
+    install just created (`staging / "venv"`), so the freshly installed
+    release's `policy_check.identity` reports the identity that governs it
+    instead of whatever the wheel happened to ship as its built-in default.
+
+    Resolves the target through `venv_root` — the exact venv this call
+    built — never through a bare `python3` looked up on PATH or
+    `importlib.util.find_spec` run from the invoking interpreter. The
+    invoking interpreter is not the installed release: it could be a
+    system `python3`, or (in a dev/editable checkout) one that already
+    happens to import an unrelated `policy_check.data`, which would make
+    this silently overwrite the wrong package's data file instead of the
+    one this install produced.
+
+    Fail-closed: a manifest missing `distribution` (or missing any of its
+    required fields), or a target site-packages tree that does not
+    actually contain an installed `policy_check.data` package, aborts the
+    install instead of silently keeping the wheel's built-in identity.
+    """
+    dist = manifest.get("distribution")
+    if not isinstance(dist, dict) or not dist:
+        raise RuntimeBundleError("bundle manifest is missing distribution identity")
+    missing = [key for key in _DISTRIBUTION_IDENTITY_FIELDS if key not in dist]
+    if missing:
+        raise RuntimeBundleError(
+            "bundle manifest distribution identity is missing: "
+            + ", ".join(missing)
+        )
+    target_dir = _venv_site_packages(venv_root) / "policy_check" / "data"
+    if not target_dir.is_dir():
+        raise RuntimeBundleError("installed policy_check.data package not found")
+    target = target_dir / "distribution.yml"
+    target.write_text(
+        "".join(f"{key}: {dist[key]}\n" for key in _DISTRIBUTION_IDENTITY_FIELDS),
+        encoding="utf-8",
+    )
+
+
 def _isolated_subprocess_env() -> dict[str, str]:
     return {
         **{
@@ -697,6 +745,7 @@ def install(
             cwd=staging,
             env=_isolated_subprocess_env(),
         )
+        _write_distribution_identity(staging / "venv", manifest)
         _run(
             [
                 str(python),
