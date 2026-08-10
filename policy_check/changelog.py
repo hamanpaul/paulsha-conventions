@@ -22,6 +22,7 @@ TYPE_TO_SECTION = {
     "refactor": "Changed",
     "perf": "Changed",
     "change": "Changed",
+    "docs": "Changed",
     "remove": "Removed",
     "deprecate": "Deprecated",
     "security": "Security",
