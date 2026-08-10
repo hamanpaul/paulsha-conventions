@@ -38,7 +38,7 @@ Scope to specific rules with `--only R-01,R-09`. For CI (GitHub reusable workflo
 The canonical project version lives in `VERSION`; release tags use `vX.Y.Z`. Version semantics (`profile: flat`) are described under [English → Versioning](#versioning) / [繁體中文 → 版本](#版本). Current version:
 
 <!-- BEGIN: generated-fact marker="repo-version" -->
-1.0.15
+1.0.16
 <!-- END: generated-fact marker="repo-version" -->
 
 ---
