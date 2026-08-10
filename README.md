@@ -83,7 +83,7 @@ This repository **dog-foods its own policy** (`profile: flat`; `policy_version` 
 | R-16 | CLI help in sync with docs | commands declared in `.project-policy.yml.cli` produce help output that differs from the marker block | `policy-exempt:cli-help` |
 | R-17 | PR ↔ issue link | PR body contains `#N` but not in closing-keyword form (`Closes` / `Fixes` / `Resolves #N`) | `policy-exempt:issue-link` |
 | R-18 | docs / README track code changes | code_paths changed but `README.md` / `docs/**` was not updated (**WARN**, does not block merge) | `policy-exempt:docs-sync` |
-| R-19 | repo has tests ⇒ CI runs them | a `tests/` dir exists (with `test_*.py` / `*_test.py`) but no `.github/workflows/**` runs any test command | `policy-exempt:ci-tests` |
+| R-19 | repo has tests ⇒ CI runs them | parsed `jobs.*.steps[].run` has no actual test command; comments/install lines do not count, conditional hits WARN, malformed YAML falls back with WARN, and `r19.strict: true` promotes these warnings to FAIL | `policy-exempt:ci-tests` |
 | R-20 | workflow policy_version in sync | the literal `policy_version` / `POLICY_VERSION` declared in a workflow disagrees with `.project-policy.yml` | — |
 | R-21 | visibility-aware secret scan | all tiers are scanned; `shareable` hits **FAIL**; for other tiers, public/unknown structural or credential hits **FAIL**, while marker-only and private/internal hits **WARN**; reports expose only relative `path:line`, detector class, and counts | `policy-exempt:secret-scan` |
 | R-22 | docs have no dangling code references | a path / internal link / backtick symbol referenced inside the canonical doc scope (`doc_paths`) does not exist; symbols use a language-agnostic scoped identity (ctags `(language, kind, scope, name)` diff); newly introduced breakage **FAIL**, pre-existing dangling **WARN** | `policy-exempt:doc-reference` |
@@ -157,6 +157,15 @@ generated_facts:
 - **Mention semantics**: R-25 uses case-sensitive exact token/phrase matching; a substring hit does not count as coverage.
 - **`changed`-mode boundary**: when base diff context is missing (e.g. a local `--repo .`) it downgrades to WARN; `cli_tree` cannot snapshot the base, so it is only checked under `mode: all`.
 - **Security note (command-executing rules)**: `R-16` (`cli`), R-25's `cli_tree` extractor and `R-26` (`generated_facts`) execute the commands declared in `.project-policy.yml` (no shell injection, but the command string itself is config-controlled and inherits the full environment). Therefore **do not** run `policy_check` on untrusted PR / fork branches; only enable it on trusted repo config.
+
+R-19's staged rollout can be made strict per repository:
+
+```yaml
+r19:
+  strict: true  # promote bypass-prone or conditional test-gate WARNs to FAIL
+```
+
+R-08 validates that `r19` is a mapping and `strict` is a boolean; omitted `r19` keeps the warning rollout default.
 
 #### The `auto_build` block (LLM auto-build convention, #30)
 
@@ -584,7 +593,7 @@ The license follows the repository owner's preference; see the `LICENSE` file at
 | R-16 | CLI help 與 docs 同步 | `.project-policy.yml.cli` 宣告項目，實跑 help 輸出與 marker 區塊不一致 | `policy-exempt:cli-help` |
 | R-17 | PR↔issue 連結 | PR body 出現 `#N` 但非 closing-keyword（`Closes`/`Fixes`/`Resolves #N`）形式 | `policy-exempt:issue-link` |
 | R-18 | docs/README 對齊 code 變動 | code_paths 有變動但 `README.md` / `docs/**` 未同步（**WARN**，不擋 merge） | `policy-exempt:docs-sync` |
-| R-19 | repo 有測試則 CI 必須執行 | 存在 `tests/`（含 `test_*.py` / `*_test.py`）但 `.github/workflows/**` 無任何測試執行指令（pytest / unittest / npm test 等） | `policy-exempt:ci-tests` |
+| R-19 | repo 有測試則 CI 必須執行 | 結構化解析 `jobs.*.steps[].run` 後沒有實際測試指令；註解／安裝行不算，條件式命中 WARN，YAML 解析失敗回退並 WARN，`r19.strict: true` 將這些 WARN 提升為 FAIL | `policy-exempt:ci-tests` |
 | R-20 | Workflow policy_version 與 config 同步 | workflow 內宣告的 `policy_version` / `POLICY_VERSION` 字面值與 `.project-policy.yml` 的 `policy_version` 不一致 | — |
 | R-21 | visibility-aware 機密掃描 | 所有 tier 都掃描；`shareable` 命中一律 **FAIL**；其他 tier 的 public/unknown 結構或憑證命中 **FAIL**，僅 marker 及 private/internal 命中 **WARN**；報告只揭露相對 `path:line`、detector 類別與筆數 | `policy-exempt:secret-scan` |
 | R-22 | docs 對 code 產物引用無懸空 | canonical doc scope（`doc_paths`，預設 `README.md` / `docs/**`）引用的路徑／內部連結／反引號 symbol 在 repo 不存在；symbol 改用**語言無關 scoped identity**（ctags `(language, kind, scope, name)` 差集，限定式 token 精準命中、結構化裸名 snake/Camel 多 scope 同名只 WARN、純單字不偵測以避免常見字誤報）；本次變更新破壞 **FAIL**、陳年懸空 **WARN**、無 diff context（本地）降 WARN；`openspec/**`・`docs/superpowers/**`・fixtures 內建排除 | `policy-exempt:doc-reference` |
@@ -665,6 +674,15 @@ generated_facts:
 - **changed 模式邊界**：缺 base diff context（如本地 `--repo .`）時降 WARN，不在無證據下 FAIL；`cli_tree` 無法快照 base，僅在 `mode: all` 受檢。
 - **generated-fact marker 語法**：`<!-- BEGIN: generated-fact marker="<name>" -->` … `<!-- END: generated-fact marker="<name>" -->`；command 以 `shlex.split` 不經 shell 執行、`cwd=repo_root`、`LC_ALL=C`、固定 30 秒 timeout，只比對正規化 stdout。
 - **安全注意（命令執行型規則）**：`R-16`（`cli`）、`R-25` 的 `cli_tree` extractor 與 `R-26`（`generated_facts`）會執行 `.project-policy.yml` 宣告的命令（無 shell injection，但命令字串本身受 config 控制並繼承完整環境）。因此**不應**在未信任的 PR／fork 分支上執行 `policy_check`；只在可信任的 repo config 上啟用。`cli_tree` 在 `mode: changed` 不會被執行（僅 `mode: all` 才跑）。
+
+R-19 的分階段 rollout 可由各 repo 自行提前切換 strict：
+
+```yaml
+r19:
+  strict: true  # 將可繞過或條件式測試 gate 的 WARN 提升為 FAIL
+```
+
+R-08 會驗證 `r19` 必須是 mapping、`strict` 必須是 boolean；省略 `r19` 維持預設的 WARN rollout。
 
 #### `auto_build` 區塊（LLM auto build 慣例，#30）
 
