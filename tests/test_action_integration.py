@@ -136,12 +136,21 @@ policy_version: 1.0.0
 def test_action_run_sh_uses_action_repo_source_with_runtime_dependency_only(fixture_repo):
     """Integration test: run.sh should work without installing policy_check into the caller repo."""
     repo_path = fixture_repo("valid-minimal")
+    # run.sh 執行的引擎來自本 repo 自身的原始碼樹（PYTHONPATH=REPO_ROOT）；#61 新增
+    # 的引擎版本 gate 會比對執行中引擎版本與這裡宣告的 policy_version，因此改成與
+    # 本 repo 實際 VERSION 一致，而非 fixture 內寫死、天然對不上引擎的 "1.0.0"。
+    engine_version = (
+        (Path(__file__).parent.parent / "VERSION").read_text(encoding="utf-8").strip()
+    )
+    (repo_path / ".paul-project.yml").write_text(
+        f'policy_profile: flat\npolicy_version: "{engine_version}"\n'
+    )
     venv.EnvBuilder(system_site_packages=True, with_pip=False).create(repo_path / ".venv")
 
     run_sh = Path(__file__).parent.parent / ".github" / "actions" / "policy-check" / "run.sh"
 
     result = subprocess.run(
-        ["bash", str(run_sh), "flat", "1.0.0"],
+        ["bash", str(run_sh), "flat", engine_version],
         capture_output=True,
         text=True,
         cwd=repo_path,
