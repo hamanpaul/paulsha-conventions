@@ -13,9 +13,16 @@ import yaml
 
 from policy_check import config as policy_config
 from policy_check.config import CONFIG_NAMES
+from policy_check.identity import identity
 
-CANONICAL_ORG = "hamanpaul"
-CANONICAL_REPO = "paulsha-conventions"
+
+def canonical_org() -> str:
+    return identity().canonical_org
+
+
+def canonical_repo() -> str:
+    return identity().engine_repo.split("/", 1)[1]
+
 
 _VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-fix\.(\d+))?$")
 _TAG_RE = re.compile(r"^v(\d+\.\d+\.\d+(?:-fix\.\d+)?)$")
@@ -103,7 +110,7 @@ def format_report(rows: list[tuple[str, str | None, str]], canonical: str) -> st
     """rows: list of (repo, policy_version_or_None, status)."""
     name_w = max([len("REPO"), *(len(r) for r, _, _ in rows)])
     lines = [
-        f"canonical: {canonical}  ({CANONICAL_ORG}/{CANONICAL_REPO}, latest tag)",
+        f"canonical: {canonical}  ({canonical_org()}/{canonical_repo()}, latest tag)",
         "",
         f"{'REPO':<{name_w}}  {'POLICY_VERSION':<16} STATUS",
     ]
@@ -158,17 +165,26 @@ def local_policy_version(path: str = ".") -> str | None:
     return str(resolution.data["policy_version"])
 
 
-def canonical_version_live(org: str = CANONICAL_ORG, repo: str = CANONICAL_REPO) -> str:
+def canonical_version_live(org: str | None = None, repo: str | None = None) -> str:
     """Highest vX.Y.Z[-fix.N] tag of canonical repo, e.g. -> '1.0.7'.
 
     Uses tags (not GitHub Releases): the canonical repo ships version tags
     per RELEASES.md (merge -> tag), and may have no Release objects.
+
+    org/repo default to None (not identity's values) so identity() is only
+    ever loaded when this function actually runs, never at module import.
     """
+    if org is None:
+        org = canonical_org()
+    if repo is None:
+        repo = canonical_repo()
     out = _gh(["api", f"repos/{org}/{repo}/tags", "--paginate", "--jq", ".[].name"])
     return highest_version(out.splitlines())
 
 
-def list_managed_repos(org: str = CANONICAL_ORG, limit: int = 200) -> list[str]:
+def list_managed_repos(org: str | None = None, limit: int = 200) -> list[str]:
+    if org is None:
+        org = canonical_org()
     out = _gh(["repo", "list", org, "--no-archived", "--limit", str(limit), "--json", "name"])
     names = [r["name"] for r in json.loads(out)]
     if len(names) >= limit:
@@ -273,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pr = sub.add_parser("report", help="List drift across an org (read-only, exit 0)")
-    pr.add_argument("--org", default=CANONICAL_ORG)
+    pr.add_argument("--org", default=canonical_org())
     pr.add_argument("--json", action="store_true")
     pr.set_defaults(func=cmd_report)
 

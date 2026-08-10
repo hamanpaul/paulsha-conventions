@@ -277,3 +277,21 @@ def test_report_exit0_when_gh_binary_missing(monkeypatch, capsys):
     rc = drift.main(["report", "--org", "hamanpaul"])
     out = capsys.readouterr().out
     assert rc == 0 and "x" in out and "error" in out
+
+
+def test_drift_canonical_values_follow_identity(monkeypatch):
+    from policy_check import drift, identity as ident
+
+    ident.identity.cache_clear()
+    monkeypatch.setattr(ident, "_load_raw", lambda: {
+        "canonical_org": "hamanpaul",
+        "engine_repo": "hamanpaul/arc-conventions",
+        "remote_base": "https://github.com",
+        "distribution_name": "arc-conventions",
+        "provider": "github",
+    })
+    try:
+        assert drift.canonical_org() == "hamanpaul"
+        assert drift.canonical_repo() == "arc-conventions"
+    finally:
+        ident.identity.cache_clear()
