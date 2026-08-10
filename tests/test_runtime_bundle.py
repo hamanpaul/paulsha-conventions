@@ -44,7 +44,7 @@ def _fake_bundle(root: Path, version: str = "1.0.13") -> Path:
             "version": package_version,
             "requires_python": ">=3.11",
         },
-        "repository": integrity.CANONICAL_REPOSITORY,
+        "repository": "hamanpaul/paulsha-conventions",
         "release_tag": f"v{version}",
         "release_commit": "a" * 40,
         "wheels": [
@@ -136,9 +136,13 @@ def _write_fake_venv(path: Path) -> None:
 
 def test_verify_bundle_accepts_closed_file_set(tmp_path: Path) -> None:
     bundle = _fake_bundle(tmp_path)
-    manifest = integrity.load_and_verify_bundle(bundle)
+    manifest = integrity.load_and_verify_bundle(
+        bundle, expected_repository="hamanpaul/paulsha-conventions"
+    )
     assert manifest["policy_version"] == "1.0.13"
-    assert manager.verify_bundle(bundle)["skill_version"] == "1.0.13"
+    assert manager.verify_bundle(
+        bundle, expected_repository="hamanpaul/paulsha-conventions"
+    )["skill_version"] == "1.0.13"
 
 
 def test_checksums_include_nested_file_named_sha256sums(tmp_path: Path) -> None:
@@ -150,7 +154,9 @@ def test_checksums_include_nested_file_named_sha256sums(tmp_path: Path) -> None:
 
     checksums = (bundle / "SHA256SUMS").read_text(encoding="utf-8")
     assert "payload/SHA256SUMS" in checksums
-    assert integrity.load_and_verify_bundle(bundle)["policy_version"] == "1.0.13"
+    assert integrity.load_and_verify_bundle(
+        bundle, expected_repository="hamanpaul/paulsha-conventions"
+    )["policy_version"] == "1.0.13"
 
 
 def test_vendored_manager_loads_the_shared_verifier_under_safe_path(
@@ -267,10 +273,14 @@ def test_verify_bundle_accepts_fix_suffix_as_post_package_version(
     tmp_path: Path,
 ) -> None:
     bundle = _fake_bundle(tmp_path, "1.0.13-fix.2")
-    manifest = integrity.load_and_verify_bundle(bundle)
+    manifest = integrity.load_and_verify_bundle(
+        bundle, expected_repository="hamanpaul/paulsha-conventions"
+    )
     assert manifest["policy_version"] == "1.0.13-fix.2"
     assert manifest["package"]["version"] == "1.0.13.post2"
-    assert manager.verify_bundle(bundle)["package"]["version"] == "1.0.13.post2"
+    assert manager.verify_bundle(
+        bundle, expected_repository="hamanpaul/paulsha-conventions"
+    )["package"]["version"] == "1.0.13.post2"
 
 
 @pytest.mark.parametrize(
@@ -288,20 +298,28 @@ def test_verify_bundle_rejects_payload_tamper(tmp_path: Path, relative: str) -> 
     with (bundle / relative).open("ab") as stream:
         stream.write(b"tampered")
     with pytest.raises(integrity.BundleError, match="checksum mismatch"):
-        integrity.load_and_verify_bundle(bundle)
+        integrity.load_and_verify_bundle(
+            bundle, expected_repository="hamanpaul/paulsha-conventions"
+        )
     with pytest.raises(manager.RuntimeBundleError, match="checksum mismatch"):
-        manager.verify_bundle(bundle)
+        manager.verify_bundle(
+            bundle, expected_repository="hamanpaul/paulsha-conventions"
+        )
 
 
 def test_verify_bundle_rejects_unlisted_file_and_symlink(tmp_path: Path) -> None:
     bundle = _fake_bundle(tmp_path)
     (bundle / "extra").write_text("unlisted\n", encoding="utf-8")
     with pytest.raises(integrity.BundleError, match="file set mismatch"):
-        integrity.load_and_verify_bundle(bundle)
+        integrity.load_and_verify_bundle(
+            bundle, expected_repository="hamanpaul/paulsha-conventions"
+        )
     (bundle / "extra").unlink()
     (bundle / "escape").symlink_to("../outside")
     with pytest.raises(integrity.BundleError, match="symlink"):
-        integrity.load_and_verify_bundle(bundle)
+        integrity.load_and_verify_bundle(
+            bundle, expected_repository="hamanpaul/paulsha-conventions"
+        )
 
 
 def test_extract_archive_verifies_digest_members_and_payload(tmp_path: Path) -> None:
@@ -315,7 +333,9 @@ def test_extract_archive_verifies_digest_members_and_payload(tmp_path: Path) -> 
         digest,
     )
     assert extracted.name == "paulsha-conventions-v1.0.13"
-    assert integrity.load_and_verify_bundle(extracted)["policy_version"] == "1.0.13"
+    assert integrity.load_and_verify_bundle(
+        extracted, expected_repository="hamanpaul/paulsha-conventions"
+    )["policy_version"] == "1.0.13"
     with pytest.raises(integrity.BundleError, match="already exists"):
         integrity.extract_verified_archive(archive, tmp_path / "output", digest)
 
@@ -1340,3 +1360,48 @@ def test_uninstall_removes_tampered_but_state_owned_inactive_release(
     )
     manager.uninstall(runtime_root, "1.0.13")
     assert not release.exists()
+
+
+def test_verification_module_stays_stdlib_only():
+    """verification.py 由 vendored bootstrap manager 共用，不得引入第三方或套件內依賴。"""
+    from pathlib import Path
+
+    source = Path("policy_check/runtime_bundle/verification.py").read_text(encoding="utf-8")
+    assert "import yaml" not in source
+    assert "policy_check.identity" not in source
+
+
+def test_manifest_repository_is_checked_against_argument():
+    from policy_check.runtime_bundle import verification
+
+    manifest = {
+        "schema_version": verification.SCHEMA_VERSION,
+        "policy_version": "1.0.15",
+        "skill_version": "1.0.15",
+        "repository": "hamanpaul/arc-conventions",
+        "release_tag": "v1.0.15",
+        "release_commit": "0" * 40,
+        "package": {
+            "name": "policy-check",
+            "version": "1.0.15",
+            "requires_python": ">=3.11",
+        },
+        "wheels": [{"path": "wheels/policy_check-1.0.15-py3-none-any.whl", "sha256": "a" * 64}],
+        "skill": {"path": "skills/preflight-ci", "sha256": "a" * 64},
+        "runtime": {
+            "path": "runtime/runtime_manager.py",
+            "sha256": "a" * 64,
+            "verifier_path": "runtime/runtime_verifier.py",
+            "verifier_sha256": "a" * 64,
+        },
+        "runtime_compatibility": {
+            "implementation": "cpython",
+            "python": "3.11",
+            "abi": "cp311",
+            "platform": "linux",
+        },
+        "prerequisites": ["git"],
+    }
+    with pytest.raises(verification.BundleError):
+        verification._require_manifest_shape(manifest, "hamanpaul/paulsha-conventions")
+    verification._require_manifest_shape(manifest, "hamanpaul/arc-conventions")

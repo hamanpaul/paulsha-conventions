@@ -14,7 +14,6 @@ from typing import Any
 # This module is deliberately stdlib-only. The source package and the vendored
 # bootstrap manager both execute this exact verifier implementation.
 SCHEMA_VERSION = 1
-CANONICAL_REPOSITORY = "hamanpaul/paulsha-conventions"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:-fix\.\d+)?$")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -111,7 +110,7 @@ def _require_hashed_path(
         raise BundleError(f"runtime.{hash_field} is invalid")
 
 
-def _require_manifest_shape(manifest: dict[str, Any]) -> None:
+def _require_manifest_shape(manifest: dict[str, Any], expected_repository: str) -> None:
     if manifest.get("schema_version") != SCHEMA_VERSION:
         raise BundleError("unsupported manifest schema_version")
     version = manifest.get("policy_version")
@@ -119,7 +118,7 @@ def _require_manifest_shape(manifest: dict[str, Any]) -> None:
         raise BundleError("manifest policy_version is invalid")
     if manifest.get("skill_version") != version:
         raise BundleError("skill_version does not match policy_version")
-    if manifest.get("repository") != CANONICAL_REPOSITORY:
+    if manifest.get("repository") != expected_repository:
         raise BundleError("manifest repository is not canonical")
     if manifest.get("release_tag") != f"v{version}":
         raise BundleError("release_tag does not match policy_version")
@@ -180,7 +179,7 @@ def _require_manifest_shape(manifest: dict[str, Any]) -> None:
         raise BundleError("manifest prerequisites must be a list of strings")
 
 
-def load_and_verify_bundle(bundle_root: Path) -> dict[str, Any]:
+def load_and_verify_bundle(bundle_root: Path, *, expected_repository: str) -> dict[str, Any]:
     root = bundle_root.resolve()
     checksums_path = root / "SHA256SUMS"
     manifest_path = root / "manifest.json"
@@ -212,7 +211,7 @@ def load_and_verify_bundle(bundle_root: Path) -> dict[str, Any]:
             raise BundleError(f"checksum mismatch: {name}")
 
     manifest = _read_manifest(manifest_path)
-    _require_manifest_shape(manifest)
+    _require_manifest_shape(manifest, expected_repository)
     for wheel in manifest["wheels"]:
         wheel_path = safe_relative_path(wheel["path"], field="wheel.path").as_posix()
         if checksums.get(wheel_path) != wheel["sha256"]:
@@ -244,9 +243,11 @@ def verify_installed_wheel_payload(
     bundle_root: Path,
     site_packages: Path,
     manifest: dict[str, Any] | None = None,
+    *,
+    expected_repository: str,
 ) -> dict[str, Any]:
     verified_manifest = (
-        load_and_verify_bundle(bundle_root)
+        load_and_verify_bundle(bundle_root, expected_repository=expected_repository)
         if manifest is None
         else manifest
     )

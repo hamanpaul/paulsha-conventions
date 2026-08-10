@@ -695,7 +695,9 @@ def _installed_manifest_engine(
     if path.name != "manifest.json" or not path.is_file():
         raise PreflightGateError("installed manifest path is invalid")
     try:
-        manifest = load_and_verify_bundle(path.parent)
+        manifest = load_and_verify_bundle(
+            path.parent, expected_repository=identity().engine_repo
+        )
     except BundleError as exc:
         raise PreflightGateError(f"installed bundle verification failed: {exc}") from exc
     expected = str(config.get("policy_version") or "").strip()
@@ -750,6 +752,7 @@ def _verify_installed_wheel_payload(
             bundle_root,
             installed_root,
             dict(manifest),
+            expected_repository=identity().engine_repo,
         )
     except BundleError as exc:
         raise PreflightGateError(str(exc)) from exc

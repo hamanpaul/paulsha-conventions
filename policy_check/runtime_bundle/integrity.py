@@ -7,8 +7,9 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from policy_check.identity import identity
+
 from .verification import (
-    CANONICAL_REPOSITORY,
     SHA256_RE,
     BundleError,
     load_and_verify_bundle,
@@ -19,9 +20,11 @@ from .verification import (
 )
 
 
-BUNDLE_ROOT_RE = re.compile(
-    r"^paulsha-conventions-v\d+\.\d+\.\d+(?:-fix\.\d+)?$"
-)
+def _bundle_dir_re() -> re.Pattern[str]:
+    return re.compile(
+        r"^" + re.escape(identity().distribution_name)
+        + r"-v\d+\.\d+\.\d+(?:-fix\.\d+)?$"
+    )
 
 
 def write_checksums(root: Path) -> None:
@@ -72,7 +75,7 @@ def extract_verified_archive(
             if len(roots) != 1:
                 raise BundleError("archive must contain exactly one bundle root")
             root_name = next(iter(roots))
-            if BUNDLE_ROOT_RE.fullmatch(root_name) is None:
+            if _bundle_dir_re().fullmatch(root_name) is None:
                 raise BundleError("archive bundle root name is invalid")
             target = destination / root_name
             if target.exists() or target.is_symlink():
@@ -89,7 +92,9 @@ def extract_verified_archive(
                     # regular-file or directory entries.
                     bundle_tar.extractall(stage)
                 extracted = stage / root_name
-                load_and_verify_bundle(extracted)
+                load_and_verify_bundle(
+                    extracted, expected_repository=identity().engine_repo
+                )
                 os.replace(extracted, target)
     except (OSError, tarfile.TarError) as exc:
         raise BundleError("bundle archive is unreadable or unsafe") from exc

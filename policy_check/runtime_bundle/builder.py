@@ -15,9 +15,10 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
 
+from policy_check.identity import identity
+
 from .integrity import (
     BundleError,
-    CANONICAL_REPOSITORY,
     load_and_verify_bundle,
     normalized_package_version,
     sha256_file,
@@ -136,11 +137,7 @@ def _git(repo: Path, *args: str) -> str:
 
 def _canonical_remote(value: str) -> bool:
     remote = value.strip().removesuffix(".git")
-    return remote in {
-        f"https://github.com/{CANONICAL_REPOSITORY}",
-        f"ssh://git@github.com/{CANONICAL_REPOSITORY}",
-        f"git@github.com:{CANONICAL_REPOSITORY}",
-    }
+    return remote in identity().remote_urls()
 
 
 def attest_clean_tag(repo: Path, tag: str) -> tuple[str, str, int]:
@@ -390,7 +387,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
     source = repo.resolve()
     version, commit, epoch = attest_clean_tag(source, tag)
     destination = _prepare_output_directory(source, output_dir)
-    archive = destination / f"paulsha-conventions-v{version}.tar.gz"
+    archive = destination / f"{identity().distribution_name}-v{version}.tar.gz"
     digest_file = archive.with_suffix(archive.suffix + ".sha256")
     if archive.exists() or digest_file.exists():
         raise BundleError(f"output already exists: {archive}")
@@ -452,7 +449,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
         ):
             raise BundleError("wheel metadata does not match VERSION")
 
-        bundle = temp / f"paulsha-conventions-v{version}"
+        bundle = temp / f"{identity().distribution_name}-v{version}"
         bundle.mkdir()
         shutil.move(str(wheels), bundle / "wheels")
         skill_root = bundle / "skills" / "preflight-ci"
@@ -488,9 +485,21 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
                 "version": metadata["Version"],
                 "requires_python": metadata.get("Requires-Python", ">=3.11"),
             },
-            "repository": CANONICAL_REPOSITORY,
+            "repository": identity().engine_repo,
             "release_tag": tag,
             "release_commit": commit,
+            "distribution": {
+                "canonical_org": identity().canonical_org,
+                "engine_repo": identity().engine_repo,
+                "remote_base": identity().remote_base,
+                "distribution_name": identity().distribution_name,
+                "provider": identity().provider,
+                **(
+                    {"distribution_build": identity().distribution_build}
+                    if identity().distribution_build is not None
+                    else {}
+                ),
+            },
             "wheels": wheel_entries,
             "skill": {
                 "path": "skills/preflight-ci",
@@ -525,7 +534,7 @@ def build_bundle(repo: Path, output_dir: Path, tag: str) -> tuple[Path, str]:
             encoding="utf-8",
         )
         write_checksums(bundle)
-        load_and_verify_bundle(bundle)
+        load_and_verify_bundle(bundle, expected_repository=identity().engine_repo)
         temporary_archive = temp / archive.name
         _deterministic_archive(bundle, temporary_archive, epoch=epoch)
         os.replace(temporary_archive, archive)

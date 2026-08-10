@@ -46,6 +46,50 @@ except ImportError:
     _verify_installed_wheels = _verifier.verify_installed_wheel_payload
 
 
+# `policy_check.identity` is not vendored alongside this module (only
+# verification.py travels into the bundle as runtime_verifier.py), so it is
+# unavailable in the narrow pre-install bootstrap window where this exact
+# file runs standalone as runtime_manager.py before any policy-check wheel
+# is installed. `_expected_repository` degrades gracefully for that window
+# only; see its docstring for why that does not weaken bundle authenticity.
+try:
+    from policy_check.identity import identity as _identity
+except ImportError:
+    _identity = None
+
+
+def _expected_repository(bundle_root: Path) -> str:
+    """The repository this manager should require a bundle's manifest to match.
+
+    Prefers the currently installed engine's distribution identity, which is
+    what every non-bootstrap call site (the source package, and any release
+    venv after `install()` has placed the policy-check wheel into it) has
+    available. The one exception is `install()`'s very first verification of
+    an incoming bundle, executed by the vendored runtime_manager.py before
+    policy-check exists anywhere on sys.path: there this falls back to the
+    bundle's own declared `repository` field. That does not weaken the
+    bundle's real integrity guarantee — per docs/runtime-bundle-runbook.md
+    the archive's externally published SHA-256 digest, not this manifest
+    field, is the authenticity anchor for that path, and every checksum and
+    schema check in `load_and_verify_bundle`/`verify_installed_wheel_payload`
+    still applies in full.
+    """
+    if _identity is not None:
+        return _identity().engine_repo
+    try:
+        manifest = json.loads(
+            (bundle_root / "manifest.json").read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeBundleError(
+            "manifest.json is unreadable or invalid JSON"
+        ) from exc
+    repository = manifest.get("repository") if isinstance(manifest, dict) else None
+    if not isinstance(repository, str) or not repository:
+        raise RuntimeBundleError("manifest.json is missing a repository identity")
+    return repository
+
+
 def _default_root() -> Path:
     configured = os.environ.get("PSC_CONVENTIONS_ROOT")
     if configured:
@@ -384,6 +428,7 @@ def _attest_installed_release(release: Path) -> None:
     _verify_installed_wheels(
         release / "artifact",
         _venv_site_packages(release / "venv"),
+        expected_repository=_expected_repository(release / "artifact"),
     )
 
 
@@ -553,7 +598,7 @@ def install(
     *,
     force_reinstall: bool = False,
 ) -> str:
-    manifest = verify_bundle(bundle)
+    manifest = verify_bundle(bundle, expected_repository=_expected_repository(bundle))
     compatibility = manifest["runtime_compatibility"]
     current = {
         "implementation": sys.implementation.name,
@@ -613,7 +658,10 @@ def install(
     try:
         (staging / "artifact").parent.mkdir(parents=True)
         shutil.copytree(bundle.resolve(), staging / "artifact")
-        verify_bundle(staging / "artifact")
+        verify_bundle(
+            staging / "artifact",
+            expected_repository=_expected_repository(staging / "artifact"),
+        )
         try:
             venv.EnvBuilder(with_pip=True, clear=False).create(staging / "venv")
         except (OSError, subprocess.SubprocessError) as exc:
@@ -745,7 +793,10 @@ def _verified_release(root: Path, version: str) -> Path:
     verified = release / "VERIFIED"
     if not release.is_dir() or not verified.is_file():
         raise RuntimeBundleError(f"verified release is not installed: {version}")
-    manifest = verify_bundle(release / "artifact")
+    manifest = verify_bundle(
+        release / "artifact",
+        expected_repository=_expected_repository(release / "artifact"),
+    )
     try:
         marker = json.loads(verified.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
@@ -946,7 +997,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     try:
         if args.command == "verify":
-            manifest = verify_bundle(Path(args.bundle))
+            manifest = verify_bundle(
+                Path(args.bundle),
+                expected_repository=_expected_repository(Path(args.bundle)),
+            )
             print(f"BUNDLE VERIFIED {manifest['policy_version']}")
         elif args.command == "install":
             version = install(
