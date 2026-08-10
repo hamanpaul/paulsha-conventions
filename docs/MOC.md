@@ -20,7 +20,7 @@ superpowers plans/specs，並標其 stage 狀態。
 - [引擎版本 vs policy_version 啟動比對（#61）](superpowers/plans/2026-08-10-issue-61-engine-version-gate.md) — 派工中；啟動 fail-loud + 報告表頭引擎版本
 - [R-19 結構化偵測實際測試執行（#62）](superpowers/plans/2026-08-10-issue-62-r19-real-test-execution.md) — 派工中；YAML 結構化偵測 + canonical tests.yml 骨架 + 反例 fixtures，分階段上線
 - [activation 斷電級 crash recovery（#52）](superpowers/plans/2026-08-10-issue-52-activation-crash-recovery.md) — 派工中；journal + SIGKILL fault injection + 重啟自動收斂
-- [ISO/IEC 42001 opt-in profile 設計（#60）](superpowers/plans/2026-08-10-issue-60-iso42001-profile-design.md) — 派工中；docs-only 設計交付，實作另開 scoped issue
+- [ISO/IEC 42001 opt-in profile 設計（#60）](superpowers/plans/2026-08-10-issue-60-iso42001-profile-design.md) — 設計文件已交付（[design](superpowers/specs/2026-08-10-iso42001-profile-design.md)），schema 落地與規則實作另開 scoped issue
 - [runtime bundle runbook](runtime-bundle-runbook.md) — build/install/exact selection/rollback 與 #39 authority 邊界
 - [內部發行管道決策（#39）](superpowers/plans/2026-07-26-issue-39-internal-release-channel.md) — needs_human（待公司選定 package authority）
 - [#46 Opus 5 對抗審查修復](superpowers/plans/2026-07-26-issue-46-opus5-review-repair.md) — 第三輪 `PASS / NONE`，主整合驗收通過
@@ -44,6 +44,7 @@ superpowers plans/specs，並標其 stage 狀態。
 - [rollout github defaults + new-project-template](superpowers/plans/2026-04-23-rollout-github-defaults-and-new-project-template.md) — 已完成
 
 ## Specs / designs（docs/superpowers/specs）
+- [ISO/IEC 42001 opt-in profile design（#60）](superpowers/specs/2026-08-10-iso42001-profile-design.md) — 設計交付；opt-in 機制、證據對映表、新規則規劃（ISO-NN）、Stage 2/3 follow-up issue 草稿
 - [auto-build-block design（#30 提案 A）](superpowers/specs/2026-07-02-auto-build-block-design.md) — 已完成（#30 提案 A，change 已 archive；canonical spec 見 `openspec/specs/auto-build-config/`）
 - [gitlab-internalization design（#20）](superpowers/specs/2026-07-01-gitlab-internalization-design.md) — 已完成（#20，change 已 archive；canonical spec 見 `openspec/specs/gitlab-ci-gate/`）
 - [rule families + 版號 generated-fact design（無 issue）](superpowers/specs/2026-07-01-rule-families-and-version-fact-design.md) — 已完成（change 已 archive）
