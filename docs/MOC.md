@@ -16,7 +16,7 @@ superpowers plans/specs，並標其 stage 狀態。
 （已落地者見 `openspec/changes/archive/`。[#48 versioned runtime bundle](../openspec/changes/archive/2026-07-26-2026-07-26-versioned-runtime-bundle/proposal.md) 已 archive，canonical specs 見 `openspec/specs/runtime-bundle/` 與 `openspec/specs/project-policy-manifest/`。[#46 canonical local preflight](../openspec/changes/archive/2026-07-26-canonical-local-preflight/proposal.md) 已 archive，canonical spec 見 `openspec/specs/preflight/`。[#45 R-21 visibility coupling](../openspec/changes/archive/2026-07-26-r21-visibility-coupling/proposal.md) 已 archive，canonical spec 見 `openspec/specs/secret-scan/`。[#30 提案 A auto-build-block](../openspec/changes/archive/2026-07-02-auto-build-block/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/auto-build-config/`。[#20 gitlab-internalization](../openspec/changes/archive/2026-07-01-gitlab-internalization/proposal.md) 已於本批落地並 archive，canonical spec 見 `openspec/specs/gitlab-ci-gate/`。#25 doc-drift-action 已於本批落地並 archive，canonical specs 見 `openspec/specs/doc-drift-core/`・`openspec/specs/doc-drift-action/`（`doc-reference`／`moc-alignment` 規格亦同步更新）。#23 cross-repo-drift-governance 已於本批落地並 archive，canonical spec 見 `openspec/specs/cross-repo-drift-governance/`。Runbook：[`docs/org-ruleset-runbook.md`](org-ruleset-runbook.md)。）
 
 ## Plans（docs/superpowers/plans）
-- [arc-conventions portability 階段一（#63）](superpowers/plans/2026-08-10-arc-conventions-portability.md) — 待執行；5 個 task，去硬編碼 + distribution identity，版號與 GitLab provider 明確排除在外
+- [arc-conventions portability 階段一（#63）](superpowers/plans/2026-08-10-arc-conventions-portability.md) — 已實作；5 個 task，去硬編碼 + distribution identity，版號與 GitLab provider 明確排除在外
 - [versioned runtime bundle（#48）](superpowers/plans/2026-07-26-issue-48-runtime-bundle.md) — 歷史 implementation plan；v1.0.14 與 fleet rollout 已落地
 - [runtime bundle runbook](runtime-bundle-runbook.md) — build/install/exact selection/rollback 與 #39 authority 邊界
 - [內部發行管道決策（#39）](superpowers/plans/2026-07-26-issue-39-internal-release-channel.md) — needs_human（待公司選定 package authority）
@@ -41,7 +41,7 @@ superpowers plans/specs，並標其 stage 狀態。
 - [rollout github defaults + new-project-template](superpowers/plans/2026-04-23-rollout-github-defaults-and-new-project-template.md) — 已完成
 
 ## Specs / designs（docs/superpowers/specs）
-- [arc-conventions portability design（#63）](superpowers/specs/2026-08-10-arc-conventions-portability-design.md) — 設計待審；階段一去硬編碼 + distribution identity 信任模型，階段二 rule plugin 介面僅列草案
+- [arc-conventions portability design（#63）](superpowers/specs/2026-08-10-arc-conventions-portability-design.md) — 已實作；階段一去硬編碼 + distribution identity 信任模型，階段二 rule plugin 介面僅列草案
 - [auto-build-block design（#30 提案 A）](superpowers/specs/2026-07-02-auto-build-block-design.md) — 已完成（#30 提案 A，change 已 archive；canonical spec 見 `openspec/specs/auto-build-config/`）
 - [gitlab-internalization design（#20）](superpowers/specs/2026-07-01-gitlab-internalization-design.md) — 已完成（#20，change 已 archive；canonical spec 見 `openspec/specs/gitlab-ci-gate/`）
 - [rule families + 版號 generated-fact design（無 issue）](superpowers/specs/2026-07-01-rule-families-and-version-fact-design.md) — 已完成（change 已 archive）
