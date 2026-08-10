@@ -106,11 +106,16 @@ def check(policy_version: str, pr_labels: Optional[Iterable[str]] = None) -> Gat
             engine_version,
         )
 
+    # pip install 需要合法的 PEP 440 版本字串；repo 宣告的 policy_version 允許
+    # `-fix.N` 這種本 policy 自訂語法（PEP 440 不合法），所以重裝指令要用
+    # _normalized_version() 轉換過的版本組 spec，沿用比對時已用過的同一個轉換
+    # （見 preflight.py:424），否則 `-fix.N` 版號會組出裝不到的 pip spec。
+    normalized_target = _normalized_version(policy_version)
     detail = (
         f"running policy-check engine is {engine_version.value} "
         f"({engine_version.source}) but this repo declares "
         f"policy_version: {policy_version}. Reinstall the engine to match: "
-        f"pip install --upgrade 'policy-check=={policy_version}'"
+        f"pip install --upgrade 'policy-check=={normalized_target}'"
     )
     release_label = _find_release_label(pr_labels)
     if release_label:

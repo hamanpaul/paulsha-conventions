@@ -107,11 +107,18 @@ def test_wheel_builds_installs_offline_and_runs(tmp_path):
     )
 
     # 4) 離線執行：對最小 fixture repo 跑 policy-check
+    #    policy_version 動態取自本 repo 實際 VERSION：wheel 就是從本 checkout
+    #    build 出來的，裝進 venv 後 `importlib.metadata.version("policy-check")`
+    #    回報的就是這個版本。#61 新增的引擎版本 gate 會在 CLI 啟動時比對「執行
+    #    中引擎版本」與這裡宣告的 policy_version，寫死的舊值（如先前的
+    #    "1.0.10"）天然對不上、會被 gate fail-loud 擋下（configuration error，
+    #    stdout 空），與本測試要驗證的「離線安裝並執行」目的無關。
+    engine_version = (REPO / "VERSION").read_text(encoding="utf-8").strip()
     policy_check = _venv_console_script(venv_dir)
     fixture = tmp_path / "repo"
     fixture.mkdir()
     (fixture / ".paul-project.yml").write_text(
-        "policy_profile: flat\npolicy_version: 1.0.10\n", encoding="utf-8"
+        f"policy_profile: flat\npolicy_version: {engine_version}\n", encoding="utf-8"
     )
     proc = subprocess.run(
         [str(policy_check), "--repo", str(fixture), "--only", "R-08"],

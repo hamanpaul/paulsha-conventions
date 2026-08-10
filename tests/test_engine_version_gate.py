@@ -77,6 +77,21 @@ def test_check_fails_loud_on_mismatch_with_both_versions_in_message(monkeypatch)
     assert "pip install" in message
 
 
+def test_check_normalizes_fix_suffix_in_reinstall_pip_spec(monkeypatch):
+    # Copilot review (PR #67, comment 3749805792): 重裝指令必須用 PEP 440
+    # 正規化後的版本字串組 pip spec，否則宣告 "1.0.15-fix.2" 時會產生
+    # `policy-check==1.0.15-fix.2`，pip 裝不到（PEP 440 不接受 `-fix.N`）。
+    monkeypatch.setattr(engine_gate, "_installed_version", lambda: "1.0.10")
+    with pytest.raises(engine_gate.EngineVersionError) as exc_info:
+        engine_gate.check("1.0.15-fix.2")
+    message = str(exc_info.value)
+    # 宣告文字維持原始 policy_version（供人閱讀比對）。
+    assert "policy_version: 1.0.15-fix.2" in message
+    # 但實際可執行的 pip spec 必須是正規化後的版本。
+    assert "pip install --upgrade 'policy-check==1.0.15.post2'" in message
+    assert "policy-check==1.0.15-fix.2" not in message
+
+
 def test_check_downgrades_to_warn_under_release_label(monkeypatch):
     # 不得誤殺情境 2：release PR 上 VERSION 先行 bump 的窗口，比照 R-07。
     monkeypatch.setattr(engine_gate, "_installed_version", lambda: "1.0.10")
