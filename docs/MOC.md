@@ -40,6 +40,7 @@ superpowers plans/specs，並標其 stage 狀態。
 - [rollout github defaults + new-project-template](superpowers/plans/2026-04-23-rollout-github-defaults-and-new-project-template.md) — 已完成
 
 ## Specs / designs（docs/superpowers/specs）
+- [arc-conventions portability design（#63）](superpowers/specs/2026-08-10-arc-conventions-portability-design.md) — 設計待審；階段一去硬編碼 + distribution identity 信任模型，階段二 rule plugin 介面僅列草案
 - [auto-build-block design（#30 提案 A）](superpowers/specs/2026-07-02-auto-build-block-design.md) — 已完成（#30 提案 A，change 已 archive；canonical spec 見 `openspec/specs/auto-build-config/`）
 - [gitlab-internalization design（#20）](superpowers/specs/2026-07-01-gitlab-internalization-design.md) — 已完成（#20，change 已 archive；canonical spec 見 `openspec/specs/gitlab-ci-gate/`）
 - [rule families + 版號 generated-fact design（無 issue）](superpowers/specs/2026-07-01-rule-families-and-version-fact-design.md) — 已完成（change 已 archive）
