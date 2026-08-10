@@ -1,0 +1,19 @@
+# Canonical test workflow skeleton for repositories with a tests/ directory.
+# The find expression deliberately uses one max-depth search with a grouped
+# name predicate; the old `ls a b` form could silently skip tests when either
+# glob had no match. This covers Python unittest/pytest files and the matching
+# *_test.py convention without making the gate depend on shell glob failure.
+name: Tests
+on:
+  pull_request:
+  push:
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests when a suite is present
+        run: |
+          if [ -d tests ] && [ -n "$(find tests -maxdepth 1 \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit)" ]; then
+            python -m pytest -q
+          fi
