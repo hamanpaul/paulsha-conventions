@@ -92,6 +92,18 @@ def test_r19_strict_mode_fails_bypass_warning(fixture_repo):
     assert "strict mode" in result.message
 
 
+def test_r19_pass_when_run_line_has_quoted_pipe(fixture_repo):
+    # Regression: a single `|` used to be treated as a shell separator, so a
+    # quoted pipe inside a run line's own arguments (e.g. `-k "a|b"`) split the
+    # command mid-quote. shlex then failed on both unbalanced-quote halves and
+    # the real `pytest` invocation went undetected (false negative). Only
+    # `&&` / `||` / `;` are separators now.
+    repo = fixture_repo("ci-tests/quoted-pipe")
+    result = get_rule().check(make_ctx(repo))
+    assert result.status == Status.PASS
+    assert "tests.yml" in result.message
+
+
 def test_r19_falls_back_to_string_matching_for_invalid_yaml(tmp_path):
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()

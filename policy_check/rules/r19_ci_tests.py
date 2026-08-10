@@ -25,7 +25,7 @@ _CI_TEST_COMMAND = re.compile(
     r"|go\s+test|cargo\s+test|ctest|make\s+test",
     re.IGNORECASE,
 )
-_SHELL_SEPARATOR = re.compile(r"\s*(?:&&|\|\||[;|])\s*")
+_SHELL_SEPARATOR = re.compile(r"\s*(?:&&|\|\||;)\s*")
 _INSTALL_COMMAND = re.compile(
     r"^(?:(?:sudo|command)\s+)*(?:"
     r"(?:python(?:3(?:\.\d+)?)?\s+-m\s+)?pip(?:3)?\s+install"
