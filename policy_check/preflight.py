@@ -17,6 +17,7 @@ from typing import Any, Mapping, Sequence
 import yaml
 
 from policy_check import config as policy_config
+from policy_check.identity import identity
 from policy_check.runtime_bundle.integrity import (
     BundleError,
     load_and_verify_bundle,
@@ -36,7 +37,6 @@ REMOTE_WORKFLOW_RE = re.compile(
 DEFAULT_STEP_TIMEOUT = 300
 POLICY_TIMEOUT = 300
 MANIFEST_SCHEMA = 1
-CANONICAL_ENGINE_REPO = "hamanpaul/paulsha-conventions"
 
 
 class PreflightUsageError(ValueError):
@@ -447,12 +447,7 @@ def _is_canonical_checkout(repo_root: Path) -> bool:
     except (OSError, UnicodeError, subprocess.TimeoutExpired):
         return False
     normalized_remote = remote.stdout.strip().removesuffix(".git")
-    canonical_remotes = {
-        f"https://github.com/{CANONICAL_ENGINE_REPO}",
-        f"ssh://git@github.com/{CANONICAL_ENGINE_REPO}",
-        f"git@github.com:{CANONICAL_ENGINE_REPO}",
-    }
-    return remote.returncode == 0 and normalized_remote in canonical_remotes
+    return remote.returncode == 0 and normalized_remote in identity().remote_urls()
 
 
 def _source_engine(
@@ -465,15 +460,17 @@ def _source_engine(
     if engine_config is not None and not isinstance(engine_config, dict):
         raise PreflightUsageError("conventions_engine must be a mapping")
     configured_repo = engine_config.get("repo") if isinstance(engine_config, dict) else None
-    if configured_repo and configured_repo != CANONICAL_ENGINE_REPO:
+    engine_repo = identity().engine_repo
+    if configured_repo and configured_repo != engine_repo:
         raise PreflightGateError(
-            "source engine disagrees with conventions_engine.repo"
+            "source engine disagrees with conventions_engine.repo: "
+            f"distribution={engine_repo!r}, repo declared={configured_repo!r}"
         )
     if not (engine_root / "policy_check" / "preflight.py").is_file():
         raise PreflightGateError("source engine is missing policy_check/preflight.py")
     if not _is_canonical_checkout(engine_root):
         raise PreflightGateError(
-            f"source engine must be a checkout of {CANONICAL_ENGINE_REPO}"
+            f"source engine must be a checkout of {engine_repo}"
         )
     version_file = engine_root / "VERSION"
     if not version_file.is_file():
@@ -500,7 +497,7 @@ def _source_engine(
         raise PreflightGateError("source engine HEAD is not a full SHA")
     return EngineIdentity(
         "source",
-        f"{display_prefix}:{CANONICAL_ENGINE_REPO}@{head}",
+        f"{display_prefix}:{engine_repo}@{head}",
         engine_root,
     )
 
@@ -636,6 +633,7 @@ def _cache_artifact(cache_dir: Path, engine_repo: str, sha: str) -> Path:
 
 
 def _populate_cache(cache_dir: Path, engine_repo: str, sha: str) -> Path:
+    remote_base = identity().remote_base
     artifact = _cache_artifact(cache_dir, engine_repo, sha)
     if artifact.exists():
         raise PreflightGateError(
@@ -654,7 +652,7 @@ def _populate_cache(cache_dir: Path, engine_repo: str, sha: str) -> Path:
                 "remote",
                 "add",
                 "origin",
-                f"https://github.com/{engine_repo}.git",
+                f"{remote_base.rstrip('/')}/{engine_repo}.git",
             ],
             cwd=temp_root,
             timeout=60,
