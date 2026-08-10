@@ -96,8 +96,9 @@ SHA pin、`rev-parse HEAD == sha` 驗證、manifest payload + sha256 全部保�
 | `preflight.py:451-453` | canonical remote 集合由 `remote_base` + `engine_repo` 組出，涵蓋 https / ssh 兩種形式 |
 | `preflight.py:657` | fetch URL 改用 `remote_base` |
 | `runtime_bundle/verification.py:17`、`builder.py:140-142` | 同上，並以 `distribution_name` 命名 artifact 目錄 |
-| `rules/r15_workflow_pinning.py`、`r20_workflow_policy_version.py` | 依 `identity().provider` 決定掃描 `.github/workflows/**` 或 `.gitlab-ci.yml`（含 `include:` 展開） |
 | `install.sh`（runtime bundle） | 安裝時寫入 distribution identity |
+
+`provider` 欄位在階段一**僅保留於 identity schema 並固定為 `github`**，R-15 / R-20 的行為不變。GitLab 分支留到實際切換時處理（見「發行路徑」）。
 
 ## 錯誤處理
 
@@ -114,7 +115,7 @@ SHA pin、`rev-parse HEAD == sha` 驗證、manifest payload + sha256 全部保�
 2. **替身分測試**：以 fixture 注入 `arc-conventions` 身分，驗證 canonical remote 集合、fetch URL、bundle 命名、R-15/R-20 路徑全部跟著切換。
 3. **信任邊界測試（必要）**：`.project-policy.yml` 嘗試把 `conventions_engine.repo` 指向第三方 → 必須 `PreflightGateError`。此案例是本設計的核心不變式，需有獨立測試。
 4. **離線測試**：`remote_base` 指向不可達位址 + `--offline` → 走已安裝版本比對路徑，不得嘗試網路。
-5. **provider 矩陣**：`github` / `gitlab` 各跑一次 R-15 / R-20。
+5. **swap 演練**：以 fixture 將 `engine_repo` / `remote_base` 由 upstream 切到私有 fork，驗證 canonical remote 集合與 fetch URL 跟著改變 — 這是「日後切到 ARC GitLab 只需換設定」這項承諾的驗收依據。
 
 ## 相容性與遷移
 
@@ -134,8 +135,19 @@ SHA pin、`rev-parse HEAD == sha` 驗證、manifest payload + sha256 全部保�
 - R-08 設定 schema 需能容納外掛規則的設定區塊
 - runtime bundle 從「單一整包」拆為「引擎 wheel + plugin wheel」對 builder / verification 的影響
 
+## 發行路徑（已決策）
+
+ARC 發行版**不直接落在 ARC GitLab**，分兩步走：
+
+1. **現階段**：在 `hamanpaul` 名下開一支 **private GitHub fork** 作為 ARC 發行版的家。`remote_base` 仍是 `https://github.com`，只有 `engine_repo` 與 `distribution_name` 改變。引擎以**地端執行為主**（`policy-check` / `policy-preflight --offline`），不依賴 CI。
+2. **日後**：真的需要時，再從該 fork 進 ARC GitLab，屆時只 swap `remote_base` 與 `engine_repo`。
+
+此決策對階段一的影響：
+
+- `remote_base` 仍必須可設定化（否則第 2 步做不到），但**不需在階段一驗證 GitLab 路徑**。
+- `provider` 固定 `github`，R-15 / R-20 行為不變；GitLab 的 pinning 等價語意（`include:` vs `uses: xxx@sha`）留待切換時定義。
+- 簽章**不做**。發行來源為私有 GitHub repo，安裝來源的可信度由該 repo 的存取權限提供。若日後進 ARC GitLab 或對外散佈，再評估 bundle 簽章。
+
 ## 待決事項
 
-1. `distribution.yml` 是否需簽章？目前設計依賴「安裝來源可信」，若 ARC 要求更強保證，需引入 bundle 簽章驗證。
-2. ARC 發行版的版號策略：跟隨 upstream `VERSION`，或獨立編號？影響 R-07（version/tag 同步）與 R-20。
-3. `provider: gitlab` 下 R-15 workflow pinning 的等價語意為何 — GitLab 的 `include:` 與 GitHub Actions `uses:` 的 pinning 概念不完全對應，需定義何謂「已 pin」。
+1. **版號策略**：upstream 引擎版號與 ARC 發行版號的關係尚未定案（見審查討論）。影響 R-07（`VERSION` 與 git tag 同步）與 R-23（pip mode 比對已安裝 `policy-check` 版本與 `policy_version`）。在定案前，實作不得觸及版號相關規則。
