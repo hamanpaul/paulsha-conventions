@@ -5,8 +5,13 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
-_CFG = """policy_profile: flat
-policy_version: 1.0.10
+# policy_version 動態取自本 repo 實際 VERSION：#61 新增的引擎版本 gate 會在
+# CLI 啟動時比對「執行中引擎版本」與這裡宣告的 policy_version，寫死的舊值會
+# 被 gate 擋下（configuration error），與本測試要驗證的 R-26 行為無關。
+_ENGINE_VERSION = (REPO / "VERSION").read_text(encoding="utf-8").strip()
+
+_CFG = f"""policy_profile: flat
+policy_version: {_ENGINE_VERSION}
 generated_facts:
   - command: "cat VERSION"
     reflected_in: "README.md"

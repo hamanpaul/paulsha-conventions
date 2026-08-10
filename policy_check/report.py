@@ -22,10 +22,18 @@ def _render_rule(r: RuleResult) -> list[str]:
     return block
 
 
-def emit(results: Iterable[RuleResult], family_map: dict | None = None) -> int:
+def emit(
+    results: Iterable[RuleResult],
+    family_map: dict | None = None,
+    *,
+    engine_version_line: str | None = None,
+) -> int:
     # 參數刻意命名 family_map（非 families）以免遮蔽 policy_check.rules.families 模組。
     results = list(results)
     lines = ["# Policy Check Report\n"]
+    if engine_version_line:
+        lines.append(engine_version_line)
+        lines.append("")
     fails = [r for r in results if r.status == Status.FAIL]
     skips = [r for r in results if r.status == Status.SKIP]
     passes = [r for r in results if r.status == Status.PASS]
