@@ -5,6 +5,7 @@
 
 | policy_version | engine tag | engine SHA | 摘要 |
 |----------------|-----------|------------|------|
+| 1.0.16 | `v1.0.16` | `42b0dae11eaf435d22ea3116ae2b9593ffcb4aff` | open-issue batch：#63 distribution identity（arc-conventions 發行接口）、#61 引擎版本 gate（fail-loud + 報告表頭）、#62 R-19 結構化偵測（含 canonical tests.yml 骨架）、#52 activation 斷電級 crash recovery（fsync journal + 自動收斂）、#60 ISO/IEC 42001 opt-in profile 設計；另收斂 changelog docs type 與 #57 遺留的 release smoke fragment |
 | 1.0.15 | `v1.0.15` | `a764806046c410eb4f254ac0b6a8aec8b7559dab` | tag 觸發的 release workflow：依支援的 Python minor version 逐一建置 runtime bundle、驗證 archive digest 與離線安裝，全數通過才發布 GitHub Release；release notes 由該版 CHANGELOG 段落、archive SHA-256 對照與前版 compare 連結組成。本版為首個由 workflow 自動發行的 release |
 | 1.0.14 | `v1.0.14` | `451c2680fb3a1f977fcbc8007baaa7dbe415cf03` | #48 建立 clean-tag versioned runtime bundle、exact-version selector、offline install/activate/rollback、installed wheel/venv identity attestation，並將 `.project-policy.yml` 升格為 canonical public manifest；公司 artifact authority 仍由 #39 決策 |
 | 1.0.13 | `v1.0.13` | `57dc4e8d54697be3400d4f58ee34c2e0c5681411` | #42 修正 release ledger tag SHA 與自我檢測；#45 將 R-21 改為 visibility-aware 並擴充 credential detectors／減敏輸出；#46 建立 canonical local CI-parity `preflight-ci` skill、pinned/source/offline engine 驗證與 fail-closed gate orchestration |
