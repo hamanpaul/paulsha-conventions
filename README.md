@@ -499,11 +499,11 @@ options:
 
 <!-- BEGIN: cli-help marker="policy-runtime-bundle-help" -->
 usage: policy-runtime-bundle [-h]
-                             {build,verify,extract,install,rollback,activate,uninstall}
+                             {build,verify,extract,install,rollback,recover,activate,uninstall}
                              ...
 
 positional arguments:
-  {build,verify,extract,install,rollback,activate,uninstall}
+  {build,verify,extract,install,rollback,recover,activate,uninstall}
     build               Build from a clean annotated tag
     verify              Verify an unpacked bundle
     extract             Verify archive digest/members and extract atomically
