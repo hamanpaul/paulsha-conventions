@@ -148,6 +148,25 @@ ARC 發行版**不直接落在 ARC GitLab**，分兩步走：
 - `provider` 固定 `github`，R-15 / R-20 行為不變；GitLab 的 pinning 等價語意（`include:` vs `uses: xxx@sha`）留待切換時定義。
 - 簽章**不做**。發行來源為私有 GitHub repo，安裝來源的可信度由該 repo 的存取權限提供。若日後進 ARC GitLab 或對外散佈，再評估 bundle 簽章。
 
-## 待決事項
+## 版號策略
 
-1. **版號策略**：upstream 引擎版號與 ARC 發行版號的關係尚未定案（見審查討論）。影響 R-07（`VERSION` 與 git tag 同步）與 R-23（pip mode 比對已安裝 `policy-check` 版本與 `policy_version`）。在定案前，實作不得觸及版號相關規則。
+方向已定：**引擎版號跟隨 upstream，發行編號獨立**。但實作方式尚未定案，且**明確排除在階段一之外**。
+
+實作時發現「發行編號寫進版號字串」的成本高於預期。`-fix.N` 這個後綴語法散在 5 處，要讓 `-arc.N` 成為合法版號，5 處都得改：
+
+| 位置 | 內容 |
+| --- | --- |
+| `rules/r06_version_format.py:14` | `^\d+\.\d+\.\d+(-fix\.\d+)?$` |
+| `drift.py:20-21` | `_VERSION_RE` / `_TAG_RE` |
+| `drift.py:25-28` | 版號排序的可比較 tuple（fix 分量） |
+| `preflight.py:424` | `-fix.N` → PEP 440 `.postN` 正規化 |
+| `rules/r23_engine_pin_attestation.py:14-16` | `_TAG_LOOSE_RE` / `_COMMENT_VER_RE` / `_canon_version` |
+
+其中 R-23 是信任鏈的版本比對。在同一階段同時改信任模型與其版本比對語意，風險疊加，因此不併入階段一。
+
+兩個候選（待定案）：
+
+- **A — 版號帶發行後綴**：`VERSION` = `1.0.15`、tag = `v1.0.15-arc.1`。需改上表 5 處。發行編號在 `pip show` 可見。
+- **A′ — 發行編號放進 identity**：`VERSION` 與 tag 完全比照 upstream，發行編號改放 `distribution.yml` 的 `distribution_build`，僅出現在 bundle artifact 名稱與報告。上表 5 處**一行都不用改**。代價是版本字串看不出發行編號。
+
+**階段一的實作不得觸及上表任何位置**，版號策略以獨立工作項推進。
