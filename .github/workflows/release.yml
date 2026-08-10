@@ -52,7 +52,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m venv "$RUNNER_TEMP/buildenv"
-          "$RUNNER_TEMP/buildenv/bin/pip" install -q --upgrade pip build
+          # pyyaml：policy_check.identity 的執行期依賴（runtime_bundle 建置會載入 distribution identity）
+          "$RUNNER_TEMP/buildenv/bin/pip" install -q --upgrade pip build pyyaml
 
       - name: Build bundle from clean tag
         env:

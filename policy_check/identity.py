@@ -11,7 +11,9 @@ from functools import lru_cache
 from importlib.resources import files
 from typing import Any
 
-import yaml
+# yaml 延後到 _load_raw() 才 import：runtime_bundle 在最小環境（如 release
+# workflow 的 buildenv）import 本模組時不得因缺 PyYAML 而在 import 期爆炸；
+# 真正解析時缺依賴仍 fail-closed 轉 IdentityError。
 
 REQUIRED_FIELDS = (
     "canonical_org",
@@ -49,6 +51,13 @@ class DistributionIdentity:
 
 
 def _load_raw() -> dict[str, Any]:
+    try:
+        import yaml
+    except ImportError as exc:
+        raise IdentityError(
+            "PyYAML is unavailable; cannot load distribution identity. "
+            "Install the policy-check runtime dependencies (pip install pyyaml)."
+        ) from exc
     try:
         raw = files("policy_check.data").joinpath("distribution.yml").read_text(
             encoding="utf-8"

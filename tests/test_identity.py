@@ -138,3 +138,23 @@ def test_distribution_build_is_optional_and_int(monkeypatch):
     monkeypatch.setattr(ident, "_load_raw", lambda: {**base, "distribution_build": "x"})
     with pytest.raises(ident.IdentityError):
         ident.identity()
+
+
+def test_yaml_import_is_lazy_not_module_level():
+    """runtime_bundle 在最小環境（release buildenv）import 本模組不得因缺 PyYAML 爆炸。"""
+    from pathlib import Path
+
+    source = Path("policy_check/identity.py").read_text(encoding="utf-8")
+    for line in source.splitlines():
+        assert not line.startswith("import yaml"), "yaml 必須延後到 _load_raw() 內 import"
+        assert not line.startswith("from yaml"), "yaml 必須延後到 _load_raw() 內 import"
+
+
+def test_missing_pyyaml_is_fail_closed_identity_error(monkeypatch):
+    import sys
+
+    ident.identity.cache_clear()
+    monkeypatch.setitem(sys.modules, "yaml", None)
+    with pytest.raises(ident.IdentityError) as exc:
+        ident.identity()
+    assert "PyYAML" in str(exc.value)
