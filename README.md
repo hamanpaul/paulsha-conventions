@@ -383,12 +383,14 @@ code, rejects startup customization/module shadows, and removes bootstrap-only
 pip/setuptools after installation. Stable launchers also anchor the active
 manifest digest and verify the current manager before executing it. The deployed
 stable lifecycle wrapper repairs
-links or switches to an already verified release:
+links or switches to an already verified release. The default runtime root is
+`~/.local/share/<distribution_name>` (upstream:
+`~/.local/share/paulsha-conventions`):
 
 ```bash
-~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
+~/.local/share/<distribution_name>/bin/policy-runtime-bundle \
   activate --version X.Y.Z
-~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
+~/.local/share/<distribution_name>/bin/policy-runtime-bundle \
   rollback --version X.Y.Z
 ```
 
@@ -908,7 +910,9 @@ stable launcher 另會錨定 active manifest digest，並在執行 current manag
 `preflight-ci` 目錄或 source-checkout symlink 須先移到可逆 backup，installer
 不會自動接管；rollback 只切到既有 VERIFIED release。active release 若被竄改，
 可用同一份已核對外部 digest 的 artifact 執行 `install --force-reinstall`；
-新 release 仍須先完成 staging 與 smoke 才替換。操作細節見
+新 release 仍須先完成 staging 與 smoke 才替換。預設 runtime root 為
+`~/.local/share/<distribution_name>`（upstream 即
+`~/.local/share/paulsha-conventions`）。操作細節見
 [runtime bundle runbook](docs/runtime-bundle-runbook.md)。
 
 #### 4. CI 整合（下游 repo）

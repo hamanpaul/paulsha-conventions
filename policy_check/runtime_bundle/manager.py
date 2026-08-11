@@ -110,14 +110,55 @@ def _expected_repository() -> str:
     )
 
 
-def _default_root() -> Path:
+def _safe_distribution_name(value: Any, *, source: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeBundleError(
+            f"{source} distribution identity is missing: distribution_name"
+        )
+    name = value.strip()
+    if name in {".", ".."} or "/" in name or "\\" in name:
+        raise RuntimeBundleError(
+            f"{source} distribution_name is not a single safe path component"
+        )
+    return name
+
+
+def _manifest_distribution_name(manifest: dict[str, Any]) -> str:
+    distribution = manifest.get("distribution")
+    _canonical_distribution_identity(distribution)
+    if not isinstance(distribution, dict):
+        raise RuntimeBundleError("bundle manifest is missing distribution identity")
+    return _safe_distribution_name(
+        distribution.get("distribution_name"),
+        source="bundle manifest",
+    )
+
+
+def _distribution_name(manifest: dict[str, Any] | None = None) -> str:
+    if manifest is not None:
+        return _manifest_distribution_name(manifest)
+    if _identity is None:
+        raise RuntimeBundleError(
+            "distribution identity is unavailable: cannot derive the runtime root"
+        )
+    try:
+        distribution_name = _identity().distribution_name
+    except (AttributeError, RuntimeError) as exc:
+        raise RuntimeBundleError(
+            "distribution identity is unavailable: cannot derive the runtime root"
+        ) from exc
+    return _safe_distribution_name(distribution_name, source="installed")
+
+
+def _default_root(manifest: dict[str, Any] | None = None) -> Path:
     configured = os.environ.get("PSC_CONVENTIONS_ROOT")
     if configured:
         return Path(configured).expanduser()
+    distribution_name = _distribution_name(manifest)
     data_home = os.environ.get("XDG_DATA_HOME")
     if data_home:
-        return Path(data_home).expanduser() / "paulsha-conventions"
-    return Path.home() / ".local" / "share" / "paulsha-conventions"
+        return Path(data_home).expanduser() / distribution_name
+    return Path.home() / ".local" / "share" / distribution_name
 
 
 def _default_skill_target() -> Path:
@@ -1009,12 +1050,13 @@ def _switch_active_release(
 
 def install(
     bundle: Path,
-    root: Path,
+    root: Path | None,
     skill_target: Path,
     *,
     force_reinstall: bool = False,
 ) -> str:
     manifest = verify_bundle(bundle, expected_repository=_expected_repository())
+    _manifest_distribution_name(manifest)
     compatibility = manifest["runtime_compatibility"]
     current = {
         "implementation": sys.implementation.name,
@@ -1028,7 +1070,9 @@ def install(
             f"need {compatibility}, current {current}"
         )
     version = manifest["policy_version"]
-    runtime_root = root.resolve()
+    runtime_root = (
+        root if root is not None else _default_root(manifest)
+    ).resolve()
     recover(runtime_root, skill_target)
     releases = runtime_root / "releases"
     destination = releases / version
@@ -1414,7 +1458,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    root = Path(args.root).expanduser() if getattr(args, "root", None) else _default_root()
+    requested_root = (
+        Path(args.root).expanduser()
+        if getattr(args, "root", None)
+        else None
+    )
     requested_skill_target = (
         Path(args.skill_target).expanduser()
         if getattr(args, "skill_target", None)
@@ -1433,55 +1481,57 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "install":
             version = install(
                 Path(args.bundle),
-                root,
+                requested_root,
                 skill_target,
                 force_reinstall=args.force_reinstall,
             )
             print(f"INSTALLED {version}")
-        elif args.command == "rollback":
-            version = rollback(root, skill_target, args.version)
-            print(f"ROLLED BACK {version}")
-        elif args.command == "recover":
-            recovered = recover(root, requested_skill_target)
-            print("RECOVERED" if recovered else "NO RECOVERY NEEDED")
-        elif args.command == "activate":
-            activate(root, skill_target, args.version)
-            print(f"ACTIVATED {args.version}")
-        elif args.command == "uninstall":
-            uninstall(root, args.version)
-            print(f"UNINSTALLED {args.version}")
-        elif args.command == "exec":
-            repo = Path(args.repo).resolve()
-            forwarded = list(args.arguments)
-            if forwarded and forwarded[0] == "--":
-                forwarded = forwarded[1:]
-            if any(
-                value in {"--repo", "--installed-manifest", "--engine-source"}
-                or value.startswith(
-                    ("--repo=", "--installed-manifest=", "--engine-source=")
-                )
-                for value in forwarded
-            ):
-                raise RuntimeBundleError(
-                    "forwarded engine authority option conflicts with exact-version selection"
-                )
-            release, _manifest = select_release(root, repo)
-            python = _venv_python(release / "venv")
-            command = [
-                str(python),
-                "-I",
-                "-m",
-                "policy_check.preflight",
-                "--repo",
-                str(repo),
-                "--installed-manifest",
-                str(release / "artifact" / "manifest.json"),
-                *forwarded,
-            ]
-            env = dict(os.environ)
-            env.pop("PYTHONPATH", None)
-            env.pop("PYTHONHOME", None)
-            os.execvpe(command[0], command, env)
+        else:
+            root = requested_root or _default_root()
+            if args.command == "rollback":
+                version = rollback(root, skill_target, args.version)
+                print(f"ROLLED BACK {version}")
+            elif args.command == "recover":
+                recovered = recover(root, requested_skill_target)
+                print("RECOVERED" if recovered else "NO RECOVERY NEEDED")
+            elif args.command == "activate":
+                activate(root, skill_target, args.version)
+                print(f"ACTIVATED {args.version}")
+            elif args.command == "uninstall":
+                uninstall(root, args.version)
+                print(f"UNINSTALLED {args.version}")
+            elif args.command == "exec":
+                repo = Path(args.repo).resolve()
+                forwarded = list(args.arguments)
+                if forwarded and forwarded[0] == "--":
+                    forwarded = forwarded[1:]
+                if any(
+                    value in {"--repo", "--installed-manifest", "--engine-source"}
+                    or value.startswith(
+                        ("--repo=", "--installed-manifest=", "--engine-source=")
+                    )
+                    for value in forwarded
+                ):
+                    raise RuntimeBundleError(
+                        "forwarded engine authority option conflicts with exact-version selection"
+                    )
+                release, _manifest = select_release(root, repo)
+                python = _venv_python(release / "venv")
+                command = [
+                    str(python),
+                    "-I",
+                    "-m",
+                    "policy_check.preflight",
+                    "--repo",
+                    str(repo),
+                    "--installed-manifest",
+                    str(release / "artifact" / "manifest.json"),
+                    *forwarded,
+                ]
+                env = dict(os.environ)
+                env.pop("PYTHONPATH", None)
+                env.pop("PYTHONHOME", None)
+                os.execvpe(command[0], command, env)
     except RuntimeBundleError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

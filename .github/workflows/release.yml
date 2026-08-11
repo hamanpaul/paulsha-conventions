@@ -102,21 +102,23 @@ jobs:
       - name: Offline install smoke in an isolated HOME
         env:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           fake_home="$RUNNER_TEMP/fakehome"
+          distribution_name="${REPO#*/}"
           mkdir -p "$fake_home"
           # PYTHON_BIN 明確指向 matrix interpreter，確保驗的是這份 bundle 的目標 ABI。
           env HOME="$fake_home" PYTHON_BIN="$(command -v python)" \
             bash "$(echo "$RUNNER_TEMP"/staging/*-"${TAG}")/install.sh" \
-            --root "$fake_home/.local/share/paulsha-conventions" \
+            --root "$fake_home/.local/share/$distribution_name" \
             --skill-target "$fake_home/.agents/skills/preflight-ci"
           # 安裝出來的 runtime 必須能實際跑起來，不是只有檔案就位。
           #
           # 這裡刻意不執行 `policy_check --repo <path>`：那條指令的 exit code 表達的是
           # policy 判定結果，不是 runtime 健康度。tag push 沒有 PR context，判定本來就
           # 不會過，拿它當 smoke 會把「engine 正常但 repo 不符 policy」誤報成建置失敗。
-          venv_python="$fake_home/.local/share/paulsha-conventions/current/venv/bin/python"
+          venv_python="$fake_home/.local/share/$distribution_name/current/venv/bin/python"
           # 一律用 isolated mode（-I），與 runtime manager 執行 engine 的方式一致：
           # 否則 cwd 的 source 樹與 egg-info 會蓋過 venv 裡真正安裝的套件，smoke 就變成
           # 在驗 checkout 而不是驗 bundle 產物。
@@ -213,7 +215,7 @@ jobs:
             echo "./${REPO#*/}-${TAG}/install.sh"
             echo '```'
             echo
-            echo "預設安裝到 \`~/.local/share/paulsha-conventions\`，skill 部署到 \`~/.agents/skills/preflight-ci\`，皆可用 \`--root\` / \`--skill-target\` 覆寫。既有 skill 目錄請先自行備份。完整說明見 [\`docs/runtime-bundle-runbook.md\`](https://github.com/${REPO}/blob/${TAG}/docs/runtime-bundle-runbook.md)。"
+            echo "預設安裝到 \`~/.local/share/${REPO#*/}\`，skill 部署到 \`~/.agents/skills/preflight-ci\`，皆可用 \`--root\` / \`--skill-target\` 覆寫。既有 skill 目錄請先自行備份。完整說明見 [\`docs/runtime-bundle-runbook.md\`](https://github.com/${REPO}/blob/${TAG}/docs/runtime-bundle-runbook.md)。"
             echo
             echo "Archive digest 只保證內容完整，不等同 registry authentication。"
           } >> "$notes"

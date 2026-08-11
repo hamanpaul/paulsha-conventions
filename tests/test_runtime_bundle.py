@@ -23,15 +23,19 @@ def _fake_bundle(
     version: str = "1.0.13",
     *,
     repository: str | None = None,
+    distribution_name: str | None = None,
 ) -> Path:
     # identity-driven: tracks whatever distribution identity this checkout
     # is built with, so the fixture stays a faithful stand-in for a real
     # bundle regardless of which fork/distribution the test suite runs
-    # under (see policy_check/data/distribution.yml).
+    # under (see policy_check/data/distribution.yml). Both knobs stay
+    # overridable so install-root tests can exercise non-default identities.
     dist = ident.identity()
     if repository is None:
         repository = dist.engine_repo
-    bundle = root / f"{dist.distribution_name}-v{version}"
+    if distribution_name is None:
+        distribution_name = dist.distribution_name
+    bundle = root / f"{distribution_name}-v{version}"
     package_version = integrity.normalized_package_version(version)
     wheel = bundle / "wheels" / f"policy_check-{package_version}-py3-none-any.whl"
     wheel.parent.mkdir(parents=True)
@@ -66,7 +70,7 @@ def _fake_bundle(
             "canonical_org": dist.canonical_org,
             "engine_repo": dist.engine_repo,
             "remote_base": dist.remote_base,
-            "distribution_name": dist.distribution_name,
+            "distribution_name": distribution_name,
             "provider": dist.provider,
         },
         "wheels": [
@@ -566,6 +570,48 @@ def test_default_root_prefers_explicit_runtime_root(
     assert manager._default_root() == configured
 
 
+def test_default_root_uses_manifest_distribution_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _fake_bundle(
+        tmp_path / "source",
+        distribution_name="arc-conventions",
+    )
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("PSC_CONVENTIONS_ROOT", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+
+    assert manager._default_root(manifest) == (
+        home / ".local" / "share" / "arc-conventions"
+    )
+    upstream_manifest = {
+        **manifest,
+        "distribution": {
+            **manifest["distribution"],
+            "distribution_name": "paulsha-conventions",
+        },
+    }
+    assert manager._default_root(upstream_manifest) == (
+        home / ".local" / "share" / "paulsha-conventions"
+    )
+
+
+def test_default_root_rejects_manifest_without_distribution_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    del manifest["distribution"]["distribution_name"]
+    monkeypatch.delenv("PSC_CONVENTIONS_ROOT", raising=False)
+
+    with pytest.raises(manager.RuntimeBundleError, match="distribution_name"):
+        manager._default_root(manifest)
+
+
 def test_attest_clean_annotated_tag_and_rejects_dirty(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -954,10 +1000,17 @@ def test_install_writes_distribution_identity_into_the_installed_venv(
     checkout — an ambient lookup would resolve to this repo's own tracked
     `policy_check/data/distribution.yml`, not the release being installed.
     """
-    bundle = _fake_bundle(tmp_path / "source")
+    bundle = _fake_bundle(
+        tmp_path / "source",
+        distribution_name="arc-conventions",
+    )
     manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
-    runtime_root = tmp_path / "runtime"
-    skill_target = tmp_path / "skills" / "preflight-ci"
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("PSC_CONVENTIONS_ROOT", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    runtime_root = home / ".local" / "share" / "arc-conventions"
+    skill_target = home / ".agents" / "skills" / "preflight-ci"
 
     class FakeEnvBuilder:
         def __init__(self, **_kwargs):
@@ -975,7 +1028,7 @@ def test_install_writes_distribution_identity_into_the_installed_venv(
         lambda *_a, **_kw: None,
     )
 
-    assert manager.install(bundle, runtime_root, skill_target) == "1.0.13"
+    assert manager.install(bundle, None, skill_target) == "1.0.13"
 
     release_venv = runtime_root / "releases" / "1.0.13" / "venv"
     written = (
@@ -1028,6 +1081,25 @@ def test_install_fails_closed_when_manifest_lacks_distribution_identity(
         manager.install(bundle, runtime_root, skill_target)
     assert not (runtime_root / "releases" / "1.0.13").exists()
     assert not list((runtime_root / "releases").glob(".staging-*"))
+
+
+def test_install_fails_closed_when_manifest_lacks_distribution_name(
+    tmp_path: Path,
+) -> None:
+    bundle = _fake_bundle(tmp_path / "source")
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["distribution"]["distribution_name"]
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+    integrity.write_checksums(bundle)
+
+    with pytest.raises(manager.RuntimeBundleError, match="distribution_name"):
+        manager.install(
+            bundle,
+            tmp_path / "runtime",
+            tmp_path / "skills" / "preflight-ci",
+        )
+    assert not (tmp_path / "runtime" / "releases").exists()
 
 
 def test_force_reinstall_recovers_tampered_active_release(
