@@ -844,7 +844,13 @@ def _bounded_command_diagnostic(
     if not text:
         return ""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    diagnostic = " | ".join(lines[-4:])
+    failure_lines = [line for line in lines if ":x:" in line]
+    if failure_lines:
+        selected = failure_lines[:3]
+        selected.extend(line for line in lines[-2:] if line not in selected)
+    else:
+        selected = lines[-4:]
+    diagnostic = " | ".join(selected)
     if len(diagnostic) > 800:
         diagnostic = diagnostic[-800:]
     return diagnostic
