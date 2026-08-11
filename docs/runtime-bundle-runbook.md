@@ -106,7 +106,7 @@ ABI/platform-specific wheel closure 誤當成任意 Python 3.11+ 通用 bundle�
 預設版型：
 
 ```text
-~/.local/share/paulsha-conventions/
+~/.local/share/<distribution_name>/
 ├── releases/<version>/
 │   ├── artifact/
 │   ├── venv/
@@ -119,7 +119,9 @@ ABI/platform-specific wheel closure 誤當成任意 Python 3.11+ 通用 bundle�
 └── activation.journal.anchor
 ```
 
-可用 `--root <PATH>`、`XDG_DATA_HOME` 或 `PSC_CONVENTIONS_ROOT` 調整 root，
+預設 root 為 `~/.local/share/<distribution_name>`（upstream 即
+`~/.local/share/paulsha-conventions`）。可用 `--root <PATH>`、`XDG_DATA_HOME` 或
+`PSC_CONVENTIONS_ROOT` 調整 root，
 並可用 `--skill-target <PATH>` 指定受管 skill symlink。部署後的 skill 先從
 自身解析後的 `current/artifact/skills/preflight-ci` 實體位置反推 runtime
 root，再退回環境變數與預設值，因此 custom `--root` 不要求永久 export。
@@ -181,9 +183,9 @@ shebang 的 console script。`activate` 可用 exit 0 修復 current/launcher/sk
 rollback 不下載、不重建，只 activation 已驗證 release：
 
 ```bash
-~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
+~/.local/share/<distribution_name>/bin/policy-runtime-bundle \
   activate --version X.Y.Z
-~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
+~/.local/share/<distribution_name>/bin/policy-runtime-bundle \
   rollback --version X.Y.Z
 ```
 
@@ -197,7 +199,7 @@ rollback target 已是 current 時會重驗並修復 managed links，回報成�
 移除 active release：
 
 ```bash
-~/.local/share/paulsha-conventions/bin/policy-runtime-bundle \
+~/.local/share/<distribution_name>/bin/policy-runtime-bundle \
   uninstall --version X.Y.Z
 ```
 
