@@ -18,6 +18,7 @@ superpowers plans/specs，並標其 stage 狀態。
 ## Plans（docs/superpowers/plans）
 - [arc-conventions portability 階段一（#63）](superpowers/plans/2026-08-10-arc-conventions-portability.md) — 已實作；5 個 task，去硬編碼 + distribution identity，版號與 GitLab provider 明確排除在外
 - [versioned runtime bundle（#48）](superpowers/plans/2026-07-26-issue-48-runtime-bundle.md) — 歷史 implementation plan；v1.0.14 與 fleet rollout 已落地
+- [smoke fixture R-21 誤中 + preflight 摘要改善（#77）](superpowers/plans/2026-08-11-issue-77-smoke-fixture-r21.md) — 派工中；fixture 自我豁免 + 失敗行優先摘要
 - [install root 跟隨 distribution_name（#74 之 3）](superpowers/plans/2026-08-11-issue-74-install-root-distribution-name.md) — 派工中；安裝期以 manifest 推導根目錄，覆寫語意不變
 - [引擎版本 vs policy_version 啟動比對（#61）](superpowers/plans/2026-08-10-issue-61-engine-version-gate.md) — 派工中；啟動 fail-loud + 報告表頭引擎版本
 - [R-19 結構化偵測實際測試執行（#62）](superpowers/plans/2026-08-10-issue-62-r19-real-test-execution.md) — 已完成；YAML 結構化偵測 + canonical tests.yml 骨架 + 反例 fixtures，分階段上線
