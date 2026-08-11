@@ -5,6 +5,17 @@
 格式基於 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，
 本專案遵循 hamanpaul project policy v1.0.4。
 
+## [1.0.17] - 2026-08-11
+
+### Added
+- Runtime bundle 預設安裝根目錄跟隨 manifest 的 `distribution_name`。
+
+### Changed
+- 測試套件（`test_preflight.py`／`test_runtime_bundle.py`／`test_runtime_bundle_integration.py`）與 `release.yml` 的產物命名／verify／install smoke／release notes 四處，改為從 `identity()` 動態推導 repo 短名與 distribution name，取代寫死的 `hamanpaul/paulsha-conventions` 字面值；upstream 內建身分與既有行為零變更，僅縮小與 distribution fork 的 divergence。
+
+### Fixed
+- 修正 runtime smoke fixture 的 R-21 絕對 interpreter 路徑誤報，並讓 preflight 失敗摘要優先保留失敗規則。
+
 ## [1.0.16] - 2026-08-10
 
 ### Added
