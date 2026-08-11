@@ -13,6 +13,7 @@ from typing import Sequence
 
 import pytest
 
+from policy_check import identity as ident
 from policy_check import preflight
 
 
@@ -687,20 +688,24 @@ def test_source_engine_rejects_version_skew(monkeypatch, tmp_path) -> None:
     (tmp_path / "VERSION").write_text("1.0.11\n", encoding="utf-8")
     monkeypatch.setattr(preflight, "_is_canonical_checkout", lambda _root: True)
 
+    # conventions_engine.repo 必須對齊本次執行的 distribution identity，否則
+    # 會先撞到「repo disagrees with conventions_engine.repo」而非本測試要驗
+    # 的 VERSION mismatch。identity-driven 讓本測試不綁死於特定發行身分。
+    config = _config()
+    config["conventions_engine"]["repo"] = ident.identity().engine_repo
     with pytest.raises(preflight.PreflightGateError, match="VERSION mismatch"):
-        preflight._source_engine(tmp_path, _config(), display_prefix="skill")
+        preflight._source_engine(tmp_path, config, display_prefix="skill")
 
 
 def test_is_canonical_checkout_returns_bool_all_branches(monkeypatch, tmp_path) -> None:
     def remote_result(remote: str) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(["git", "remote", "get-url", "origin"], 0, f"{remote}\n", "")
 
+    canonical_remote = f"https://github.com/{ident.identity().engine_repo}"
     monkeypatch.setattr(
         preflight,
         "_run_command",
-        lambda *_args, **_kwargs: remote_result(
-            "https://github.com/hamanpaul/paulsha-conventions"
-        ),
+        lambda *_args, **_kwargs: remote_result(canonical_remote),
     )
     assert preflight._is_canonical_checkout(tmp_path) is True
 

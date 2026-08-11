@@ -75,8 +75,9 @@ jobs:
           set -euo pipefail
           abi="cp${PYVER//./}"
           mkdir -p "$RUNNER_TEMP/dist"
-          src="$RUNNER_TEMP/out/paulsha-conventions-${TAG}.tar.gz"
-          dest="paulsha-conventions-${TAG}-${abi}.tar.gz"
+          # 產物名跟隨 distribution identity（builder 依 identity 命名），不寫死發行名稱
+          src="$(echo "$RUNNER_TEMP"/out/*-"${TAG}".tar.gz)"
+          dest="$(basename "$src" .tar.gz)-${abi}.tar.gz"
           cp "$src" "$RUNNER_TEMP/dist/$dest"
           ( cd "$RUNNER_TEMP/dist" && sha256sum "$dest" > "$dest.sha256" )
           echo "ARCHIVE=$dest" >> "$GITHUB_ENV"
@@ -96,7 +97,7 @@ jobs:
             --output-dir "$RUNNER_TEMP/staging"
           PYTHONPATH="$GITHUB_WORKSPACE" "$RUNNER_TEMP/buildenv/bin/python" \
             -m policy_check.runtime_bundle.cli verify \
-            --bundle "$RUNNER_TEMP/staging/paulsha-conventions-${TAG}"
+            --bundle "$(echo "$RUNNER_TEMP"/staging/*-"${TAG}")"
 
       - name: Offline install smoke in an isolated HOME
         env:
@@ -107,7 +108,7 @@ jobs:
           mkdir -p "$fake_home"
           # PYTHON_BIN 明確指向 matrix interpreter，確保驗的是這份 bundle 的目標 ABI。
           env HOME="$fake_home" PYTHON_BIN="$(command -v python)" \
-            bash "$RUNNER_TEMP/staging/paulsha-conventions-${TAG}/install.sh" \
+            bash "$(echo "$RUNNER_TEMP"/staging/*-"${TAG}")/install.sh" \
             --root "$fake_home/.local/share/paulsha-conventions" \
             --skill-target "$fake_home/.agents/skills/preflight-ci"
           # 安裝出來的 runtime 必須能實際跑起來，不是只有檔案就位。
@@ -209,7 +210,7 @@ jobs:
             echo '```bash'
             echo "sha256sum -c <archive>.sha256"
             echo "tar -xzf <archive>"
-            echo "./paulsha-conventions-${TAG}/install.sh"
+            echo "./${REPO#*/}-${TAG}/install.sh"
             echo '```'
             echo
             echo "預設安裝到 \`~/.local/share/paulsha-conventions\`，skill 部署到 \`~/.agents/skills/preflight-ci\`，皆可用 \`--root\` / \`--skill-target\` 覆寫。既有 skill 目錄請先自行備份。完整說明見 [\`docs/runtime-bundle-runbook.md\`](https://github.com/${REPO}/blob/${TAG}/docs/runtime-bundle-runbook.md)。"

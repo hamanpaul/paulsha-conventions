@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from policy_check import identity as ident
 from policy_check.runtime_bundle import builder, integrity, manager
 
 
@@ -63,7 +64,7 @@ def _build_and_extract(repo: Path, root: Path, version: str) -> tuple[Path, str]
         digest,
     )
     manifest = integrity.load_and_verify_bundle(
-        extracted, expected_repository="hamanpaul/paulsha-conventions"
+        extracted, expected_repository=ident.identity().engine_repo
     )
     assert manifest["policy_version"] == version
     assert manifest["release_commit"] == _run(["git", "rev-parse", "HEAD"], cwd=repo)
@@ -93,7 +94,7 @@ def test_clean_tag_bundle_offline_install_upgrade_and_rollback(
             "remote",
             "set-url",
             "origin",
-            "https://github.com/hamanpaul/paulsha-conventions.git",
+            f"https://github.com/{ident.identity().engine_repo}.git",
         ],
         cwd=source,
     )
