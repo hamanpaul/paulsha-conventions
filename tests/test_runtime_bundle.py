@@ -22,9 +22,16 @@ def _fake_bundle(
     root: Path,
     version: str = "1.0.13",
     *,
-    repository: str = "hamanpaul/paulsha-conventions",
+    repository: str | None = None,
 ) -> Path:
-    bundle = root / f"paulsha-conventions-v{version}"
+    # identity-driven: tracks whatever distribution identity this checkout
+    # is built with, so the fixture stays a faithful stand-in for a real
+    # bundle regardless of which fork/distribution the test suite runs
+    # under (see policy_check/data/distribution.yml).
+    dist = ident.identity()
+    if repository is None:
+        repository = dist.engine_repo
+    bundle = root / f"{dist.distribution_name}-v{version}"
     package_version = integrity.normalized_package_version(version)
     wheel = bundle / "wheels" / f"policy_check-{package_version}-py3-none-any.whl"
     wheel.parent.mkdir(parents=True)
@@ -56,11 +63,11 @@ def _fake_bundle(
         "release_tag": f"v{version}",
         "release_commit": "a" * 40,
         "distribution": {
-            "canonical_org": "hamanpaul",
-            "engine_repo": "hamanpaul/paulsha-conventions",
-            "remote_base": "https://github.com",
-            "distribution_name": "paulsha-conventions",
-            "provider": "github",
+            "canonical_org": dist.canonical_org,
+            "engine_repo": dist.engine_repo,
+            "remote_base": dist.remote_base,
+            "distribution_name": dist.distribution_name,
+            "provider": dist.provider,
         },
         "wheels": [
             {
@@ -158,11 +165,11 @@ def _write_fake_venv(path: Path) -> None:
 def test_verify_bundle_accepts_closed_file_set(tmp_path: Path) -> None:
     bundle = _fake_bundle(tmp_path)
     manifest = integrity.load_and_verify_bundle(
-        bundle, expected_repository="hamanpaul/paulsha-conventions"
+        bundle, expected_repository=ident.identity().engine_repo
     )
     assert manifest["policy_version"] == "1.0.13"
     assert manager.verify_bundle(
-        bundle, expected_repository="hamanpaul/paulsha-conventions"
+        bundle, expected_repository=ident.identity().engine_repo
     )["skill_version"] == "1.0.13"
 
 
@@ -176,7 +183,7 @@ def test_checksums_include_nested_file_named_sha256sums(tmp_path: Path) -> None:
     checksums = (bundle / "SHA256SUMS").read_text(encoding="utf-8")
     assert "payload/SHA256SUMS" in checksums
     assert integrity.load_and_verify_bundle(
-        bundle, expected_repository="hamanpaul/paulsha-conventions"
+        bundle, expected_repository=ident.identity().engine_repo
     )["policy_version"] == "1.0.13"
 
 
@@ -206,7 +213,7 @@ def test_vendored_manager_loads_the_shared_verifier_under_safe_path(
     bootstrap = tmp_path / "bootstrap"
     bootstrap.mkdir()
     runtime_manager = _vendor_bootstrap(
-        bootstrap, expected_repository="hamanpaul/paulsha-conventions"
+        bootstrap, expected_repository=ident.identity().engine_repo
     )
 
     result = subprocess.run(
@@ -242,7 +249,7 @@ def test_vendored_manager_rejects_foreign_manifest_repository_when_identity_unav
     bootstrap = tmp_path / "bootstrap"
     bootstrap.mkdir()
     runtime_manager = _vendor_bootstrap(
-        bootstrap, expected_repository="hamanpaul/paulsha-conventions"
+        bootstrap, expected_repository=ident.identity().engine_repo
     )
 
     result = subprocess.run(
@@ -361,12 +368,12 @@ def test_verify_bundle_accepts_fix_suffix_as_post_package_version(
 ) -> None:
     bundle = _fake_bundle(tmp_path, "1.0.13-fix.2")
     manifest = integrity.load_and_verify_bundle(
-        bundle, expected_repository="hamanpaul/paulsha-conventions"
+        bundle, expected_repository=ident.identity().engine_repo
     )
     assert manifest["policy_version"] == "1.0.13-fix.2"
     assert manifest["package"]["version"] == "1.0.13.post2"
     assert manager.verify_bundle(
-        bundle, expected_repository="hamanpaul/paulsha-conventions"
+        bundle, expected_repository=ident.identity().engine_repo
     )["package"]["version"] == "1.0.13.post2"
 
 
@@ -386,11 +393,11 @@ def test_verify_bundle_rejects_payload_tamper(tmp_path: Path, relative: str) -> 
         stream.write(b"tampered")
     with pytest.raises(integrity.BundleError, match="checksum mismatch"):
         integrity.load_and_verify_bundle(
-            bundle, expected_repository="hamanpaul/paulsha-conventions"
+            bundle, expected_repository=ident.identity().engine_repo
         )
     with pytest.raises(manager.RuntimeBundleError, match="checksum mismatch"):
         manager.verify_bundle(
-            bundle, expected_repository="hamanpaul/paulsha-conventions"
+            bundle, expected_repository=ident.identity().engine_repo
         )
 
 
@@ -399,13 +406,13 @@ def test_verify_bundle_rejects_unlisted_file_and_symlink(tmp_path: Path) -> None
     (bundle / "extra").write_text("unlisted\n", encoding="utf-8")
     with pytest.raises(integrity.BundleError, match="file set mismatch"):
         integrity.load_and_verify_bundle(
-            bundle, expected_repository="hamanpaul/paulsha-conventions"
+            bundle, expected_repository=ident.identity().engine_repo
         )
     (bundle / "extra").unlink()
     (bundle / "escape").symlink_to("../outside")
     with pytest.raises(integrity.BundleError, match="symlink"):
         integrity.load_and_verify_bundle(
-            bundle, expected_repository="hamanpaul/paulsha-conventions"
+            bundle, expected_repository=ident.identity().engine_repo
         )
 
 
@@ -419,9 +426,9 @@ def test_extract_archive_verifies_digest_members_and_payload(tmp_path: Path) -> 
         tmp_path / "output",
         digest,
     )
-    assert extracted.name == "paulsha-conventions-v1.0.13"
+    assert extracted.name == f"{ident.identity().distribution_name}-v1.0.13"
     assert integrity.load_and_verify_bundle(
-        extracted, expected_repository="hamanpaul/paulsha-conventions"
+        extracted, expected_repository=ident.identity().engine_repo
     )["policy_version"] == "1.0.13"
     with pytest.raises(integrity.BundleError, match="already exists"):
         integrity.extract_verified_archive(archive, tmp_path / "output", digest)
@@ -575,7 +582,7 @@ def test_attest_clean_annotated_tag_and_rejects_dirty(tmp_path: Path) -> None:
             "remote",
             "add",
             "origin",
-            "https://github.com/hamanpaul/paulsha-conventions.git",
+            f"https://github.com/{ident.identity().engine_repo}.git",
         ],
         cwd=repo,
         check=True,
