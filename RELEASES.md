@@ -5,6 +5,7 @@
 
 | policy_version | engine tag | engine SHA | 摘要 |
 |----------------|-----------|------------|------|
+| 1.0.19 | `v1.0.19` | `2dcf2f815afeddc477c1cacc33df9beb06ae14fb` | R-27 診斷碼文件說明覆蓋規則（OD-06，opt-in） |
 | 1.0.18 | `v1.0.18` | `7539d5252159eac50e278ec2a3bcbc5189d396ab` | R-12 分支契約修復：明確 opt-in `branch_source.allowed_prefixes: [feature, fix]`，省略設定維持 feature-only；啟用前綴的 base 強制相同 worktree slug，非法設定與命名 fail-closed |
 | 1.0.17 | `v1.0.17` | `9e7fabbf0b5eea9ad933fa6798764b723934a0b7` | distribution-agnostic batch：#74 三項（identity-driven 測試與 release workflow 命名回流、install root 跟隨 manifest distribution_name）+ #77（smoke fixture R-21 自我豁免與 preflight 失敗摘要改善）；arc fork 同步至同版 |
 | 1.0.16 | `v1.0.16` | `21a729aa5433af307cefbf3b3c566925a7937206` | open-issue batch：#63 distribution identity（arc-conventions 發行接口）、#61 引擎版本 gate（fail-loud + 報告表頭）、#62 R-19 結構化偵測（含 canonical tests.yml 骨架）、#52 activation 斷電級 crash recovery（fsync journal + 自動收斂）、#60 ISO/IEC 42001 opt-in profile 設計；另收斂 changelog docs type 與 #57 遺留的 release smoke fragment |
